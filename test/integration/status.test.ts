@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as chime from '../../src/modules/chime/index.ts';
 import * as context from '../../src/modules/compact-context/index.ts';
 import type { Distribution } from '../../src/types.ts';
-import { loaderFixture } from './loader-harness.ts';
+import { loaderFixture, until } from './loader-harness.ts';
 
 const distribution: Distribution = { name: 'dsh-extras-chime', moduleIds: ['chime'], modulePlugins: { chime } };
 
@@ -37,4 +37,33 @@ test('a configured peer capability fails closed and is reported as a conflict, n
   assert.equal(state.report.modules['compact-context'].phase, 'conflict');
   assert.equal(state.modules['compact-context'].phase, 'conflict');
   assert.match(state.modules['compact-context'].reason, /another Extras distribution/);
+});
+
+test('owner status reports independent live capabilities only while their exact feature fiber is active', { timeout: 10000 }, async t => {
+  let mounted: any;
+  let reads = 0;
+  let phase: 'active' | 'unavailable' = 'active';
+  const feature = {
+    name: 'capability-status-fixture', Config: context.Config, inject: [],
+    apply(ctx: any) { mounted = ctx; },
+    runtimeStatus(ctx: any) {
+      reads++;
+      assert.equal(ctx.fiber, mounted.fiber, 'status belongs to the mounted feature, not the shell fiber');
+      return { capabilities: { compactionReasoning: { phase }, tools: { phase: 'unavailable' as const, reason: 'Tool services are absent.' } } };
+    },
+  };
+  const d: Distribution = { name: 'dsh-extras-compact-context', moduleIds: ['compact-context'], modulePlugins: { 'compact-context': feature } };
+  const initial = { modules: { 'compact-context': { enabled: true, compactTool: false } }, migration: { auto: false } };
+  const f = await loaderFixture(t, d, initial); await f.ready();
+  assert.deepEqual(f.status().modules['compact-context'].capabilities, {
+    compactionReasoning: { phase: 'active' }, tools: { phase: 'unavailable', reason: 'Tool services are absent.' },
+  });
+  phase = 'unavailable';
+  assert.equal(f.status().modules['compact-context'].phase, 'active', 'a capability failure does not masquerade as shell disposal');
+  assert.equal(f.status().modules['compact-context'].capabilities.compactionReasoning.phase, 'unavailable');
+  await f.update({ ...initial, modules: { 'compact-context': { enabled: false, compactTool: false } } });
+  await until(() => f.status().modules['compact-context'].phase, value => value === 'disabled', 'feature disable');
+  const before = reads;
+  assert.equal(f.status().modules['compact-context'].capabilities, undefined, 'disabled features expose no stale capability snapshot');
+  assert.equal(reads, before, 'disabled features are not inspected');
 });

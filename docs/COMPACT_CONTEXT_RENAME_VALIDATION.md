@@ -4,7 +4,7 @@ Scope: rename-only follow-up to approved docs baseline `4bdcc6e`. No reasoning p
 
 ## Isolation
 
-All commands run from the dedicated `compact-context-rename` worktree. Existing ancestor dependencies are resolved read-only; there is no install into ancestor node_modules. Every execution uses explicit disposable state:
+All commands run from the dedicated `compact-context-rename` worktree. Existing ancestor dependencies are resolved read-only; there is no install into ancestor node_modules. Every execution uses explicit disposable state (the Chromium binary path below is intentionally anonymized):
 
 ```sh
 mkdir -p .sandbox-rename/{home,dsh-home,cache,config,data,npm-cache}
@@ -14,7 +14,7 @@ export XDG_CACHE_HOME=$PWD/.sandbox-rename/cache
 export XDG_CONFIG_HOME=$PWD/.sandbox-rename/config
 export XDG_DATA_HOME=$PWD/.sandbox-rename/data
 export npm_config_cache=$PWD/.sandbox-rename/npm-cache
-export DSH_EXTRAS_CHROMIUM=/home/dev/.cache/ms-playwright/chromium-1248/chrome-linux64/chrome
+export DSH_EXTRAS_CHROMIUM=/absolute/path/to/read-only/chromium
 ```
 
 The existing Chromium executable is read-only; browser state belongs to the sandbox. Packed-consumer tests install only into disposable worktree-local consumer directories/caches. No live GUI (3080), real HOME/profile, push, tag or release is used.
@@ -24,7 +24,7 @@ The existing Chromium executable is read-only; browser state belongs to the sand
 - Before implementation, `node --test test/integration/module-identity.test.ts` failed 2/2, identifying old public ids and migration admission.
 - Focused configuration: `node --test test/integration/module-identity.test.ts test/integration/config.test.ts` passed 8/8 after renaming.
 - Focused feature/integration/migration/client: `node --test test/integration/*.test.ts test/migration/*.test.ts test/modules/compact-context/*.test.ts test/client/forms.test.ts test/client/emitted.test.ts` passed 229/229, zero failures/skips. Includes native in-process scoped compaction, tools, retention and lifecycle regressions, not provider requests.
-- Strict typecheck: `/home/dev/dev/dsh-extras/node_modules/.bin/tsc --noEmit` passed, including compile-time no-old-id and new-id assertions for host, migration and client unions.
+- Strict typecheck: the resolved baseline TypeScript executable with `--noEmit` passed, including compile-time no-old-id and new-id assertions for host, migration and client unions.
 - Complete source: `node scripts/test.mjs` passed 389/389, zero failures/skips, with the explicit Chromium executable above.
 - `node scripts/build.mjs && node scripts/pack.mjs` generated all five distributions/tarballs using safe JS binding aliases and quoted canonical module keys.
 - `node --test test/artifacts/packages.test.mjs` passed 5/5 clean-consumer installs, imports, native schema/false/zero values, selected feature payload/notices, unchanged canonical tool names and CLI help identities. No old plugin/config/notice alias is emitted.
