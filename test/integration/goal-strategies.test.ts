@@ -2,7 +2,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import * as goalWait from '../../src/modules/goal-wait/index.ts'
-import { llm, startChild } from '../modules/retry/runtime.ts'
+import { llm, startChild, load } from '../modules/retry/runtime.ts'
 import { createGoalRuntime } from '../modules/goal-wait/native-runtime.ts'
 import { until } from './loader-harness.ts'
 
@@ -275,6 +275,36 @@ test('an unrecognizable truncated native lifecycle stack never grants restoratio
     assert.equal(f.ctx.goals.get(handle.agent).activation, 'disarmed')
     assert.equal(f.ctx.goals.get(handle.agent).revision, goal.revision)
   } finally { Error.stackTraceLimit = old; release.resolve(); off(); await handle.agent.whenIdle() }
+})
+
+test('module runtimeStatus reports an actual dependency-pending replacement until its native fiber becomes active', { timeout: 15000 }, async t => {
+  const f = await createGoalRuntime(t, { jobs: false, config: { strategy: 'replacement' } })
+  await until(f.status, state => !!state.details.goalWait.fallback, 'missing Jobs pending diagnostic')
+  assert.equal(f.status().capabilities.continuation.phase, 'unavailable')
+  assert.equal(f.status().details.goalWait.mounted, 'none')
+  assert.equal(f.stockEntry().fiber?.uid, null)
+  const handle = await f.createAgent({ sessionId: 'pending-created-goal' })
+  const goal = f.ctx.goals.create(handle.agent, { objective: 'goal created during pending mount', maxGoalRounds: 1 })
+  await f.ctx.sessions.flush(handle.agent.session)
+  await f.ctx.plugin((await load<any>('dsh-jobs-local')).default, {}).await()
+  const detach = f.ctx.jobs.attachController('late-jobs-test'); t.after(detach)
+  await until(f.status, state => state.capabilities.continuation.phase === 'active', 'late native Jobs mounted')
+  assert.equal(f.status().details.goalWait.mounted, 'replacement-port')
+  await until(() => handle.state.requests.length, count => count === 1, 'pending-created goal retains legitimate authority')
+  assert.equal(f.ctx.goals.get(handle.agent).id, goal.id)
+})
+
+test('a dependency-pending replacement can switch back to stock without stranding a newly authorized goal', { timeout: 15000 }, async t => {
+  const f = await createGoalRuntime(t, { jobs: false, config: { strategy: 'replacement' } })
+  await until(f.status, state => !!state.details.goalWait.fallback, 'pending before stock rollback')
+  const handle = await f.createAgent({ sessionId: 'pending-rollback-goal' })
+  const goal = f.ctx.goals.create(handle.agent, { objective: 'rollback pending owner', maxGoalRounds: 1 })
+  await f.ctx.sessions.flush(handle.agent.session)
+  await f.update({ strategy: 'native' })
+  await until(f.status, state => state.capabilities.continuation.phase === 'active' && state.details.goalWait.mounted === 'host-driver', 'pending rollback restored stock')
+  await until(() => handle.state.requests.length, count => count === 1, 'pending rollback goal continues')
+  assert.equal(f.ctx.goals.get(handle.agent).id, goal.id)
+  assert.equal(f.ctx.goals.get(handle.agent).roundsStarted, 1)
 })
 
 test('ordinary module replacement uses the pinned port, retains armed authority while Jobs wait, and wakes quietly', { timeout: 15000 }, async t => {

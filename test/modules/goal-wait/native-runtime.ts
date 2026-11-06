@@ -11,13 +11,16 @@ export async function createGoalRuntime(t: TestContext, options: {
   plugin?: FeaturePlugin
   config?: Record<string, unknown>
   subagents?: boolean
+  jobs?: boolean
 } = {}) {
   const runtime = await createRuntime({ product: false, retry: false, subagents: options.subagents ?? false })
   const { ctx } = runtime
   t.after(() => runtime.dispose())
   await ctx.plugin((await load<any>('dsh-goal')).default).await()
-  await ctx.plugin((await load<any>('dsh-jobs-local')).default, {}).await()
-  const detach = ctx.jobs.attachController('goal-strategies-test'); t.after(detach)
+  if (options.jobs !== false) {
+    await ctx.plugin((await load<any>('dsh-jobs-local')).default, {}).await()
+    const detach = ctx.jobs.attachController('goal-strategies-test'); t.after(detach)
+  }
   const plugin = options.plugin ?? source
   const commits: EntryChange[] = []
   class MemoryLoader extends Loader {

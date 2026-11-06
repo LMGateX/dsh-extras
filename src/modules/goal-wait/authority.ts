@@ -27,12 +27,22 @@ export function observeTransitionAuthority(ctx: Context, host: HostProfile, hold
       && (frames[4]?.includes(artifact + ':357:') === true || frames[4]?.includes(artifact + ':363:') === true)
   }
   function wrapped(this: unknown, ...args: Parameters<typeof original>): ReturnType<typeof original> {
-    const capture = captures.get(args[0])
+    const stack = new Error().stack ?? ''
+    const ownedCall = marked === args[0] || nativeLifecycle(stack)
+    marked = undefined // Consume before the native call can synchronously emit external callbacks.
+    let capture = captures.get(args[0])
+    if (!capture && ownedCall) {
+      // A legitimate goal can be created while a dependency-pending mount is
+      // waiting. Capture only its directly observed owned lifecycle mutation,
+      // never an arbitrary armed value somewhere inside the transition window.
+      const goal = goals.get(args[0])
+      if (goal?.phase === 'active' && goal.activation === 'armed') {
+        capture = { id: goal.id, revision: goal.revision, owned: true, revoked: false }
+        captures.set(args[0], capture)
+      }
+    }
     if (capture) {
-      const stack = new Error().stack ?? ''
-      const explicitlyOwned = marked === args[0]
-      marked = undefined // Consume before the native call can synchronously emit external callbacks.
-      if (explicitlyOwned || nativeLifecycle(stack)) capture.owned = true
+      if (ownedCall) capture.owned = true
       else {
         capture.revoked = true
         const frames = stack.split('\n')

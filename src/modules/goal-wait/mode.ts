@@ -15,6 +15,7 @@ export function createGoalMode(ctx: Context, policy: () => ResolvedConfig) {
   let mountedStrategy: Strategy | undefined
   let requested = policy().strategy
   let switching = false
+  let waitingMount = false
   let closed = false
   let fault: string | undefined
   let host: HostProfile | undefined
@@ -23,6 +24,20 @@ export function createGoalMode(ctx: Context, policy: () => ResolvedConfig) {
   const observed = new Set<Agent>()
   const owner = createHostDriverOwner(ctx, {
     autoDispose: false,
+    onChange(state) {
+      if (!waitingMount || closed || !['active', 'failed', 'conflict'].includes(state.phase)) return
+      queueMicrotask(() => {
+        if (!waitingMount || closed) return
+        const current = owner.snapshot()
+        if (!['active', 'failed', 'conflict'].includes(current.phase)) return
+        waitingMount = false
+        const reason = authority?.finish(current.phase === 'active')
+        authority = undefined
+        if (reason) fault = reason
+        if (current.phase === 'active') mountedStrategy = requested
+        switching = false
+      })
+    },
     onConflict(reason) { fault = reason; gate?.closeWithoutRearm(); gate = undefined },
   })
   const evaluate = (agent: Agent) => { if (!closed) { observed.add(agent); gate?.evaluate(agent) } }
@@ -56,17 +71,22 @@ export function createGoalMode(ctx: Context, policy: () => ResolvedConfig) {
       const target = policy().strategy
       requested = target
       fault = undefined
+      waitingMount = false
       host ??= await assertHostVersion(ctx)
-      authority = observeTransitionAuthority(ctx, host, (agent, id) => gate?.holds(agent, id) ?? false)
+      authority ??= observeTransitionAuthority(ctx, host, (agent, id) => gate?.holds(agent, id) ?? false)
       let state
       try {
         state = await owner.transition({ strategy: target,
           ...(target === 'replacement' ? { mountOwned: mountReplacement } : {}) })
       } finally {
         if (!closed) {
-          const reason = authority.finish(owner.snapshot().phase === 'active')
-          authority = undefined
-          if (reason) fault = reason
+          const current = owner.snapshot()
+          waitingMount = target === 'replacement' && current.phase === 'missing-dependency'
+          if (!waitingMount) {
+            const reason = authority.finish(current.phase === 'active')
+            authority = undefined
+            if (reason) fault = reason
+          }
         }
       }
       if (closed) return
@@ -75,7 +95,7 @@ export function createGoalMode(ctx: Context, policy: () => ResolvedConfig) {
         if (target !== 'activation') { gate?.dispose(); gate = undefined }
         mountedStrategy = target
       }
-      switching = false
+      switching = waitingMount
     }).catch(error => { fault = error instanceof Error ? error.message : String(error); switching = false })
     return queue
   }
