@@ -6,6 +6,8 @@ For 0.2.0, preserve this baseline and apply the approved [amendments](AMENDMENTS
 
 For 0.3.0, apply the approved [latest legacy parity contract](LEGACY_PARITY_030.md), including the ordinary Goal-wait four-strategy scope and explicit historical activation-overlap limitation. Its additional PAR-* acceptance rows supplement every baseline gate.
 
+For 0.3.1, additionally apply the [standalone migration entry contract](MIGRATION_CLI_031.md). Independent CLI/API startup must not assume hoisted host peers; all previous migration and owner-safety gates remain mandatory.
+
 ## Required deliverables
 
 1. One combined installable distribution, dsh-extras, one plugin card and unified settings grouped into four independently enabled modules.

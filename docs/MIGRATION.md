@@ -1,5 +1,7 @@
 # Automatic migration and recovery contract
 
+The [0.3.1 standalone entry contract](MIGRATION_CLI_031.md) clarifies dependency acquisition: CLI help and public offline migration imports do not require profile-hoisted Cordis; native helpers/runtime proof use the explicit host installation anchor. Missing live Goal proof remains unverified, not a takeover grant.
+
 ## Discovery
 
 Current profile only. Known predecessors: dsh-tool-compact-context (usual row dsh-tool-compact-context), dsh-stream-retry (stream-retry), dsh-session-chime (dsh-session-chime), dsh-goal-wait-gate (goal-wait-gate). Match verified module/package identity, not row id alone; support explicit ids and old manual insertions when unambiguous. Include disabled rows and bundle configuration, not just live forms. Use source effective defaults for known versions and safe raw inherited/override data. Expressions and unknown historical defaults are not guessed.
