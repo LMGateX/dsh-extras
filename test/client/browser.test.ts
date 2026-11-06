@@ -50,7 +50,7 @@ test('Chromium emitted client: rendered settings, rest persistence, audio, disab
     await page.getByRole('button', { name: '🌙 休息中', exact: true }).click();
     await page.evaluate(() => { (window as any).setRunning(true); (window as any).setRunning(false); });
     await page.waitForFunction(() => (window as any).starts === 1);
-    await page.getByRole('button', { name: '停止铃声', exact: true }).click();
+    await page.getByRole('button', { name: 'Stop the chime', exact: true }).click();
     await page.evaluate(() => (window as any).disableChime());
     await page.waitForFunction(() => !document.querySelector('[aria-pressed]'));
     assert.equal(await page.locator('[data-module]').count(), 4, 'sibling settings remain after disabling chime');

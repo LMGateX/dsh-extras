@@ -37,6 +37,8 @@ const form = {
   },
 };
 const provide = (name, value) => { ctx.provide(name); ctx.set(name, value); };
+provide('locale', { getLocale: () => ({ active: 'en' }), subscribe: () => () => {}, resolveText: text => typeof text === 'string' ? text : text.en });
+
 function render() {
   root.render(h(React.Fragment, null, ...[...views].filter(([key]) => !key.startsWith('plugins.row.config:')).map(([key, entry]) => h(entry.view, { key, view: 'page', ...(entry.options.inject?.() ?? {}) }))));
 }

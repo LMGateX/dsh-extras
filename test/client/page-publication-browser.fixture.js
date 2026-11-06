@@ -22,6 +22,8 @@ async function pageMutate(ops,revision) {
 }
 const form={getSnapshot:()=>nativeState,subscribe(listener){nativeListeners.add(listener);return()=>nativeListeners.delete(listener);},mutate(){throw new Error('fallback-root writes are forbidden');}};
 const provide=(name,value)=>{ctx.provide(name);ctx.set(name,value);};
+provide('locale', { getLocale: () => ({ active: 'en' }), subscribe: () => () => {}, resolveText: text => typeof text === 'string' ? text : text.en });
+
 provide('configForms',{get:()=>form,whileServed:(_rows,fn)=>fn()});
 let View;
 const readPage=()=>pageState;

@@ -1,3 +1,4 @@
+import { SETTINGS_CSS, useSettingsText, translateSettingsError, type SettingsLocale, type SettingsText } from './settings-ui.ts';
 import { bindSection, createPageFormAdapter } from './forms.ts';
 import type { CapabilityStatus } from './status.ts';
 import type { ConfigForm, ConfigFormSnapshot, ConfigPageForm, PathOperation, AcceptedConfigSource } from './forms.ts';
@@ -148,21 +149,28 @@ export function createFieldEditor(form: ConfigForm, field: TextField) {
   };
 }
 
-const labels: Record<ModuleId, string> = {
-  'compact-context': 'Compact-context', retry: 'Stream and empty-response retry',
-  chime: 'Session chime', goalWait: 'Goal wait',
+const labels: Record<ModuleId, { en: string; zh: string }> = {
+  'compact-context': { en: 'Compact-context', zh: '上下文压缩' },
+  retry: { en: 'Stream and empty-response retry', zh: '流式与空响应重试' },
+  chime: { en: 'Session chime', zh: '会话提示音' },
+  goalWait: { en: 'Goal wait', zh: '目标等待' },
 };
+
+function phaseText(phase: string, t: SettingsText): string {
+  const names: Record<string, string> = { active: '运行中', disabled: '已禁用', unavailable: '不可用', conflict: '所有权冲突', 'reload-required': '需要刷新页面', 'restart-required': '需要重启', 'saved/restart-required': '已保存，需重启', loading: '加载中', 'missing-dependency': '缺少依赖', 'migration-pending': '等待迁移', failed: '运行失败', 'Status unknown': '状态未知' };
+  return names[phase] ? t(phase, names[phase]) : phase;
+}
 const emptyStatus: SettingsStatusStore = { getSnapshot: () => undefined, subscribe: () => () => {} };
-export function capabilityText(label: string, status?: CapabilityStatus): string {
+export function capabilityText(label: string, status?: CapabilityStatus, t: SettingsText = en => en): string {
   const phase = ['disabled', 'active', 'unavailable'].includes(status?.phase ?? '') ? status!.phase : 'unavailable';
   const reason = typeof status?.reason === 'string' ? status.reason.slice(0, 200) : '';
-  return label + ' runtime: ' + phase + (reason ? ' · ' + reason : '');
+  return label + t(' runtime: ', '运行状态：') + phaseText(phase, t) + (reason ? ' · ' + reason : '');
 }
 
 /** Uses the platform React instance. The chime component is the preserved custom editor. */
 export function createSettingsView(
   React: any, descriptor: SettingsDescriptor, chimeEditor?: unknown, status?: SettingsStatusStore, reasoningEditor?: unknown,
-  accepted?: AcceptedConfigSource,
+  accepted?: AcceptedConfigSource, locale?: SettingsLocale,
 ): (props: SettingsProps) => unknown {
   const h = React.createElement;
   const formCallbacks = new WeakMap<ConfigForm, { subscribe: ConfigForm['subscribe']; getSnapshot: ConfigForm['getSnapshot'] }>();
@@ -175,16 +183,16 @@ export function createSettingsView(
     }
     return React.useSyncExternalStore(callbacks.subscribe, callbacks.getSnapshot, callbacks.getSnapshot) as ConfigFormSnapshot;
   };
-  const style = { display: 'grid', gap: 12 };
 
   function TextControl({ form, field, label, hint }: { form: ConfigForm; field: TextField; label: string; hint?: string }) {
+    const t = useSettingsText(React, locale);
     const [editor] = React.useState(() => createFieldEditor(form, field));
     React.useEffect(() => editor.start(), [editor]);
     const draft = React.useSyncExternalStore(editor.subscribe, editor.getSnapshot, editor.getSnapshot) as DraftState;
     const disabled = draft.status !== 'ready' || !draft.writable || draft.revision === undefined || draft.saving;
     const id = descriptor.rowId + '-' + field;
     const multiline = ['guidanceText', 'errorCodes', 'providers', 'ptcModelTimeouts'].includes(field);
-    return h('div', { style, 'data-field': field },
+    return h('div', { className: 'extras-field', 'data-field': field },
       h('label', { htmlFor: id }, label),
       h(multiline ? 'textarea' : 'input', {
         id, value: draft.text, disabled, rows: multiline ? 4 : undefined,
@@ -192,15 +200,16 @@ export function createSettingsView(
         onChange: (event: any) => editor.edit(String(event.target.value)),
       }),
       hint && h('small', null, hint),
-      draft.conflict && h('p', { role: 'alert' }, 'Configuration changed. Discard the draft to reload; it will not overwrite newer settings.'),
-      draft.error && h('p', { role: 'alert' }, draft.error),
-      h('div', null,
-        h('button', { type: 'button', disabled: disabled || !draft.dirty || draft.conflict, onClick: () => { void editor.save(); } }, 'Save'),
-        h('button', { type: 'button', disabled: draft.saving || !draft.dirty && !draft.conflict, onClick: () => editor.discard() }, 'Discard draft'),
-        h('button', { type: 'button', disabled: disabled || draft.conflict, onClick: () => { void editor.reset(); } }, 'Reset to inherited')));
+      draft.conflict && h('p', { role: 'alert' }, t("Configuration changed. Discard the draft to reload; it will not overwrite newer settings.", "配置已更新。请放弃草稿以重新读取；不会覆盖较新的设置。")),
+      draft.error && h('p', { role: 'alert' }, translateSettingsError(draft.error, t)),
+      h('div', { className: 'extras-actions' },
+        h('button', { type: 'button', className: 'extras-primary', disabled: disabled || !draft.dirty || draft.conflict, onClick: () => { void editor.save(); } }, t("Save", "保存")),
+        h('button', { type: 'button', disabled: draft.saving || !draft.dirty && !draft.conflict, onClick: () => editor.discard() }, t("Discard draft", "放弃草稿")),
+        h('button', { type: 'button', disabled: disabled || draft.conflict, onClick: () => { void editor.reset(); } }, t("Reset to inherited", "恢复继承值"))));
   }
 
   function Switch({ form, field, label, fallback = false }: { form: ConfigForm; field: string; label: string; fallback?: boolean }) {
+    const t = useSettingsText(React, locale);
     const snapshot = useSnapshot(form);
     const [busy, setBusy] = React.useState(false);
     const [error, setError] = React.useState('');
@@ -220,11 +229,13 @@ export function createSettingsView(
           finally { setBusy(false); }
         },
       }), ' ', label),
-      error && h('p', { role: 'alert' }, error));
+      error && h('p', { role: 'alert' }, translateSettingsError(error, t)));
   }
 
 
   function ModuleSection({ root, id, runtime, liveRuntime }: { root: ConfigForm; id: ModuleId; runtime?: SettingsStatus; liveRuntime?: SettingsStatus }) {
+    const t = useSettingsText(React, locale);
+    const moduleLabel = t(labels[id].en, labels[id].zh);
     const form = bindSection(root, ['modules', id]);
     const snapshot = useSnapshot(form);
     const moduleStatus = runtime?.modules?.[id];
@@ -232,47 +243,48 @@ export function createSettingsView(
     const flag = (field: string, label: string, fallback = false) => h(Switch, { key: field, form, field, label, fallback });
     let fields: unknown[];
     if (id === 'compact-context') fields = [
-      h('fieldset', {key:'agent-tools','aria-label':'Agent-facing compaction tools',style},
-        h('legend', null, 'Agent-facing compaction tools'),
-        h('p', {role:'status'}, capabilityText('Tools', liveRuntime?.modules?.[id]?.capabilities?.tools)),
-        flag('compactTool', 'Expose compact_context', true), flag('statusTool', 'Expose context_status (opt-in)')),
+      h('fieldset', {key:'agent-tools','aria-label':t("Agent-facing compaction tools", "代理可用的压缩工具"),className:'extras-group'},
+        h('legend', null, t("Agent-facing compaction tools", "代理可用的压缩工具")),
+        h('p', {role:'status'}, capabilityText(t('Tools', '工具'), liveRuntime?.modules?.[id]?.capabilities?.tools, t)),
+        flag('compactTool', t("Expose compact_context", "开放 compact_context 工具"), true), flag('statusTool', t("Expose context_status (opt-in)", "开放 context_status 工具（可选）"))),
       reasoningEditor && h(reasoningEditor, {key:'reasoning',form,runtime:liveRuntime?.modules?.[id]}),
-      flag('guidance', 'Add context guidance to the system prompt'),
-      text('guidanceText', 'Custom guidance text', 'Empty uses built-in guidance; at most 8000 characters.'),
-      flag('pressureContext', 'Experimental context-pressure line'),
-      text('retryAttempts', 'Additional compaction retry attempts (0–5)'),
-      text('retryDelayMs', 'Retry base delay (seconds)', '0–60 seconds; doubles per attempt.'),
-      text('ptcTimeoutMs', 'Default PTC timeout (seconds)', '0 keeps the deployment default.'),
-      text('ptcModelTimeouts', 'Per-model PTC timeouts (seconds)', 'One provider/model = seconds per line. Blank saves an explicit empty map.'),
-      h('p', { key: 'yaml-note' }, 'Nonvolatile watermarks notifyAtRatio and pressureStep remain YAML-only. Compaction thresholds and retention belong to host compaction settings.'),
+      flag('guidance', t("Add context guidance to the system prompt", "将上下文引导添加到系统提示词")),
+      text('guidanceText', t("Custom guidance text", "自定义引导文字"), t("Empty uses built-in guidance; at most 8000 characters.", "留空使用内置引导；最多 8000 个字符。")),
+      flag('pressureContext', t("Experimental context-pressure line", "实验性上下文压力提示")),
+      text('retryAttempts', t("Additional compaction retry attempts (0–5)", "额外压缩重试次数（0–5）")),
+      text('retryDelayMs', t("Retry base delay (seconds)", "重试基础延迟（秒）"), t("0–60 seconds; doubles per attempt.", "0–60 秒；每次重试翻倍。")),
+      text('ptcTimeoutMs', t("Default PTC timeout (seconds)", "默认 PTC 超时（秒）"), t("0 keeps the deployment default.", "0 表示保留部署默认值。")),
+      text('ptcModelTimeouts', t("Per-model PTC timeouts (seconds)", "各模型 PTC 超时（秒）"), t("One provider/model = seconds per line. Blank saves an explicit empty map.", "每行一项，格式为 provider/model = 秒数。留空将保存显式空映射。")),
+      h('p', { key: 'yaml-note' }, t("Nonvolatile watermarks notifyAtRatio and pressureStep remain YAML-only. Compaction thresholds and retention belong to host compaction settings.", "非热更新水位 notifyAtRatio 和 pressureStep 仅支持 YAML 配置。压缩阈值和保留策略由宿主压缩设置管理。")),
     ];
     else if (id === 'retry') fields = [
-      text('errorCodes', 'Error codes', 'One exact, case-sensitive identifier per line. Blank saves []; Reset removes the override.'),
-      text('providers', 'Provider routes', 'One route per line, no whitespace. Blank saves [] (all routes). Never enter credentials.'),
-      flag('retryEmptyResponse', 'Retry empty model responses', true),
+      text('errorCodes', t("Error codes", "错误码"), t("One exact, case-sensitive identifier per line. Blank saves []; Reset removes the override.", "每行填写一个精确标识符，区分大小写。留空保存 []；恢复继承值会移除覆盖。")),
+      text('providers', t("Provider routes", "提供方路由"), t("One route per line, no whitespace. Blank saves [] (all routes). Never enter credentials.", "每行一个路由，不能包含空白。留空保存 []（所有路由）。请勿填写凭据。")),
+      flag('retryEmptyResponse', t("Retry empty model responses", "重试模型空响应"), true),
     ];
     else if (id === 'goalWait') fields = [
-      flag('waitForJobs', 'Wait for running and stopping jobs', true),
-      flag('waitForSubagents', 'Wait for live subagent descendants', true),
-      text('maxHoldMs', 'Maximum hold (milliseconds)', '0 holds indefinitely. Does not change durable goal phase.'),
+      flag('waitForJobs', t("Wait for running and stopping jobs", "等待运行中及停止中的后台作业"), true),
+      flag('waitForSubagents', t("Wait for live subagent descendants", "等待仍在工作的后代子代理"), true),
+      text('maxHoldMs', t("Maximum hold (milliseconds)", "最长等待时长（毫秒）"), t("0 holds indefinitely. Does not change durable goal phase.", "0 表示无限期等待。不会更改持久化的目标阶段。")),
     ];
     else fields = chimeEditor
       ? [h(chimeEditor, { key: 'chime-editor', configForm: form })]
-      : [h('p', { key: 'chime-unavailable', role: 'status' }, 'The custom chime editor is unavailable in this distribution.')];
-    return h('section', { key: id, style, 'data-module': id, 'aria-label': labels[id] },
-      h('h3', null, labels[id]),
+      : [h('p', { key: 'chime-unavailable', role: 'status' }, t("The custom chime editor is unavailable in this distribution.", "此分发版本的提示音编辑器不可用。"))];
+    return h('section', { key: id, className: 'extras-module', 'data-module': id, 'aria-label': moduleLabel },
+      h('h3', null, moduleLabel),
       // The original custom editor already owns the same chime.enabled switch.
-      (id !== 'chime' || !chimeEditor) && flag('enabled', 'Enable ' + labels[id], true),
+      (id !== 'chime' || !chimeEditor) && flag('enabled', t('Enable ', '启用') + moduleLabel, true),
       h('p', { role: 'status' }, moduleStatus
-        ? [moduleStatus.phase ?? 'Status unknown', moduleStatus.ready === undefined ? '' : moduleStatus.ready ? 'ready' : 'not ready',
-          moduleStatus.enabled === undefined ? '' : moduleStatus.enabled ? 'enabled' : 'disabled', moduleStatus.reason ?? ''].filter(Boolean).join(' · ')
-        : 'Runtime status unavailable; saved configuration alone does not confirm activation.'),
-      snapshot.status !== 'ready' && h('p', { role: 'status' }, snapshot.status === 'loading' ? 'Loading configuration…' : 'Configuration unavailable.'),
-      snapshot.status === 'ready' && !snapshot.writable && h('p', { role: 'status' }, 'Read-only configuration.'),
+        ? [phaseText(moduleStatus.phase ?? 'Status unknown', t), moduleStatus.ready === undefined ? '' : moduleStatus.ready ? t('ready', '已就绪') : t('not ready', '未就绪'),
+          moduleStatus.enabled === undefined ? '' : moduleStatus.enabled ? t('enabled', '已启用') : t('disabled', '已禁用'), translateSettingsError(moduleStatus.reason ?? '', t)].filter(Boolean).join(' · ')
+        : t("Runtime status unavailable; saved configuration alone does not confirm activation.", "运行状态不可用；配置已保存并不代表功能已生效。")),
+      snapshot.status !== 'ready' && h('p', { role: 'status' }, snapshot.status === 'loading' ? t("Loading configuration…", "正在加载配置…") : t("Configuration unavailable.", "配置不可用。")),
+      snapshot.status === 'ready' && !snapshot.writable && h('p', { role: 'status' }, t("Read-only configuration.", "配置为只读。")),
       ...fields);
   }
 
   function Editor({ root, status: suppliedStatus }: { root: ConfigForm; status?: SettingsStatusStore }) {
+    const t = useSettingsText(React, locale);
     const snapshot = useSnapshot(root);
     const source = suppliedStatus ?? status ?? emptyStatus;
     const remote = React.useSyncExternalStore(source.subscribe, source.getSnapshot, source.getSnapshot) as SettingsStatus | undefined;
@@ -280,10 +292,11 @@ export function createSettingsView(
     const metadata = record(value.metadata);
     const runtime = remote ?? (value.status ?? metadata.status ?? metadata) as SettingsStatus;
     const report = runtime?.report ?? value.report;
-    return h('div', { style, 'data-package': descriptor.packageName },
-      h('h2', null, 'Extras settings'),
+    return h('div', { 'data-extras-settings': '', 'data-package': descriptor.packageName },
+      h('style', null, SETTINGS_CSS),
+      h('h2', null, t("Extras settings", "Extras 设置")),
       ...descriptor.moduleIds.map(id => h(ModuleSection, { key: id, root, id, runtime, liveRuntime: remote })),
-      report !== undefined && h('details', null, h('summary', null, 'Migration report'), h('pre', null, JSON.stringify(report, null, 2))));
+      report !== undefined && h('details', null, h('summary', null, t("Migration report", "迁移报告")), h('pre', null, JSON.stringify(report, null, 2))));
   }
   function PageEditor({ form, status }: { form: ConfigPageForm; status?: SettingsStatusStore }) {
     const [adapter] = React.useState(() => createPageFormAdapter(form, accepted));
@@ -292,9 +305,9 @@ export function createSettingsView(
   }
   return function SettingsView(props: SettingsProps) {
     // Summary cards must not subscribe, allocate editors, or access form services.
-    if (props.view === 'summary') return descriptor.moduleIds.map(id => labels[id]).join(' · ');
+    if (props.view === 'summary') return descriptor.moduleIds.map(id => locale ? locale.resolveText(labels[id]) : labels[id].zh).join(' · ');
     if (props.form) return h(PageEditor, { form: props.form, status: props.status });
     if (props.configForm) return h(Editor, { key: descriptor.rowId, root: props.configForm, status: props.status });
-    return h('p', { role: 'status' }, 'Configuration unavailable.');
+    return h('p', { role: 'status' }, locale ? locale.resolveText({ en: 'Configuration unavailable.', zh: '配置不可用。' }) : '配置不可用。');
   };
 }

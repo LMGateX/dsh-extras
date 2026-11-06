@@ -2,8 +2,12 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { bindSection, createPageFormAdapter } from '../../client/forms.ts';
 import type { ConfigForm, ConfigFormSnapshot, PathOperation } from '../../client/forms.ts';
-import { createFieldEditor, createSettingsView } from '../../client/settings.ts';
+import { createFieldEditor, createSettingsView as makeSettingsView } from '../../client/settings.ts';
 import type { ModuleId } from '../../client/settings.ts';
+
+// These behavior oracles intentionally select English; presentation tests cover Chinese/default/live switching.
+const english = { getLocale: () => ({active:'en'}), subscribe: () => () => {}, resolveText: (text: any) => text.en };
+const createSettingsView = (...args: Parameters<typeof makeSettingsView>) => makeSettingsView(args[0], args[1], args[2], args[3], args[4], english);
 
 function rootForm(value: unknown = { modules: {} }) {
   let snapshot: ConfigFormSnapshot = { status: 'ready', writable: true, revision: 7, value };
@@ -346,8 +350,10 @@ test('package fallback preserves native form receivers and stable React store ca
   const view = createSettingsView(React, { rowId: 'native', packageName: 'native', moduleIds: [] });
   view({ view: 'page', configForm: native });
   view({ view: 'page', configForm: native });
-  assert.equal(callbacks[0]!.subscribe, callbacks[2]!.subscribe);
-  assert.equal(callbacks[0]!.read, callbacks[2]!.read);
+  assert.equal(callbacks[0]!.subscribe, callbacks[3]!.subscribe);
+  assert.equal(callbacks[0]!.read, callbacks[3]!.read);
+  assert.equal(callbacks[1]!.subscribe, callbacks[4]!.subscribe);
+  assert.equal(callbacks[1]!.read, callbacks[4]!.read);
   cleanups.forEach(cleanup => cleanup()); render.cleanup();
   assert.equal(listeners.size, 0);
 });

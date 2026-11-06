@@ -19,6 +19,8 @@ const form = {
   },
 };
 const provide = (name,value) => {ctx.provide(name); ctx.set(name,value);};
+provide('locale', { getLocale: () => ({ active: 'en' }), subscribe: () => () => {}, resolveText: text => typeof text === 'string' ? text : text.en });
+
 window.catalogCalls = 0;
 window.catalog = {ok:true,value:{groups:[{id:'Route/A',name:'Route display',models:[{id:'Model/Exact',name:'Model display',reasoning:{efforts:[{id:'Opaque:MAX/Case',name:'Advertised native effort'}]}}]}],failures:[]}};
 if(!window.noRemote) provide('remote',{session:{async modelCatalog(){window.catalogCalls++; if(window.pendingCatalog) return new Promise(resolve => {window.resolveCatalog=resolve;}); return window.catalog;}}});
