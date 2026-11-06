@@ -193,8 +193,8 @@ test('registers the expected plugin surface', () => {
   assert.equal(defaults.retryDelayMs, 1000);
   assert.equal(defaults.ptcTimeoutMs, 0);
   assert.deepEqual(defaults.ptcModelTimeouts, {});
-  // Native preset engines are optional per-Agent services, never a root mount gate.
-  assert.deepEqual(inject, ['tools', 'tokenMeter', 'systemPrompt', 'llm']);
+  // Reasoning is independent; tool-only dependencies belong to the child fiber.
+  assert.deepEqual(inject, []);
   const harness = makeHarness();
   assert.equal(harness.tool('compact_context').name, 'compact_context');
   assert.equal(harness.tool('context_status').name, 'context_status');

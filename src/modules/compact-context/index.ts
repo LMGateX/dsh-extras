@@ -31,13 +31,24 @@ import { contextForAgent } from './scope.ts';
 import { installPtcTimeoutOverride } from './ptc-timeout.ts';
 import { selectNativeRetentionRange } from './manual.ts';
 import { buildStatus, renderStatus } from './status.ts';
+import { installCompactionReasoning, type ReasoningCapability } from './reasoning-runtime.ts';
 import type { ContextStatus, StatusOptions } from './status.ts';
 
 /** Stable Cordis plugin name. */
 export const name = 'extras-compact-context';
 
-/** Services the tools cannot work without. */
-export const inject = ['tools', 'tokenMeter', 'systemPrompt', 'llm'];
+/** Request reasoning is independent of tool-only service availability. */
+export const inject: string[] = [];
+const toolDependencies = ['tools', 'tokenMeter', 'systemPrompt', 'llm'];
+interface CapabilityState { compactionReasoning: ReasoningCapability; tools: ReasoningCapability }
+const runtimeStates = new WeakMap<Context['fiber'], CapabilityState>();
+
+/** Status is scoped to the exact feature fiber, never inferred from enabled config. */
+export function runtimeStatus(ctx: Context): { capabilities: CapabilityState } {
+  const state = runtimeStates.get(ctx.fiber);
+  return { capabilities: state ? { compactionReasoning: { ...state.compactionReasoning }, tools: { ...state.tools } }
+    : { compactionReasoning: { phase: 'disabled' }, tools: { phase: 'disabled' } } };
+}
 
 export { Config, resolveConfig, validateConfig };
 
@@ -478,7 +489,7 @@ function statusTool(ctx: Context): ToolDefinition {
  * @param ctx plugin context
  * @param rawConfig loader-resolved row config (plain values or volatile accessors)
  */
-export function apply(ctx: Context, rawConfig: Record<string, unknown> = {}): void {
+function applyTools(ctx: Context, rawConfig: Record<string, unknown> = {}): (next: ResolvedConfig) => void {
   const config = resolveConfig(rawConfig);
   validateConfig(config);
 
@@ -576,4 +587,43 @@ export function apply(ctx: Context, rawConfig: Record<string, unknown> = {}): vo
   if (typeof ctx.effect === 'function') {
     ctx.effect(() => () => teardown(), 'dsh-tool-compact-context: settings layout');
   }
+  return build;
+}
+
+/** Keep the native request modifier alive even when tool injection is pending. */
+export function apply(ctx: Context, rawConfig: Record<string, unknown> = {}): void {
+  // Direct module users may supply the documented minimal tool composition.
+  if (typeof ctx.plugin !== 'function') { applyTools(ctx, rawConfig); return; }
+  let accepted = resolveConfig(rawConfig);
+  validateConfig(accepted);
+  const state: CapabilityState = { compactionReasoning: { phase: 'disabled' }, tools: { phase: 'unavailable', reason: 'tool dependencies are unavailable' } };
+  runtimeStates.set(ctx.fiber, state);
+  let disposeReasoning: (() => void) | undefined;
+  let updateTools: ((next: ResolvedConfig) => void) | undefined;
+  const mountReasoning = (): void => {
+    disposeReasoning?.();
+    state.compactionReasoning = { phase: 'disabled' };
+    disposeReasoning = accepted.compactionReasoning.enabled
+      ? installCompactionReasoning(ctx, accepted.compactionReasoning, value => { state.compactionReasoning = value; }) : undefined;
+  };
+  mountReasoning();
+  const child = {
+    name: 'extras-compact-context-tools', inject: toolDependencies,
+    apply(toolCtx: Context) {
+      updateTools = applyTools(toolCtx, accepted as unknown as Record<string, unknown>);
+      state.tools = { phase: accepted.compactTool || accepted.statusTool ? 'active' : 'disabled' };
+      toolCtx.effect(() => () => { updateTools = undefined; state.tools = { phase: 'unavailable', reason: 'tool dependencies are unavailable' }; });
+    },
+  };
+  ctx.plugin(child);
+  const on = ctx.on as unknown as (event: string, listener: () => void) => void;
+  on('loader/volatile-update', () => {
+    let next: ResolvedConfig;
+    try { next = resolveConfig(rawConfig); validateConfig(next); } catch { return; }
+    accepted = next;
+    mountReasoning();
+    updateTools?.(next);
+    if (updateTools) state.tools = { phase: next.compactTool || next.statusTool ? 'active' : 'disabled' };
+  });
+  ctx.effect(() => () => { disposeReasoning?.(); runtimeStates.delete(ctx.fiber); }, 'compaction request reasoning');
 }
