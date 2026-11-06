@@ -10,7 +10,7 @@ const listeners = new Set();
 const localeListeners = new Set();
 let snapshot = {status:'ready', writable:true, revision:7, value:{
   modules:{
-    'compact-context':{enabled:true, compactTool:false, guidanceText:'Original guidance', retryAttempts:2, retryDelayMs:1500, ptcTimeoutMs:30000, compactionReasoning:{enabled:false,rules:[]}},
+    'compact-context':{enabled:true, compactTool:false, guidanceText:'Original guidance', retryAttempts:2, retryDelayMs:1500, ptcTimeoutMs:30000, ptcModelTimeouts:{'original/model':5000}, compactionReasoning:{enabled:false,rules:[]}},
     retry:{enabled:true,errorCodes:['STREAM_ERROR'],providers:['Original/Route'],retryEmptyResponse:true},
     goalWait:{enabled:true,waitForJobs:true,waitForSubagents:true,maxHoldMs:12000},
     chime:{enabled:true,durationMs:0},
@@ -47,6 +47,7 @@ if (requestedLocale !== 'absent') provide('locale', {
 window.setLocale = next => {active=next; for(const fn of localeListeners) fn();};
 window.localeSubscriberCount = () => localeListeners.size;
 window.accepted = () => structuredClone(snapshot);
+window.setFormState = patch => {snapshot={...snapshot,...patch};for(const fn of listeners)fn();};
 window.externalUpdate = () => form.mutate([{op:'set',path:['modules','retry','enabled'],value:false}], snapshot.revision);
 provide('configForms',{get:()=>form,whileServed:(_rows,fn)=>fn()});
 provide('remote',{session:{async modelCatalog(){return {ok:true,value:{groups:[],failures:[]}};}}});

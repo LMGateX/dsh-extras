@@ -215,6 +215,8 @@ test('text validation rejects unsafe durations, attempts and malformed model/lis
     ['ptcModelTimeouts', 'missing-key = 1'], ['ptcModelTimeouts', 'p/m = 0'],
     ['ptcModelTimeouts', 'p/m = 1\np/m = 2'], ['providers', 'has space'], ['errorCodes', 'bad:code'],
     ['guidanceText', 'x'.repeat(8001)],
+    ['notifyAtRatio', '-0.1'], ['notifyAtRatio', '1'], ['notifyAtRatio', 'NaN'],
+    ['pressureStep', '0'], ['pressureStep', '51'], ['pressureStep', '1.5'],
   ] as const;
   for (const [field, value] of cases) {
     const root = rootForm();
@@ -281,14 +283,150 @@ test('combined settings expose all original controls and exactly one custom chim
   assert.equal(chimeForm, bindSection(root.form, ['modules', 'chime']));
   const fields = new Set(nodes(tree).map(node => node.props['data-field']).filter(Boolean));
   for (const field of ['compactTool', 'statusTool', 'guidance', 'guidanceText', 'pressureContext', 'retryAttempts', 'retryDelayMs', 'ptcTimeoutMs', 'ptcModelTimeouts', 'errorCodes', 'providers', 'retryEmptyResponse', 'waitForJobs', 'waitForSubagents', 'maxHoldMs']) assert.equal(fields.has(field), true, field);
-  assert.equal(fields.has('notifyAtRatio'), false);
-  assert.match(contents(tree), /notifyAtRatio.*pressureStep.*YAML-only/);
+  assert.equal(fields.has('notifyAtRatio'), true);
+  assert.equal(fields.has('pressureStep'), true);
+  assert.match(contents(tree), /live.*next.*prompt/i);
   assert.match(contents(tree), /saved\/restart-required.*not ready.*reload host/);
   assert.match(contents(tree), /Migration report.*migrated/s);
   await enabled[1].props.onChange({ target: { checked: true } });
   assert.deepEqual(root.writes[0], { revision: 7, ops: [{ op: 'set', path: ['modules', 'retry', 'enabled'], value: true }] });
   assert.equal((root.form.getSnapshot().value as any).modules['compact-context'].enabled, true);
   render.cleanup();
+});
+
+test('retry group stages lists and flag, commits once, and Reset stages boolean unset until Save', async () => {
+  const root = rootForm({ modules: { retry: { errorCodes: ['old'], providers: ['alpha'], retryEmptyResponse: true } } });
+  const render = renderer();
+  const tree = createSettingsView(render.React, { rowId: 'retry', packageName: 'retry', moduleIds: ['retry'] })({ configForm: root.form });
+  const group = nodes(tree).find(node => node.props['data-group'] === 'retry-policy');
+  assert.ok(group, 'render a single retry policy draft');
+  const input = (field: string) => nodes(group).find(node => ['input', 'textarea'].includes(node.type) && (node.props['data-field'] === field || node.props.id === 'retry-' + field))!;
+  const action = (name: string) => nodes(group).find(node => node.type === 'button' && contents(node) === name)!;
+  input('errorCodes').props.onChange({ target: { value: 'NEW' } });
+  input('providers').props.onChange({ target: { value: '' } });
+  input('retryEmptyResponse').props.onChange({ target: { checked: false } });
+  assert.equal(root.writes.length, 0, 'flag participates in draft, not an immediate mutation');
+  await action('Save').props.onClick();
+  assert.deepEqual(root.writes, [{revision:7,ops:[
+    {op:'set',path:['modules','retry','errorCodes'],value:['NEW']},
+    {op:'set',path:['modules','retry','providers'],value:[]},
+    {op:'set',path:['modules','retry','retryEmptyResponse'],value:false},
+  ]}]);
+  action('Reset to inherited').props.onClick();
+  assert.equal(root.writes.length, 1, 'reset is staged');
+  action('Discard draft').props.onClick();
+  await action('Save').props.onClick();
+  assert.equal(root.writes.length, 1, 'discard also removes reset intent');
+  action('Reset to inherited').props.onClick();
+  await action('Save').props.onClick();
+  assert.deepEqual(root.writes[1], {revision:8,ops:['errorCodes','providers','retryEmptyResponse'].map(field => ({op:'unset',path:['modules','retry',field]}))});
+  render.cleanup();
+});
+
+test('compact timeout policy stages all four values and validates before one atomic mutation', async () => {
+  const root = rootForm({modules:{'compact-context':{retryAttempts:2,retryDelayMs:1500,ptcTimeoutMs:5000,ptcModelTimeouts:{'p/m':2500}}}});
+  const render = renderer();
+  const tree = createSettingsView(render.React, {rowId:'compact',packageName:'compact',moduleIds:['compact-context']})({configForm:root.form});
+  const group = nodes(tree).find(node => node.props['data-group'] === 'compact-timeouts');
+  assert.ok(group, 'render a single timeout/retry draft');
+  const input = (field: string) => nodes(group).find(node => ['input','textarea'].includes(node.type) && node.props.id === 'compact-'+field)!;
+  const save = nodes(group).find(node => node.type === 'button' && contents(node) === 'Save')!;
+  assert.equal(input('retryDelayMs').props.value, '1.5');
+  assert.equal(input('ptcModelTimeouts').props.value, 'p/m = 2.5');
+  for (const [field,value] of [['retryAttempts','6'],['retryDelayMs','0.125'],['ptcTimeoutMs','0'],['ptcModelTimeouts','']]) input(field!).props.onChange({target:{value}});
+  await save.props.onClick();
+  assert.equal(root.writes.length, 0, 'invalid attempt rejects entire group');
+  input('retryAttempts').props.onChange({target:{value:'0'}});
+  await save.props.onClick();
+  assert.deepEqual(root.writes,[{revision:7,ops:[
+    {op:'set',path:['modules','compact-context','retryAttempts'],value:0},
+    {op:'set',path:['modules','compact-context','retryDelayMs'],value:125},
+    {op:'set',path:['modules','compact-context','ptcTimeoutMs'],value:0},
+    {op:'set',path:['modules','compact-context','ptcModelTimeouts'],value:{}},
+  ]}]);
+  render.cleanup();
+});
+
+test('goal strategy and wait policy save together, with live actual mount separate from saved strategy', async () => {
+  const root = rootForm({modules:{goalWait:{enabled:true,strategy:'activation',waitForJobs:true,waitForSubagents:true,maxHoldMs:0}}});
+  const render = renderer();
+  const store = {getSnapshot:()=>({modules:{goalWait:{phase:'active',ready:true,enabled:true,capabilities:{continuation:{phase:'active' as const}},details:{goalWait:{requested:'replacement',mounted:'host-driver+gate' as const,fallback:'pin mismatch',host:{version:'0.2.2-alpha.3',cordis:'4',driverDigest:'abc'}}}}}}),subscribe:()=>()=>{}};
+  const tree = createSettingsView(render.React,{rowId:'goal',packageName:'goal',moduleIds:['goalWait']},undefined,store)({configForm:root.form});
+  const group = nodes(tree).find(node => node.props['data-group'] === 'goal-policy');
+  assert.ok(group, 'render a single strategy/policy draft');
+  const strategy = nodes(group).find(node => node.type === 'select')!;
+  assert.deepEqual(nodes(strategy).filter(node => node.type === 'option').map(node=>node.props.value), ['activation','replacement','native','off']);
+  strategy.props.onChange({target:{value:'off'}});
+  nodes(group).find(node => node.type === 'input' && node.props['data-field'] === 'waitForJobs')!.props.onChange({target:{checked:false}});
+  assert.equal(root.writes.length,0);
+  await nodes(group).find(node=>node.type==='button' && contents(node)==='Save')!.props.onClick();
+  assert.deepEqual(root.writes,[{revision:7,ops:[
+    {op:'set',path:['modules','goalWait','strategy'],value:'off'},
+    {op:'set',path:['modules','goalWait','waitForJobs'],value:false},
+  ]}]);
+  assert.match(contents(tree),/Requested.*replacement.*Mounted.*host-driver\+gate.*Fallback.*pin mismatch.*Host.*0.2.2-alpha.3/s);
+  assert.match(contents(tree),/repeated external disarm.*indistinguishable.*replacement/s);
+  render.cleanup();
+});
+
+test('active feature fiber without active continuation capability cannot confirm its driver owner', () => {
+  for(const continuation of [undefined,{phase:'unavailable' as const,reason:'pending driver drain'},{phase:'disabled' as const}]) {
+    const root = rootForm({modules:{goalWait:{strategy:'off'}}});
+    const render = renderer();
+    const store = {getSnapshot:()=>({modules:{goalWait:{phase:'active',ready:true,enabled:true,capabilities:{continuation},details:{goalWait:{requested:'off',mounted:'none' as const}}}}}),subscribe:()=>()=>{}};
+    const tree = createSettingsView(render.React,{rowId:'goal',packageName:'goal',moduleIds:['goalWait']},undefined,store)({configForm:root.form});
+    assert.match(contents(tree),/Actual driver not confirmed active/);
+    assert.doesNotMatch(contents(tree),/Mounted:/);
+    render.cleanup();
+  }
+});
+
+test('unavailable goal status cannot present a reported mount as effective or infer from saved settings', () => {
+  const root = rootForm({modules:{goalWait:{strategy:'replacement'}}});
+  const render = renderer();
+  const store = {getSnapshot:()=>({modules:{goalWait:{phase:'unavailable',ready:false,details:{goalWait:{requested:'replacement',mounted:'replacement-port' as const}}}}}),subscribe:()=>()=>{}};
+  const tree = createSettingsView(render.React,{rowId:'goal',packageName:'goal',moduleIds:['goalWait']},undefined,store)({configForm:root.form});
+  assert.match(contents(tree),/Actual driver not confirmed active/);
+  assert.doesNotMatch(contents(tree),/Mounted:.*replacement-port/);
+  const savedOnly = createSettingsView(render.React,{rowId:'goal',packageName:'goal',moduleIds:['goalWait']})({configForm:root.form});
+  assert.match(contents(savedOnly),/Goal driver status unavailable.*saved strategy does not confirm/s);
+  render.cleanup();
+});
+
+test('watermarks preserve valid zero and fraction while remaining independent from reasoning and tool enablement', async () => {
+  const root = rootForm({modules:{'compact-context':{enabled:true,compactTool:false,pressureContext:false,compactionReasoning:{enabled:false,rules:[]},notifyAtRatio:0.25,pressureStep:10}}});
+  const render = renderer();
+  const tree = createSettingsView(render.React,{rowId:'compact',packageName:'compact',moduleIds:['compact-context']})({configForm:root.form});
+  for(const [field,value,expected] of [['notifyAtRatio','0',0],['pressureStep','50',50],['notifyAtRatio','0.625',0.625]] as const) {
+    const wrapper=nodes(tree).find(node=>node.type==='div' && node.props['data-field']===field)!;
+    nodes(wrapper).find(node=>node.type==='input')!.props.onChange({target:{value}});
+    await nodes(wrapper).find(node=>node.type==='button' && contents(node)==='Save')!.props.onClick();
+    // TextControl deliberately fire-and-forgets its native save; yield one event-loop turn before another action.
+    await new Promise<void>(resolve=>setImmediate(resolve));
+    assert.deepEqual(root.writes.at(-1)?.ops,[{op:'set',path:['modules','compact-context',field],value:expected}]);
+  }
+  const config=(root.form.getSnapshot().value as any).modules['compact-context'];
+  assert.equal(config.compactTool,false);assert.equal(config.pressureContext,false);assert.deepEqual(config.compactionReasoning,{enabled:false,rules:[]});
+  render.cleanup();
+});
+
+test('retry group mixed reset/edit submits only its intents and stale or failed saves never rebase drafts', async () => {
+  const root = rootForm({modules:{retry:{errorCodes:['OLD'],providers:['old'],retryEmptyResponse:true}}});
+  const render=renderer();
+  const tree=createSettingsView(render.React,{rowId:'retry',packageName:'retry',moduleIds:['retry']})({configForm:root.form});
+  const group=nodes(tree).find(node=>node.props['data-group']==='retry-policy')!;
+  const action=(name:string)=>nodes(group).find(node=>node.type==='button' && contents(node)===name)!;
+  const provider=nodes(group).find(node=>node.type==='textarea' && node.props.id==='retry-providers')!;
+  action('Reset to inherited').props.onClick();
+  provider.props.onChange({target:{value:'new'}});
+  await action('Save').props.onClick();
+  assert.deepEqual(root.writes[0],{revision:7,ops:[{op:'unset',path:['modules','retry','errorCodes']},{op:'set',path:['modules','retry','providers'],value:['new']},{op:'unset',path:['modules','retry','retryEmptyResponse']}]});
+  provider.props.onChange({target:{value:'kept draft'}});root.update({revision:10});
+  await action('Save').props.onClick();assert.equal(root.writes.length,1,'foreign revision never reaches mutate');
+  action('Discard draft').props.onClick();provider.props.onChange({target:{value:'valid-route'}});root.fail(new Error('offline'));
+  await action('Save').props.onClick();assert.equal(root.writes[1]?.revision,10);
+  await action('Save').props.onClick();assert.equal(root.writes[2]?.revision,10,'transport retry keeps exact read revision');
+  render.cleanup();assert.equal(root.listeners.size,0);
 });
 
 test('split descriptors render only selected modules and page form takes precedence over fallback', async () => {

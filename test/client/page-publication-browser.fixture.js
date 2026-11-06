@@ -17,7 +17,7 @@ function accept(ops) {
 async function pageMutate(ops,revision) {
   window.nativeWrites.push({ops,revision});
   if(revision!==nativeState.revision)return false;
-  if(window.nativeWrites.length===1)return new Promise(resolve=>{window.acknowledge=()=>{accept(ops);resolve(true);};});
+  if(window.nativeWrites.length===1 || window.holdNextMutation){window.holdNextMutation=false;return new Promise(resolve=>{window.acknowledge=()=>{accept(ops);resolve(true);};});}
   accept(ops);return true;
 }
 const form={getSnapshot:()=>nativeState,subscribe(listener){nativeListeners.add(listener);return()=>nativeListeners.delete(listener);},mutate(){throw new Error('fallback-root writes are forbidden');}};

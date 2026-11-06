@@ -36,6 +36,28 @@ test('emitted settings share the native wire fence and keep sibling writes curre
     await page.waitForFunction(()=>(window as any).accepted().value.modules.retry.enabled===false);
     assert.deepEqual(await page.evaluate(()=>(window as any).nativeWrites.map((write:any)=>write.revision)),[7,8]);
     assert.equal(await page.getByRole('alert').count(),0);
+    // The grouped policy uses the same native page wire-call fence, not a fallback write path.
+    const retry=page.locator('[data-group="retry-policy"]');
+    await retry.getByRole('textbox',{name:'Provider routes',exact:true}).fill('Route/Atomic');
+    await retry.getByRole('checkbox',{name:'Retry empty model responses',exact:true}).uncheck();
+    await page.evaluate(()=>(window as any).holdNextMutation=true);
+    await retry.getByRole('button',{name:'Save',exact:true}).click();
+    await page.waitForFunction(()=>(window as any).nativeWrites.length===3);
+    assert.equal(await sibling.isDisabled(),true);
+    assert.equal(await retry.getByRole('button',{name:'Save',exact:true}).isDisabled(),true);
+    assert.equal(await policy.getByRole('checkbox',{name:'Enable compaction-request reasoning',exact:true}).isDisabled(),true);
+    await page.evaluate(()=>(window as any).acknowledge());
+    await page.waitForFunction(()=>(window as any).accepted().revision===10);
+    assert.deepEqual(await page.evaluate(()=>(window as any).nativeWrites[2]),{revision:9,ops:[
+      {op:'set',path:['modules','retry','providers'],value:['Route/Atomic']},
+      {op:'set',path:['modules','retry','retryEmptyResponse'],value:false},
+    ]});
+    assert.equal(await page.evaluate(()=>(window as any).pageRevision()),7,'group acceptance does not require publishing page props');
+    await retry.getByRole('textbox',{name:'Error codes',exact:true}).fill('EXACT');
+    await retry.getByRole('button',{name:'Save',exact:true}).click();
+    await page.waitForFunction(()=>(window as any).accepted().revision===11);
+    assert.deepEqual(await page.evaluate(()=>(window as any).nativeWrites[3]),{revision:10,ops:[{op:'set',path:['modules','retry','errorCodes'],value:['EXACT']}]});
+    assert.equal(await page.getByRole('alert').count(),0);
     await page.evaluate(()=>(window as any).unload());assert.equal(await page.evaluate(()=>(window as any).remainingListeners),0);
     assert.deepEqual(errors,[]);
   }finally{await browser?.close();server.close();await once(server,'close');}

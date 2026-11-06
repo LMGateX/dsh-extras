@@ -1,6 +1,7 @@
 import { SETTINGS_CSS, useSettingsText, translateSettingsError, type SettingsLocale, type SettingsText } from './settings-ui.ts';
 import { bindSection, createPageFormAdapter } from './forms.ts';
-import type { CapabilityStatus } from './status.ts';
+import { createSettingsGroupView, type GroupField } from './settings-group.ts';
+import type { CapabilityStatus, GoalWaitStatus } from './status.ts';
 import type { ConfigForm, ConfigFormSnapshot, ConfigPageForm, PathOperation, AcceptedConfigSource } from './forms.ts';
 
 export type ModuleId = 'compact-context' | 'retry' | 'chime' | 'goalWait';
@@ -10,7 +11,7 @@ export interface SettingsDescriptor {
   moduleIds: readonly ModuleId[];
 }
 export interface SettingsStatus {
-  modules?: Partial<Record<ModuleId, { phase?: string; ready?: boolean; enabled?: boolean; reason?: string; capabilities?: { compactionReasoning?: CapabilityStatus; tools?: CapabilityStatus } }>>;
+  modules?: Partial<Record<ModuleId, { phase?: string; ready?: boolean; enabled?: boolean; reason?: string; capabilities?: { compactionReasoning?: CapabilityStatus; tools?: CapabilityStatus; continuation?: CapabilityStatus }; details?: { goalWait?: GoalWaitStatus } }>>;
   report?: unknown;
 }
 export interface SettingsStatusStore {
@@ -25,7 +26,7 @@ export interface SettingsProps {
 }
 
 type TextField = 'guidanceText' | 'retryAttempts' | 'retryDelayMs' | 'ptcTimeoutMs'
-  | 'ptcModelTimeouts' | 'errorCodes' | 'providers' | 'maxHoldMs';
+  | 'ptcModelTimeouts' | 'errorCodes' | 'providers' | 'maxHoldMs' | 'notifyAtRatio' | 'pressureStep';
 interface DraftState {
   text: string;
   revision?: number;
@@ -58,6 +59,16 @@ function milliseconds(text: string, maxSeconds = Number.MAX_SAFE_INTEGER / 1000)
   return ms;
 }
 function parse(field: TextField, text: string): unknown {
+  if (field === 'notifyAtRatio') {
+    const value = number(text, 0, 1);
+    if (value >= 1) throw new Error('Notify ratio must be at least 0 and less than 1.');
+    return value;
+  }
+  if (field === 'pressureStep') {
+    const value = number(text, 1, 50);
+    if (!Number.isSafeInteger(value)) throw new Error('Pressure step must be a whole percentage from 1 to 50.');
+    return value;
+  }
   if (field === 'guidanceText') {
     if (text.length > 8000) throw new Error('Guidance is limited to 8000 characters.');
     return text;
@@ -173,6 +184,7 @@ export function createSettingsView(
   accepted?: AcceptedConfigSource, locale?: SettingsLocale,
 ): (props: SettingsProps) => unknown {
   const h = React.createElement;
+  const SettingsGroup = createSettingsGroupView(React, descriptor.rowId, locale);
   const formCallbacks = new WeakMap<ConfigForm, { subscribe: ConfigForm['subscribe']; getSnapshot: ConfigForm['getSnapshot'] }>();
   const useSnapshot = (form: ConfigForm): ConfigFormSnapshot => {
     let callbacks = formCallbacks.get(form);
@@ -233,6 +245,36 @@ export function createSettingsView(
   }
 
 
+  function GoalDriverStatus({ runtime }: { runtime?: NonNullable<SettingsStatus['modules']>['goalWait'] }) {
+    const t = useSettingsText(React, locale);
+    const detail = runtime?.details?.goalWait as GoalWaitStatus | undefined;
+    if (!detail) return h('p', {role:'status','data-goal-driver':''}, t('Goal driver status unavailable; saved strategy does not confirm activation.', '目标驱动状态不可用；已保存的策略并不代表已生效。'));
+    const strategy: Record<string, string> = {
+      activation:t('activation (native driver + activation gate)', 'activation（原生驱动与激活门控）'),
+      replacement:t('replacement (ported driver)', 'replacement（移植驱动）'),
+      native:t('native (unmodified continuation)', 'native（未修改的原生续跑）'),
+      off:t('off (no automatic continuation)', 'off（无自动续跑）'),
+    };
+    const mounted: Record<string,string> = {
+      'replacement-port':t('replacement-port (ported driver)', 'replacement-port（移植驱动）'),
+      'host-driver+gate':t('host-driver+gate (native driver + activation gate)', 'host-driver+gate（原生驱动与激活门控）'),
+      'host-driver':t('host-driver (native driver)', 'host-driver（原生驱动）'),
+      none:t('none (no driver mounted)', 'none（未挂载驱动）'),
+    };
+    const active = runtime?.phase === 'active' && runtime.ready === true && runtime.enabled === true
+      && runtime.capabilities?.continuation?.phase === 'active';
+    const host = detail.host;
+    const hostText = host && [host.version ?? host.distribution, host.cordis && 'Cordis '+host.cordis,
+      (host.driverDigest ?? host.driverSha256) && 'SHA256 '+(host.driverDigest ?? host.driverSha256)].filter(Boolean).join(' · ');
+    return h('div', {role:'status','data-goal-driver':''},
+      h('p', null, capabilityText(t('Continuation', '续跑'), runtime?.capabilities?.continuation, t)),
+      h('p', null, t('Requested: ', '请求策略：') + (strategy[detail.requested] ?? detail.requested)),
+      h('p', null, active ? t('Mounted: ', '实际挂载：') + (mounted[detail.mounted] ?? t('unknown', '未知'))
+        : t('Actual driver not confirmed active; reported mount: ', '尚未确认实际驱动已生效；报告的挂载：') + (mounted[detail.mounted] ?? t('unknown', '未知'))),
+      h('p', null, t('Fallback: ', '回退原因：') + (detail.fallback ? translateSettingsError(detail.fallback, t) : t('none reported', '未报告回退'))),
+      h('p', null, t('Host: ', '宿主：') + (hostText || t('unavailable', '不可用'))));
+  }
+
   function ModuleSection({ root, id, runtime, liveRuntime }: { root: ConfigForm; id: ModuleId; runtime?: SettingsStatus; liveRuntime?: SettingsStatus }) {
     const t = useSettingsText(React, locale);
     const moduleLabel = t(labels[id].en, labels[id].zh);
@@ -251,21 +293,39 @@ export function createSettingsView(
       flag('guidance', t("Add context guidance to the system prompt", "将上下文引导添加到系统提示词")),
       text('guidanceText', t("Custom guidance text", "自定义引导文字"), t("Empty uses built-in guidance; at most 8000 characters.", "留空使用内置引导；最多 8000 个字符。")),
       flag('pressureContext', t("Experimental context-pressure line", "实验性上下文压力提示")),
-      text('retryAttempts', t("Additional compaction retry attempts (0–5)", "额外压缩重试次数（0–5）")),
-      text('retryDelayMs', t("Retry base delay (seconds)", "重试基础延迟（秒）"), t("0–60 seconds; doubles per attempt.", "0–60 秒；每次重试翻倍。")),
-      text('ptcTimeoutMs', t("Default PTC timeout (seconds)", "默认 PTC 超时（秒）"), t("0 keeps the deployment default.", "0 表示保留部署默认值。")),
-      text('ptcModelTimeouts', t("Per-model PTC timeouts (seconds)", "各模型 PTC 超时（秒）"), t("One provider/model = seconds per line. Blank saves an explicit empty map.", "每行一项，格式为 provider/model = 秒数。留空将保存显式空映射。")),
-      h('p', { key: 'yaml-note' }, t("Nonvolatile watermarks notifyAtRatio and pressureStep remain YAML-only. Compaction thresholds and retention belong to host compaction settings.", "非热更新水位 notifyAtRatio 和 pressureStep 仅支持 YAML 配置。压缩阈值和保留策略由宿主压缩设置管理。")),
+      h(SettingsGroup, {key:'compact-timeouts',form,name:'compact-timeouts',label:t('Compaction retry and PTC timeouts', '压缩重试与 PTC 超时'),fields:[
+        {field:'retryAttempts',label:t('Additional compaction retry attempts (0–5)', '额外压缩重试次数（0–5）')},
+        {field:'retryDelayMs',label:t('Retry base delay (seconds)', '重试基础延迟（秒）'),hint:t('0–60 seconds; doubles per attempt.', '0–60 秒；每次重试翻倍。')},
+        {field:'ptcTimeoutMs',label:t('Default PTC timeout (seconds)', '默认 PTC 超时（秒）'),hint:t('0 keeps the deployment default.', '0 表示保留部署默认值。')},
+        {field:'ptcModelTimeouts',kind:'multiline',label:t('Per-model PTC timeouts (seconds)', '各模型 PTC 超时（秒）'),hint:t('One provider/model = seconds per line. Blank saves an explicit empty map.', '每行一项，格式为 provider/model = 秒数。留空将保存显式空映射。')},
+      ].map(f => ({...f,format:(value: unknown)=>format(f.field as TextField,value),parse:(value: string | boolean)=>parse(f.field as TextField,String(value))}))}),
+      text('notifyAtRatio', t('Pressure notify ratio (0 ≤ ratio < 1)', '压力提示水位（0 ≤ 比例 < 1）'), t('Updates live for the next optional pressure prompt when pressure context and the compact tool are enabled. This is not the native compaction threshold.', '热更新作用于下一次可选压力提示；需启用压力提示与压缩工具。这不是原生压缩阈值。')),
+      text('pressureStep', t('Pressure quantization step (1–50%)', '压力量化步长（1–50%）'), t('Whole percentage; updates live for the next pressure prompt and status calculation. Native compaction thresholds and retention remain host-owned.', '整数百分比；热更新作用于下一次压力提示与状态计算。原生压缩阈值和保留策略仍由宿主管理。')),
     ];
     else if (id === 'retry') fields = [
-      text('errorCodes', t("Error codes", "错误码"), t("One exact, case-sensitive identifier per line. Blank saves []; Reset removes the override.", "每行填写一个精确标识符，区分大小写。留空保存 []；恢复继承值会移除覆盖。")),
-      text('providers', t("Provider routes", "提供方路由"), t("One route per line, no whitespace. Blank saves [] (all routes). Never enter credentials.", "每行一个路由，不能包含空白。留空保存 []（所有路由）。请勿填写凭据。")),
-      flag('retryEmptyResponse', t("Retry empty model responses", "重试模型空响应"), true),
+      h(SettingsGroup, {key:'retry-policy',form,name:'retry-policy',label:t('Retry policy', '重试策略'),fields:[
+        {field:'errorCodes',kind:'multiline',label:t('Error codes', '错误码'),hint:t('One exact, case-sensitive identifier per line. Blank saves []; Reset removes the override after Save.', '每行填写一个精确标识符，区分大小写。留空保存 []；恢复继承值并保存后移除覆盖。'),format:(value: unknown)=>format('errorCodes',value),parse:(value: string | boolean)=>parse('errorCodes',String(value))},
+        {field:'providers',kind:'multiline',label:t('Provider routes', '提供方路由'),hint:t('One route per line, no whitespace. Blank saves [] (all routes). Never enter credentials.', '每行一个路由，不能包含空白。留空保存 []（所有路由）。请勿填写凭据。'),format:(value: unknown)=>format('providers',value),parse:(value: string | boolean)=>parse('providers',String(value))},
+        {field:'retryEmptyResponse',kind:'flag',label:t('Retry empty model responses', '重试模型空响应'),format:(value: unknown)=>typeof value === 'boolean' ? value : true,parse:(value: string | boolean)=>Boolean(value)},
+      ] satisfies GroupField[]}),
     ];
     else if (id === 'goalWait') fields = [
-      flag('waitForJobs', t("Wait for running and stopping jobs", "等待运行中及停止中的后台作业"), true),
-      flag('waitForSubagents', t("Wait for live subagent descendants", "等待仍在工作的后代子代理"), true),
-      text('maxHoldMs', t("Maximum hold (milliseconds)", "最长等待时长（毫秒）"), t("0 holds indefinitely. Does not change durable goal phase.", "0 表示无限期等待。不会更改持久化的目标阶段。")),
+      h(GoalDriverStatus, {key:'goal-status',runtime:liveRuntime?.modules?.goalWait}),
+      h(SettingsGroup, {key:'goal-policy',form,name:'goal-policy',label:t('Goal continuation strategy and wait policy', '目标续跑策略与等待政策'),hint:t('Save applies the strategy and dirty policy fields together. Native keeps official continuation; off stops automatic continuation. Disabling the module restores official native continuation.', '保存将同时提交策略和已编辑的政策字段。native 保留官方续跑；off 停止自动续跑。禁用模块则恢复官方原生续跑。'),fields:[
+        {field:'strategy',kind:'choice',label:t('Continuation strategy', '续跑策略'),choices:[
+          {value:'activation',label:t('Activation gate (native driver)', '激活门控（原生驱动）')},
+          {value:'replacement',label:t('Replacement (ported driver)', '替换（移植驱动）')},
+          {value:'native',label:t('Native continuation', '原生续跑')},
+          {value:'off',label:t('Off (no automatic continuation)', '关闭（无自动续跑）')},
+        ],format:(value: unknown)=>String(value ?? 'activation'),parse:(value: string | boolean)=>{
+          if (!['activation','replacement','native','off'].includes(String(value))) throw new Error('Choose a supported continuation strategy.');
+          return value;
+        }},
+        {field:'waitForJobs',kind:'flag',label:t('Wait for running and stopping jobs', '等待运行中及停止中的后台作业'),format:(value: unknown)=>typeof value === 'boolean' ? value : true,parse:(value: string | boolean)=>Boolean(value)},
+        {field:'waitForSubagents',kind:'flag',label:t('Wait for live subagent descendants', '等待仍在工作的后代子代理'),format:(value: unknown)=>typeof value === 'boolean' ? value : true,parse:(value: string | boolean)=>Boolean(value)},
+        {field:'maxHoldMs',label:t('Maximum hold (milliseconds)', '最长等待时长（毫秒）'),hint:t('0 holds indefinitely. A new limit applies to the next hold. Does not change durable goal phase.', '0 表示无限期等待。新时长作用于下一次等待。不会更改持久化的目标阶段。'),format:(value: unknown)=>format('maxHoldMs',value ?? 0),parse:(value: string | boolean)=>parse('maxHoldMs',String(value))},
+      ] satisfies GroupField[]}),
+      h('p', {key:'activation-limitation'}, t('Activation limitation: repeated external disarm during an owned hold can be indistinguishable from the gate’s own disarm; release may rearm that goal. Use replacement to wait without changing activation. Reliable observed revocations still fail closed; no strategy changes durable goal phase.', '激活门控的历史限制：已持有等待期间，外部重复撤销激活可能与门控自身的撤销无法区分；释放等待时可能重新激活该目标。可选择 replacement，在不改变激活状态的情况下等待。可靠观测到的撤权仍会安全拒绝续跑；任何策略均不更改持久化目标阶段。')),
     ];
     else fields = chimeEditor
       ? [h(chimeEditor, { key: 'chime-editor', configForm: form })]

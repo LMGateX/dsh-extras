@@ -148,6 +148,7 @@ test('all five actual packed settings localize, retain drafts and use native the
     }
     const harness=(await build({entryPoints:[join(root,'test/client/settings-presentation-browser.fixture.js')],bundle:true,write:false,
       platform:'browser',format:'iife',alias:{react:dependency.resolve('react'),'react-dom/client':dependency.resolve('react-dom/client')}})).outputFiles[0]!.text;
+    let goalRuntime:any;
     const server=createServer((req,res)=>{
       const url=new URL(req.url ?? '/', 'http://127.0.0.1');
       if(url.pathname==='/harness.js'){res.setHeader('content-type','text/javascript');res.end(harness);return;}
@@ -156,6 +157,7 @@ test('all five actual packed settings localize, retain drafts and use native the
       if(url.pathname.endsWith('/status')) {
         const status=Object.fromEntries(Object.keys(modules).map(id=>[id,{phase:'missing-dependency',ready:false,enabled:true,reason:'Waiting for services: syntheticService',
           capabilities:{tools:{phase:'unavailable',reason:'tool dependencies are unavailable'},compactionReasoning:{phase:'unavailable',reason:'no native LLM runtime is available'}}}]));
+        if(goalRuntime) status.goalWait=goalRuntime;
         res.setHeader('content-type','application/json');res.end(JSON.stringify({modules:status}));return;
       }
       if(!packedClients.has(name)){res.statusCode=404;res.end();return;}
@@ -220,12 +222,104 @@ test('all five actual packed settings localize, retain drafts and use native the
           await page.getByRole('heading',{name:'Extras settings',exact:true}).waitFor();
           assert.match(await alert.innerText(),/configuration changed/i);
         }));
+        for(const id of ids.filter(id=>id!=='chime')) await t.test(name+': '+id+' grouped policy is atomic across language switch, reset, conflict and permission fences',()=>scenario('en',async page=>{
+          const specs = {
+            retry:{name:'retry-policy',fields:['errorCodes','providers','retryEmptyResponse'],edits:{errorCodes:'EXACT',providers:'',retryEmptyResponse:false},expected:[['errorCodes',['EXACT']],['providers',[]],['retryEmptyResponse',false]]},
+            'compact-context':{name:'compact-timeouts',fields:['retryAttempts','retryDelayMs','ptcTimeoutMs','ptcModelTimeouts'],edits:{retryAttempts:'0',retryDelayMs:'0.125',ptcTimeoutMs:'0',ptcModelTimeouts:''},expected:[['retryAttempts',0],['retryDelayMs',125],['ptcTimeoutMs',0],['ptcModelTimeouts',{}]]},
+            goalWait:{name:'goal-policy',fields:['strategy','waitForJobs','waitForSubagents','maxHoldMs'],edits:{strategy:'replacement',waitForJobs:false,waitForSubagents:false,maxHoldMs:'0'},expected:[['strategy','replacement'],['waitForJobs',false],['waitForSubagents',false],['maxHoldMs',0]]},
+          };
+          const spec=specs[id as keyof typeof specs];
+          const group=page.locator('[data-group="'+spec.name+'"]');
+          const control=(field:string)=>group.locator('#'+name+'-'+field);
+          const edit=async(field:string,value:unknown)=>{
+            const node=control(field);
+            if(typeof value==='boolean') await node.setChecked(value);
+            else if(field==='strategy') await node.selectOption(String(value));
+            else await node.fill(String(value));
+          };
+          const before=await page.evaluate(()=>(window as any).accepted());
+          for(const [field,value] of Object.entries(spec.edits)) await edit(field,value);
+          assert.deepEqual(await page.evaluate(()=>(window as any).writes),[],'typing and booleans only stage');
+          for(const language of ['zh','en']) {
+            await page.evaluate(language=>(window as any).setLocale(language),language);
+            await group.getByRole('button',{name:language==='zh'?'保存':'Save',exact:true}).waitFor();
+            for(const [field,value] of Object.entries(spec.edits)) {
+              if(typeof value==='boolean') assert.equal(await control(field).isChecked(),value);
+              else assert.equal(await control(field).inputValue(),value);
+            }
+          }
+          await group.getByRole('button',{name:'Save',exact:true}).click();
+          await page.waitForFunction(()=>(window as any).accepted().revision===8);
+          assert.deepEqual(await page.evaluate(()=>(window as any).writes),[{revision:7,ops:spec.expected.map(([field,value])=>({op:'set',path:['modules',id,field],value}))}]);
+          const after=await page.evaluate(()=>(window as any).accepted());
+          for(const sibling of Object.keys(before.value.modules).filter(key=>key!==id)) assert.deepEqual(after.value.modules[sibling],before.value.modules[sibling]);
+          const reset=group.getByRole('button',{name:'Reset to inherited',exact:true});
+          await reset.click();assert.equal(await page.evaluate(()=>(window as any).writes.length),1,'reset sends nothing before Save');
+          await group.getByRole('button',{name:'Discard draft',exact:true}).click();
+          assert.equal(await group.getByRole('button',{name:'Save',exact:true}).isDisabled(),true,'discard clears all pending unsets');
+          await reset.click();
+          await group.getByRole('button',{name:'Save',exact:true}).click();
+          await page.waitForFunction(()=>(window as any).accepted().revision===9);
+          assert.deepEqual(await page.evaluate(()=>(window as any).writes.at(-1)),{revision:8,ops:spec.fields.map(field=>({op:'unset',path:['modules',id,field]}))});
+          // Preserve a stale group without rebasing when another module changes.
+          const field=spec.fields[0]!;const value=spec.edits[field as keyof typeof spec.edits];
+          await edit(field,value);
+          await page.evaluate(()=>(window as any).externalUpdate());
+          await group.getByRole('alert').first().waitFor();
+          assert.equal(await group.getByRole('button',{name:'Save',exact:true}).isDisabled(),true);
+          assert.equal(await control(field).inputValue(),String(value),'foreign accepted updates retain the draft');
+          await group.getByRole('button',{name:'Discard draft',exact:true}).click();
+          for(const patch of [{writable:false},{writable:true,status:'loading'},{status:'unavailable'},{status:'ready',revision:undefined}]) {
+            await page.evaluate(patch=>(window as any).setFormState(patch),patch);
+            assert.equal(await control(field).isDisabled(),true,'all non-writable/unfenced states disable edits');
+            assert.equal(await reset.isDisabled(),true);
+          }
+        }));
+        if(ids.includes('compact-context')) await t.test(name+': packed watermarks validate and save live fields without enabling independent features',()=>scenario('en',async page=>{
+          const section=page.locator('[data-module="compact-context"]');
+          const ratio=section.locator('[data-field="notifyAtRatio"]');
+          const step=section.locator('[data-field="pressureStep"]');
+          await ratio.locator('input').fill('1');await ratio.getByRole('button',{name:'Save',exact:true}).click();
+          await ratio.getByRole('alert').waitFor();assert.deepEqual(await page.evaluate(()=>(window as any).writes),[]);
+          await ratio.locator('input').fill('0');await ratio.getByRole('button',{name:'Save',exact:true}).click();
+          await page.waitForFunction(()=>(window as any).accepted().revision===8);
+          await step.locator('input').fill('50');await step.getByRole('button',{name:'Save',exact:true}).click();
+          await page.waitForFunction(()=>(window as any).accepted().revision===9);
+          assert.deepEqual(await page.evaluate(()=>(window as any).writes),[
+            {revision:7,ops:[{op:'set',path:['modules','compact-context','notifyAtRatio'],value:0}]},
+            {revision:8,ops:[{op:'set',path:['modules','compact-context','pressureStep'],value:50}]},
+          ]);
+          const accepted=await page.evaluate(()=>(window as any).accepted().value.modules['compact-context']);
+          assert.equal(accepted.compactTool,false);assert.equal(accepted.compactionReasoning.enabled,false);
+          assert.match(await ratio.innerText(),/Updates live.*next.*pressure prompt/);
+        }));
+        if(ids.includes('goalWait')) await t.test(name+': bilingual live requested/mounted/fallback/host status never treats an unavailable mount as active',async()=>{
+          try {
+            goalRuntime={phase:'active',ready:true,enabled:true,capabilities:{continuation:{phase:'active'}},details:{goalWait:{requested:'replacement',mounted:'host-driver+gate',fallback:'audited host pin mismatch',host:{distribution:'0.2.2-alpha.3',cordis:'4.19',driverSha256:'abc123'}}}};
+            await scenario('en',async page=>{
+              const driver=page.locator('[data-goal-driver]');
+              await driver.getByText('Requested:',{exact:false}).waitFor();
+              assert.match(await driver.innerText(),/Requested:.*replacement[\s\S]*Mounted:.*host-driver\+gate[\s\S]*Fallback: audited host pin mismatch[\s\S]*Host: 0.2.2-alpha.3.*abc123/);
+              await page.evaluate(()=>(window as any).setLocale('zh'));
+              await driver.getByText('请求策略：',{exact:false}).waitFor();
+              assert.match(await driver.innerText(),/请求策略：.*replacement[\s\S]*实际挂载：.*host-driver\+gate[\s\S]*回退原因：.*pin mismatch[\s\S]*宿主：.*abc123/);
+              assert.match(await page.locator('[data-module="goalWait"]').innerText(),/外部重复撤销激活.*无法区分.*replacement/);
+              goalRuntime={...goalRuntime,phase:'unavailable',ready:false};
+              await driver.getByText('尚未确认实际驱动已生效',{exact:false}).waitFor();
+              assert.doesNotMatch(await driver.innerText(),/实际挂载：/);
+              await page.evaluate(()=>(window as any).setLocale('en'));
+              await driver.getByText('Actual driver not confirmed active',{exact:false}).waitFor();
+              assert.doesNotMatch(await driver.innerText(),/Mounted:/);
+            });
+          } finally {goalRuntime=undefined;}
+        });
         await t.test(name+': subscribed locale switches retain drafts and module-scoped writes',()=>scenario('en',async page=>{
           await titles(page,ids,'en');
           const id=ids[0]!;
           const section=page.locator('[data-module="'+id+'"]');
-          const fieldRoot=id==='chime' ? section.locator('form') : section.locator('[data-field="'+field+'"]');
-          const control=id==='chime' ? fieldRoot.locator('#dsh-session-chime-durationMs') : fieldRoot.locator('textarea, input');
+          const groupName=id==='retry'?'retry-policy':id==='goalWait'?'goal-policy':undefined;
+          const fieldRoot=id==='chime' ? section.locator('form') : groupName ? section.locator('[data-group="'+groupName+'"]') : section.locator('[data-field="'+field+'"]');
+          const control=id==='chime' ? fieldRoot.locator('#dsh-session-chime-durationMs') : section.locator('[data-field="'+field+'"] textarea, [data-field="'+field+'"] input');
           const original=await control.inputValue();
           await control.fill(draft);
           const identity=await control.elementHandle();assert.ok(identity);
@@ -254,7 +348,7 @@ test('all five actual packed settings localize, retain drafts and use native the
             if(policyIdentity) {
               assert.equal(await policyIdentity.evaluate(element=>(element as HTMLInputElement).value),'Opaque:MAX/Case');
               assert.equal(await policyIdentity.evaluate(element=>element.isConnected),true,'policy draft is not remounted');
-              assert.deepEqual(await section.locator('fieldset input[type="text"]').evaluateAll(nodes=>nodes.map(node=>(node as HTMLInputElement).value)),['Route/Exact-Case','Model/Exact-Case','Opaque:MAX/Case']);
+              assert.deepEqual(await section.getByRole('group',{name:language==='zh'?'压缩请求推理':'Compaction-request reasoning',exact:true}).getByRole('textbox').evaluateAll(nodes=>nodes.map(node=>(node as HTMLInputElement).value)),['Route/Exact-Case','Model/Exact-Case','Opaque:MAX/Case']);
             }
             assert.equal(await page.evaluate(()=>(window as any).viewRegistrations),1,'no slot registration/remount on language change');
             assert.deepEqual(await page.evaluate(()=>(window as any).accepted()),before,'locale changes do not mutate accepted configuration or its revision');
@@ -276,8 +370,13 @@ test('all five actual packed settings localize, retain drafts and use native the
           assert.deepEqual(await page.evaluate(()=>(window as any).accepted()),expected,'save changes exactly the selected module field, preserving every sibling');
           if(id!=='chime') {
             await fieldRoot.getByRole('button',{name:'Reset to inherited',exact:true}).click();
+            if(groupName) {
+              assert.equal(await page.evaluate(()=>(window as any).accepted().revision),8,'group Reset is staged until Save');
+              await fieldRoot.getByRole('button',{name:'Save',exact:true}).click();
+            }
             await page.waitForFunction(()=>(window as any).accepted().revision===9);
-            assert.deepEqual(await page.evaluate(()=>(window as any).writes.at(-1)),{revision:8,ops:[{op:'unset',path:['modules',id,field]}]});
+            const resetFields=id==='retry'?['errorCodes','providers','retryEmptyResponse']:id==='goalWait'?['strategy','waitForJobs','waitForSubagents','maxHoldMs']:[field];
+            assert.deepEqual(await page.evaluate(()=>(window as any).writes.at(-1)),{revision:8,ops:resetFields.map(field=>({op:'unset',path:['modules',id,field]}))});
           } else {
             // The preserved chime editor stages its toggle and saves exactly the
             // same chime.enabled field, not a new translated/config alias.

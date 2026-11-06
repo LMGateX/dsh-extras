@@ -1,6 +1,12 @@
 /** Read-only host status. Failure closes browser capability, never settings access. */
 export interface CapabilityStatus { phase: 'disabled' | 'active' | 'unavailable'; reason?: string; }
-export interface ModuleStatus { phase: string; ready: boolean; enabled: boolean; reason?: string; capabilities?: { compactionReasoning?: CapabilityStatus; tools?: CapabilityStatus }; }
+export interface GoalWaitStatus {
+  requested: string;
+  mounted: 'replacement-port' | 'host-driver+gate' | 'host-driver' | 'none';
+  fallback?: string;
+  host?: { version?: string; distribution?: string; cordis?: string; driverDigest?: string; driverSha256?: string };
+}
+export interface ModuleStatus { phase: string; ready: boolean; enabled: boolean; reason?: string; capabilities?: { compactionReasoning?: CapabilityStatus; tools?: CapabilityStatus; continuation?: CapabilityStatus }; details?: { goalWait?: GoalWaitStatus }; }
 export interface ExtrasStatus {
   modules: Record<string, ModuleStatus>;
   report?: unknown;
