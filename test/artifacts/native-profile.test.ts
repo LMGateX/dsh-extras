@@ -109,7 +109,11 @@ test('native CLI installs packed combined distribution into isolated web profile
   const nativePolicyStatus=await page.evaluate(async()=> (await (await fetch('/extras/dsh-extras/status',{credentials:'same-origin',cache:'no-store'})).json()).modules['compact-context'].capabilities);
   assert.equal(nativePolicyStatus.compactionReasoning.phase,'active');assert.equal(nativePolicyStatus.tools.phase,'disabled');
   await page.getByRole('checkbox',{name:'Enable Stream and empty-response retry',exact:true}).click();
-  await page.waitForFunction(()=>!(document.querySelector('[data-module=retry] input[data-field=enabled]') as HTMLInputElement)?.checked);
+  await page.waitForFunction(()=>!(document.querySelector('[data-module=retry] input[data-field=enabled]') as HTMLInputElement)?.checked).catch(async error=>{
+    const disk=parse(await readFile(join(environment(temp).DSH_HOME!,'profiles',profile,'cordis.patch.yml'),'utf8')).find((row:any)=>row.id==='dsh-extras')?.config?.modules;
+    const runtime=await page.evaluate(async()=> (await (await fetch('/extras/dsh-extras/status',{credentials:'same-origin',cache:'no-store'})).json()).modules.retry);
+    throw new Error('Retry toggle not accepted: '+JSON.stringify({saved:disk?.retry, runtime, alerts:await page.getByRole('alert').allTextContents(), browserErrors:errors}),{cause:error});
+  });
   await page.getByRole('button',{name:'🔔 正常',exact:true}).click();
   await page.getByRole('button',{name:'🌙 休息中',exact:true}).waitFor();
   await page.reload();await page.getByRole('button',{name:'🌙 休息中',exact:true}).waitFor();
