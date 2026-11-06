@@ -276,7 +276,7 @@ export async function inspectMigration(host: NativeMigrationHost, target: Distri
     const matches = sources.filter(source => source.moduleId === id);
     if (matches.length > 1) for (const source of matches) source.problem = [source.problem, 'multiple legacy instances require explicit recovery'].filter(Boolean).join('; ');
   }
-  const goalOwner = target.moduleIds.includes('goalWait') ? await inspectNativeGoalOwner(host, target, sources) : undefined;
+  const goalOwner = target.moduleIds.includes('goalWait') ? await inspectNativeGoalOwner(host, target, sources, flat.filter(row => row.value.id === 'goal-round-driver')) : undefined;
   if (goalOwner?.reason) addProblem(['goalWait'], goalOwner.reason);
   if (host.startupOwner && host.startupOwner !== 'native') addProblem(['goalWait'], 'unsupported custom startup owner: ' + host.startupOwner);
   const targetRows = flat.filter(row => row.value.id === target.rowId);

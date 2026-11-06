@@ -1,7 +1,7 @@
 import { Context, type Fiber } from '@deepseek-ai/cordis';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
-import type { Distribution, NativeMigrationHost, Source } from './types.ts';
+import type { Distribution, LoaderEntry, NativeMigrationHost, Source, Values } from './types.ts';
 
 const ownerNames = new Set(['goal-round-driver', 'goal-wait-gate', 'goal-wait-startup', 'background-aware-goal-driver', 'goal-wait-owned-native-compatible-driver', 'goal-wait-owned-replacement-driver']);
 function within(fiber: Fiber, ancestor: unknown): boolean {
@@ -17,7 +17,7 @@ function within(fiber: Fiber, ancestor: unknown): boolean {
 
 /** Read-only runtime evidence; never acquires a driver slot or edits composition. */
 export interface NativeGoalOwner { verified: boolean; stockActive: boolean; reason?: string }
-export async function inspectNativeGoalOwner(host: NativeMigrationHost, target: Distribution, sources: Source[]): Promise<NativeGoalOwner> {
+export async function inspectNativeGoalOwner(host: NativeMigrationHost, target: Distribution, sources: Source[], nativeRows: readonly {value: Values; disabled: boolean; dynamic: boolean}[]): Promise<NativeGoalOwner> {
   const ctx = host.continuationContext;
   if (!ctx) return {verified:false,stockActive:false,reason:'programmatic goal continuation ownership cannot be verified offline; restart with native runtime verification required'};
   const key = Symbol.for('goal-wait-startup.root-lifetime.v1');
@@ -34,11 +34,38 @@ export async function inspectNativeGoalOwner(host: NativeMigrationHost, target: 
   let stockCount = 0;
   const marker = Symbol.for('goal-wait-startup.owner-callback.v1');
   const entries = [...host.loader.entries()];
-  const allowed = entries.filter(entry => entry.options.id === target.rowId && entry.options.name === (target.packageName ?? target.rowId) || sources.some(source => source.moduleId === 'goalWait' && !source.problem && source.rowId === entry.options.id && (source.moduleName ?? source.packageName) === entry.options.name));
+  // Context service access can return distinct scoped proxies. Correlate actual
+  // entry objects, not service-proxy identity, against the native service inventory.
+  const nativeLoader = ctx.get('loader') as {entries?(): Iterable<LoaderEntry>} | undefined;
+  const nativeInventory = new Set(nativeLoader?.entries?.() ?? []);
+  const nativeEntries = entries.filter(entry => entry.options.id === 'goal-round-driver' && entry.options.name === '@deepseek-ai/dsh-goal-round-driver');
+  const stockEntry = nativeEntries.length === 1 ? nativeEntries[0] : undefined;
+  const stockRow = nativeRows.length === 1 ? nativeRows[0] : undefined;
+  const nativeFibers = new Set([...ctx.registry.values()].filter(runtime => runtime.callback === originalNative).flatMap(runtime => [...runtime.fibers]));
+  const stockTupleMatches = (fiber: Fiber | undefined): boolean => !!fiber && !!stockEntry && nativeInventory.has(stockEntry) &&
+    stockEntry.moduleNamespace?.apply === originalNative && stockEntry.fiber?.ctx?.fiber === fiber && fiber.runtime?.callback === originalNative &&
+    fiber.ctx.root === ctx.root && (fiber as Fiber & {entry?: unknown}).entry === stockEntry &&
+    !!stockRow && stockRow.value.name === '@deepseek-ai/dsh-goal-round-driver' && !stockRow.disabled && !stockRow.dynamic;
+  const stockMatches = (fiber: Fiber | undefined): boolean => !!fiber && stockTupleMatches(fiber) && fiber.uid !== null && nativeFibers.has(fiber);
+  const stockRaw = stockEntry?.fiber?.ctx?.fiber;
+  // Runtime-only suppression leaves the exact disposed Loader pointer in place.
+  // It proves known inactivity only, never a new live-stock restoration grant.
+  const retiredStock = !!stockRaw && stockTupleMatches(stockRaw) && stockRaw.uid === null && ![...nativeFibers].some(fiber => fiber.uid !== null);
+  const mismatch = (): NativeGoalOwner => ({verified:false,stockActive:false,reason:'unverified programmatic native continuation callback: no matching native Loader ownership'});
+  if (nativeEntries.length > 1 || nativeEntries.some(entry => !!entry.fiber) && !stockMatches(stockRaw) && !retiredStock) return mismatch();
+  const ownsLoaderEntry = (entry: LoaderEntry): boolean => {
+    const raw = entry.fiber?.ctx?.fiber;
+    return !!raw && nativeInventory.has(entry) && raw.ctx.root === ctx.root && (raw as Fiber & {entry?: unknown}).entry === entry;
+  };
+  const allowed = entries.filter(entry => ownsLoaderEntry(entry) && (entry.options.id === target.rowId && entry.options.name === (target.packageName ?? target.rowId) || sources.some(source => source.moduleId === 'goalWait' && !source.problem && source.rowId === entry.options.id && (source.moduleName ?? source.packageName) === entry.options.name)));
   for (const runtime of ctx.registry.values()) {
     if ([...runtime.fibers].length && Object.getOwnPropertyDescriptor(runtime.callback, marker)?.value === true) return {verified:false,stockActive:false,reason:'unsupported programmatic startup owner callback'};
     if (runtime.callback === originalNative) {
       for (const fiber of runtime.fibers) if (!allowed.some(entry => within(fiber, entry.fiber))) {
+        if (fiber === stockRaw && retiredStock) continue;
+        // Callback identity says what runs, not who owns it. A programmatic
+        // mount of the exact official callback must never impersonate stock.
+        if (!stockMatches(fiber)) return mismatch();
         stockCount++; if (fiber.state === 2) stockActive = true;
       }
     } else if (ownerNames.has(runtime.name ?? '')) for (const fiber of runtime.fibers) {

@@ -36,8 +36,11 @@ test('latest bundle suppression is recorded as an owned composition delta, not a
   const runtime=await createRuntime({product:false,retry:false}); const {ctx}=runtime;
   t.after(()=>runtime.dispose()); f.host.continuationContext=ctx;
   await ctx.plugin((await load('@deepseek-ai/dsh-goal')).default).await();
-  const targetFiber=ctx.plugin({name:'migration-goal-target-proof',apply(){}}); await targetFiber.await();
-  f.host.loader.entries=()=>[{id:'include:dsh-extras',options:{id:'dsh-extras',name:'dsh-extras'},fiber:targetFiber}];
+  ctx.baseUrl=pathToFileURL(f.dir).href+'/';
+  await writeFile(join(f.dir,'node_modules','dsh-extras','index.js'),"export const name='migration-goal-target-proof';export function apply(){}");
+  await ctx.plugin((await load('@deepseek-ai/cordis-plugin-loader')).default).await();
+  await ctx.loader.create({id:target.rowId,name:target.packageName,config:{modules:{}}});await ctx.loader.await();
+  f.host.loader=ctx.loader;
   await f.pkg('native-base','1.0.0',[{insert:[{id:'goal-round-driver',name:'@deepseek-ai/dsh-goal-round-driver'}]}]);
   await f.pkg('dsh-goal-wait-gate','0.4.23',[{insert:[{id:'goal-wait-gate',name:'dsh-goal-wait-gate',config:{strategy:'off'}}]},{id:'goal-round-driver',disabled:true}]);
   await writeFile(join(f.dir,'package.json'),JSON.stringify({dependencies:{'dsh-extras':'*','dsh-goal-wait-gate':'*'},dsh:{profile:{bundles:['native-base','dsh-goal-wait-gate','dsh-extras']}}}));
@@ -50,15 +53,64 @@ test('latest bundle suppression is recorded as an owned composition delta, not a
   const unverified=await runMigration(f.host,target);
   assert.equal(unverified.modules.goalWait?.ready,false);
   assert.match(unverified.modules.goalWait?.reason??'',/native.*driver.*restor|stock.*callback/);
-  const stock=ctx.plugin(await load('@deepseek-ai/dsh-goal-round-driver')); await stock.await();
+  const nativePath=hostRequire.resolve('@deepseek-ai/dsh-goal-round-driver');
+  await mkdir(join(f.dir,'node_modules','@deepseek-ai'),{recursive:true});
+  await symlink(dirname(dirname(nativePath)),join(f.dir,'node_modules','@deepseek-ai','dsh-goal-round-driver'),'dir');
+  await ctx.loader.create({id:'goal-round-driver',name:'@deepseek-ai/dsh-goal-round-driver'});await ctx.loader.await();
+  const stock=ctx.loader.resolve('goal-round-driver').fiber;
   assert.equal(stock.state,2);
+  assert.deepEqual((await inspectMigration(f.host,target)).goalOwner,{verified:true,stockActive:true});
+  const stockEntry=ctx.loader.resolve('goal-round-driver');const official=await load('@deepseek-ai/dsh-goal-round-driver');
+  ctx.registry.delete(official.apply);await stock.await();
+  assert.equal(stockEntry.fiber.ctx.fiber.uid,null,'actual MemoryLoader retains its exact stopped stock pointer');
+  assert.deepEqual((await inspectMigration(f.host,target)).goalOwner,{verified:true,stockActive:false},'known retired canonical stock is inactive, not foreign');
+  assert.equal((await runMigration(f.host,target)).modules.goalWait?.ready,false,'a disposed pointer cannot grant the first stock restoration proof');
+  await stockEntry.init();await ctx.loader.await();
   const verified=await runMigration(f.host,target);
   assert.equal(verified.modules.goalWait?.ready,true);
+  f.host.continuationContext=ctx.loader.resolve(target.rowId).fiber.ctx;
+  assert.deepEqual((await inspectMigration(f.host,target)).goalOwner,{verified:true,stockActive:true},'actual Extras child context shares the verified native root');
   const {Context}=await load('@deepseek-ai/cordis');const otherRoot=new Context();
   try {
     f.host.continuationContext=otherRoot;
+    const mismatched=await inspectMigration(f.host,target);
+    assert.equal(mismatched.goalOwner?.verified,false,'a native Loader entry from another root is a conflict, not an empty stock slot');
+    assert.equal((await dryRunMigration(f.host,target)).decisions[0].phase,'conflict');
     assert.equal((await runMigration(f.host,target)).modules.goalWait?.ready,false,'a same-process different root cannot reuse native verification');
   } finally {f.host.continuationContext=ctx;await otherRoot.fiber.dispose();}
+  const extrasEntry=process.env.DSH_TEST_EXTRAS_GOAL_ENTRY;
+  const goalModule=extrasEntry?await import(pathToFileURL(extrasEntry).href):undefined;
+  if(goalModule) await ctx.plugin((await load('@deepseek-ai/dsh-jobs-local')).default,{}).await();
+  for(const strategy of ['replacement','off']) {
+    const policy={enabled:true,strategy,waitForJobs:true,waitForSubagents:true,maxHoldMs:0};
+    const draft=parseDocument(await readFile(f.host.profileContext.patchPath,'utf8'));
+    const index=draft.toJS().findLastIndex((row:any)=>row.id===target.rowId&&row.config?.modules?.goalWait);
+    draft.setIn([index,'config','modules','goalWait','strategy'],strategy);await writeFile(f.host.profileContext.patchPath,String(draft));
+    await ctx.loader.update(target.rowId,{config:{modules:{goalWait:policy}}});await ctx.loader.await();f.host.moduleConfig=()=>policy;
+    const slot=ctx.loader.resolve('goal-round-driver');let feature:any;
+    try {
+      if(goalModule) {
+        feature=ctx.loader.resolve(target.rowId).fiber.ctx.plugin(goalModule,policy);await feature.await();
+        const deadline=Date.now()+5_000;
+        while(goalModule.runtimeStatus(feature.ctx).capabilities.continuation.phase!=='active') {
+          assert.ok(Date.now()<deadline,JSON.stringify(goalModule.runtimeStatus(feature.ctx)));
+          await new Promise<void>(done=>setImmediate(done));
+        }
+      } else {
+        // The default fixture is a native suppression actor; the explicit entry
+        // configuration below executes the actual module Config/apply/status seam.
+        const previous=slot.fiber;ctx.registry.delete(official.apply);await previous.await();
+      }
+      assert.equal(slot.fiber.ctx.fiber.uid,null);
+      assert.deepEqual((await inspectMigration(f.host,target)).goalOwner,{verified:true,stockActive:false});
+      assert.equal((await runMigration(f.host,target)).modules.goalWait?.ready,true,strategy+' rescan retains only the original root-local stock proof');
+    } finally {
+      if(feature) await feature.dispose();else await slot.init();
+      await ctx.loader.await();
+    }
+    assert.equal(ctx.loader.resolve('goal-round-driver').fiber.state,2);
+  }
+  t.diagnostic(goalModule?'actual Extras Config/apply/runtimeStatus replacement/off rescans':'explicit native suppression actor replacement/off rescans (not actual Extras mode execution)');
   const after=await inspectMigration(f.host,target);
   assert.equal(after.rows.find(row=>row.id==='goal-round-driver')?.disabled,undefined);
   assert.ok(!(await readFile(f.host.profileContext.patchPath,'utf8')).includes('id: goal-round-driver'));
@@ -140,6 +192,10 @@ test('latest recovery restores only owned bundle delta and cannot claim live suc
     f.host.handoverAcknowledged=(_id,source)=>![...ctx.loader.entries()].some((entry:any)=>entry.options.id===source.rowId&&entry.fiber);
     const preparing=await runMigration(f.host,split);assert.equal(preparing.modules.goalWait?.ready,false);
     await reload();
+    const nativeEntry=[...ctx.loader.entries()].find((entry:any)=>entry.options.id==='goal-round-driver');
+    const official=await load('@deepseek-ai/dsh-goal-round-driver');
+    const raw=nativeEntry?.fiber?.ctx.fiber;
+    t.diagnostic(JSON.stringify({loaderIdentity:f.host.loader===ctx.get('loader'),namespace:nativeEntry?.moduleNamespace?.apply===official.apply,entryIdentity:raw?.entry===nativeEntry,rootIdentity:raw?.ctx.root===ctx.root,state:raw?.state,publicGoalOwner:(await inspectMigration(f.host,split)).goalOwner}));
     const applied=await runMigration(f.host,split);
     assert.equal(applied.modules.goalWait?.ready,true,JSON.stringify(applied.modules.goalWait));
     assert.equal([...ctx.loader.entries()].find((entry:any)=>entry.options.id==='goal-wait-gate')?.fiber,undefined);
@@ -158,13 +214,52 @@ test('latest manual row without a bundle suppression delta still requires a veri
   assert.equal(report.modules.goalWait?.ready,false);
   assert.match(report.modules.goalWait?.reason??'',/native.*driver.*restor|stock.*callback/);
 });
-test('actual official native callback identity is recognized without trusting its display name',async t=>{
-  const f=await fixture(t); const {Context}=await load('@deepseek-ai/cordis'); const ctx=new Context();
-  t.after(()=>ctx.fiber.dispose()); f.host.continuationContext=ctx;
+test('unmarked programmatic official callback cannot impersonate verified native Loader ownership',async t=>{
+  const f=await fixture(t);const {createRuntime}=await import('../modules/retry/runtime.ts');
+  const runtime=await createRuntime({product:false,retry:false});const {ctx}=runtime;
+  t.after(()=>runtime.dispose());f.host.continuationContext=ctx;
+  await ctx.plugin((await load('@deepseek-ai/dsh-goal')).default).await();
   const driver=await load('@deepseek-ai/dsh-goal-round-driver');
-  await ctx.plugin(driver);
+  const fiber=ctx.plugin(driver);await fiber.await();assert.equal(fiber.state,2);
   const input=await inspectMigration(f.host,target);
-  assert.equal(input.moduleProblems?.goalWait,undefined);
+  assert.equal(input.goalOwner?.verified,false);
+  assert.equal(input.goalOwner?.stockActive,false);
+  assert.match(input.moduleProblems?.goalWait?.join(';')??'',/native.*Loader|programmatic|unverified/);
+  const plan=await dryRunMigration(f.host,target);
+  assert.equal(plan.decisions[0].phase,'conflict');
+  assert.equal(plan.decisions[0].enabled,false);
+  const combined=await dryRunMigration(f.host,{...target,moduleIds:['goalWait','retry']});
+  assert.equal(combined.decisions.find(decision=>decision.moduleId==='retry')?.phase,'fresh','native owner conflict remains goal-local');
+  assert.equal((await runMigration(f.host,target)).modules.goalWait?.ready,false);
+  // Neither a stock-shaped nor a target-shaped caller inventory can turn a
+  // programmatic fiber into a verified native Loader entry.
+  for(const options of [{id:'goal-round-driver',name:'@deepseek-ai/dsh-goal-round-driver'},{id:target.rowId,name:target.packageName!}]) {
+    f.host.loader.entries=()=>[{id:options.id,options,fiber,moduleNamespace:driver}];
+    assert.equal((await inspectMigration(f.host,target)).goalOwner?.verified,false,'caller stock/target rows are not native ownership proof');
+  }
+});
+for(const shape of ['noncanonical-row','nonmatching-artifact-namespace'] as const) test('native Loader refuses '+shape+' despite an exact active official callback',async t=>{
+  const f=await fixture(t);const {createRuntime}=await import('../modules/retry/runtime.ts');
+  const runtime=await createRuntime({product:false,retry:false});const {ctx}=runtime;
+  t.after(()=>runtime.dispose());f.host.continuationContext=ctx;ctx.baseUrl=pathToFileURL(f.dir).href+'/';
+  await ctx.plugin((await load('@deepseek-ai/dsh-goal')).default).await();
+  const nativePath=hostRequire.resolve('@deepseek-ai/dsh-goal-round-driver');
+  if(shape==='nonmatching-artifact-namespace') {
+    await f.pkg('@deepseek-ai/dsh-goal-round-driver','0.2.2-alpha.3',[]);
+    await writeFile(join(f.dir,'node_modules','@deepseek-ai','dsh-goal-round-driver','index.js'),'import * as native from '+JSON.stringify(pathToFileURL(nativePath).href)+';export default native;');
+  } else {
+    await mkdir(join(f.dir,'node_modules','@deepseek-ai'),{recursive:true});
+    await symlink(dirname(dirname(nativePath)),join(f.dir,'node_modules','@deepseek-ai','dsh-goal-round-driver'),'dir');
+  }
+  const row={id:shape==='noncanonical-row'?'programmatic-driver-row':'goal-round-driver',name:'@deepseek-ai/dsh-goal-round-driver'};
+  await f.pkg('native-base','1.0.0',[{insert:[row]}]);
+  const manifest=JSON.parse(await readFile(join(f.dir,'package.json'),'utf8'));manifest.dsh.profile.bundles.unshift('native-base');await writeFile(join(f.dir,'package.json'),JSON.stringify(manifest));
+  await ctx.plugin((await load('@deepseek-ai/cordis-plugin-loader')).default).await();
+  await ctx.loader.create(row);await ctx.loader.await();f.host.loader=ctx.loader;
+  assert.equal(ctx.loader.resolve(row.id).fiber.state,2);
+  const input=await inspectMigration(f.host,target);
+  assert.equal(input.goalOwner?.verified,false);assert.equal(input.goalOwner?.stockActive,false);
+  assert.equal((await dryRunMigration(f.host,target)).decisions[0].phase,'conflict');
 });
 test('known continuation callback outside verified profile ownership blocks native discovery',async t=>{
   const f=await fixture(t); const {Context}=await load('@deepseek-ai/cordis'); const ctx=new Context();

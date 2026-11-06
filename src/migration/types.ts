@@ -5,7 +5,7 @@ export type ModuleId = typeof MODULE_IDS[number];
 export type Values = Record<string, unknown>;
 export interface Distribution { rowId: string; packageName?: string; moduleIds: readonly ModuleId[]; validateModule?: (id: ModuleId, value: Values) => void }
 export interface ProfileFacts { dir: string; patchPath: string; installAnchor: string; home: string; overlays?: readonly unknown[]; name?: string }
-export interface LoaderEntry { id: string; options: { id: string; name: string; config?: unknown; disabled?: unknown; group?: unknown }; disabled?: boolean; fiber?: { state?: number; inertia?: Promise<unknown>; effectiveConfig?: unknown }; parent?: unknown }
+export interface LoaderEntry { id: string; options: { id: string; name: string; config?: unknown; disabled?: unknown; group?: unknown }; disabled?: boolean; fiber?: { state?: number; inertia?: Promise<unknown>; effectiveConfig?: unknown; ctx?: Context }; moduleNamespace?: { apply?: unknown }; parent?: unknown }
 export interface NativeMigrationHost {
   profileContext: ProfileFacts;
   nativeMigration?: { resolveBundleDir(binName: string, packageName: string, installAnchor: string, profileDir: string): string; loadOverlayPatches(binName: string, file: string): unknown[]; composeEntries(layers: unknown[][], warn?: (message: string) => void): Values[] };
