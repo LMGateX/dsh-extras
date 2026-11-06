@@ -1,14 +1,19 @@
 /** Published native Loader/registry/driver lifecycle; no profile or network access. */
 import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
-import Loader, { type EntryChange } from '@deepseek-ai/cordis-plugin-loader';
+import Loader, { Group, type EntryChange } from '@deepseek-ai/cordis-plugin-loader';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { createRuntime } from '../modules/retry/runtime.ts';
-import { loadHost, requireHost } from './loader-harness.ts';
+import { loadHost, requireHost, loaderFixture } from './loader-harness.ts';
+import Schema from '@deepseek-ai/schemastery';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import type { Distribution, FeaturePlugin } from '../../src/types.ts';
+import { parse as parseYaml } from 'yaml';
 import { createHostDriverOwner, type HostDriverOwnerOptions } from '../../src/modules/goal-wait/host-owner.ts';
 
-async function fixture(t: TestContext, options: HostDriverOwnerOptions = {}, beforeOwner?: (ctx: any, entry: any) => (() => void)) {
+async function fixture(t: TestContext, options: HostDriverOwnerOptions = {}, beforeOwner?: (ctx: any, entry: any) => (() => void), grouped = false) {
   const runtime = await createRuntime({ product: false, retry: false });
   t.after(() => runtime.dispose());
   const { ctx } = runtime;
@@ -28,7 +33,10 @@ async function fixture(t: TestContext, options: HostDriverOwnerOptions = {}, bef
   }
   const loader = new RecordingLoader(ctx, { baseUrl: pathToFileURL(requireHost.resolve('@deepseek-ai/dsh/package.json')).href });
   await new Promise<void>(done => setImmediate(done)); // Allow Loader's isolation plugin to install its public hooks.
-  await ctx.loader.create({ id: 'goal-round-driver', name: '@deepseek-ai/dsh-goal-round-driver' } as any);
+  loader.builtins.group = Group;
+  const nativeRow = { id: 'goal-round-driver', name: '@deepseek-ai/dsh-goal-round-driver' };
+  await ctx.loader.create((grouped ? { id: 'native-ancestor', name: 'cordis:group', group: true, config: [nativeRow] } : nativeRow) as any);
+  await ctx.loader.await();
   const entry = loader.resolve('goal-round-driver');
   await entry.fiber!.await();
   commits.length = 0;
@@ -43,7 +51,7 @@ async function fixture(t: TestContext, options: HostDriverOwnerOptions = {}, bef
     blocked = { entered: Promise.withResolvers<void>(), release: Promise.withResolvers<void>() };
     return blocked;
   };
-  return { ctx, loader, entry, commits, owner: owner!, row, live, native, blockImport };
+  return { runtime, ctx, loader, entry, commits, owner: owner!, row, live, native, blockImport };
 }
 
 test('off suppresses only runtime, then close restores the original enabled Loader entry', async t => {
@@ -474,4 +482,174 @@ test('late real jobs activation clears only the obsolete dependency reason even 
   assert.equal(atActivation?.phase, 'active');
   assert.equal(atActivation?.reason, undefined, 'active must not retain a dependency fallback before the later projection listener runs');
   assert.equal(f.owner.snapshot().reason, undefined);
+});
+
+test('real ConfigEditor Save/recompose recognizes intentional runtime suppression without native disabled profile writes', async t => {
+  const runtime = await createRuntime({ product: false, retry: false });
+  t.after(() => runtime.dispose());
+  await runtime.ctx.plugin((await loadHost('dsh-goal')).default).await();
+  let owner: ReturnType<typeof createHostDriverOwner>;
+  const primitive = {
+    name: 'synthetic-native-owner-save',
+    Config: Schema.object({ strategy: Schema.string().default('activation') }),
+    async apply(scope: any, config: { strategy: 'activation' | 'off' | 'native' }) {
+      owner = createHostDriverOwner(scope);
+      await owner.transition({ strategy: config.strategy });
+    },
+  } as FeaturePlugin;
+  const distribution: Distribution = { name: 'synthetic-native-owner-save', moduleIds: ['goalWait'], modulePlugins: {} };
+  const f = await loaderFixture(t, distribution, { strategy: 'activation' }, runtime.ctx,
+    [{ id: 'goal-round-driver', name: '@deepseek-ai/dsh-goal-round-driver' }], primitive);
+  const stock = [...f.loader.entries()].find(entry => entry.options.name === '@deepseek-ai/dsh-goal-round-driver')!;
+  // Older shared fixture has no suppliedImports parameter: install the real native
+  // namespace into its public import table, then recover the initial import once.
+  f.importTable.set('@deepseek-ai/dsh-goal-round-driver', await loadHost('dsh-goal-round-driver'));
+  await stock.init(); await stock.fiber!.await();
+  assert.equal(stock.fiber!.state, 2, 'real stock driver is healthy before the public Save');
+  const before = structuredClone(stock.options);
+  const descriptor = Object.getOwnPropertyDescriptor(stock, 'disabled');
+  await f.update({ strategy: 'off' }); // Public ConfigEditor.edit -> native Include recompose + inactiveEntries.
+  assert.equal(owner!.snapshot().effective, 'none', JSON.stringify(owner!.snapshot()));
+  assert.equal(stock.fiber!.uid, null);
+  assert.deepEqual(stock.options, before);
+  const patches = parseYaml(await readFile(join(f.profile, 'cordis.patch.yml'), 'utf8'));
+  assert.equal(JSON.stringify(patches).includes('"disabled"'), false);
+  await f.update({ strategy: 'native' });
+  assert.equal(owner!.snapshot().effective, 'stock');
+  assert.equal(stock.fiber!.state, 2);
+  assert.equal(stock.disabled, false);
+  assert.deepEqual(stock.options, before);
+  assert.deepEqual(Object.getOwnPropertyDescriptor(stock, 'disabled'), descriptor);
+});
+
+test('runtime disabled view delegates native intent and only CAS-restores a descriptor it still owns', async t => {
+  const f = await fixture(t);
+  const before = Object.getOwnPropertyDescriptor(f.entry, 'disabled');
+  const prototype = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(f.entry), 'disabled')!;
+  const options = structuredClone(f.entry.options);
+  let raw: any;
+  await f.owner.transition({ strategy: 'replacement', mountOwned: async () => {
+    raw = f.row.ctx.plugin({ name: 'goal-wait-owned-replacement-driver', apply() {} }).ctx.fiber;
+    await raw.await();
+    return { rawFiber: raw, stop: async () => { await raw.dispose(); } };
+  } });
+  assert.equal(f.entry.disabled, true);
+  assert.equal(prototype.get!.call(f.entry), false, 'original native user/ancestor intent stays enabled');
+  assert.deepEqual(f.entry.options, options);
+  const foreign = { configurable: true, enumerable: true, get() { return true; } };
+  Object.defineProperty(f.entry, 'disabled', foreign);
+  assert.equal(f.owner.snapshot().phase, 'conflict');
+  assert.notEqual(raw.uid, null, 'a pure snapshot must not dispose a driver');
+  f.ctx.emit('loader/config-update');
+  assert.equal(raw.uid, null, 'next public checkpoint revokes owned execution');
+  assert.equal((await f.owner.close()).phase, 'conflict');
+  assert.deepEqual(Object.getOwnPropertyDescriptor(f.entry, 'disabled'), { ...foreign, set: undefined });
+  assert.deepEqual(f.entry.options, options);
+  assert.deepEqual(f.commits, []);
+  // The external descriptor owner, not the adapter, removes its own view.
+  Reflect.deleteProperty(f.entry, 'disabled');
+  assert.deepEqual(Object.getOwnPropertyDescriptor(f.entry, 'disabled'), before);
+});
+
+test('unknown initial disabled getter is not adopted or overwritten', async t => {
+  const f = await fixture(t);
+  const uid = f.entry.fiber!.uid;
+  const foreign = { configurable: true, enumerable: false, get() { return false; } };
+  Object.defineProperty(f.entry, 'disabled', foreign);
+  const result = await f.owner.transition({ strategy: 'off' });
+  assert.equal(result.phase, 'conflict');
+  assert.equal(f.entry.fiber!.uid, uid);
+  await f.owner.close();
+  assert.deepEqual(Object.getOwnPropertyDescriptor(f.entry, 'disabled'), { ...foreign, set: undefined });
+  assert.deepEqual(f.commits, []);
+  Reflect.deleteProperty(f.entry, 'disabled');
+});
+
+test('descriptor takeover at a real native Agent pre-step revokes owned driver before any provider request', { timeout: 10000 }, async t => {
+  const f = await fixture(t);
+  let raw: any;
+  await f.owner.transition({ strategy: 'replacement', mountOwned: async () => {
+    raw = f.row.ctx.plugin({ name: 'goal-wait-owned-replacement-driver', inject: f.native.inject, apply: f.native.apply }).ctx.fiber;
+    await raw.await();
+    return { rawFiber: raw, stop: async () => { await raw.dispose(); } };
+  } });
+  const handle = await f.runtime.createAgent({ sessionId: 'native-descriptor-pre-step', adapter: { failures: 0 } });
+  const changed = Promise.withResolvers<void>();
+  const foreign = { configurable: true, enumerable: false, get() { return true; } };
+  let changedOnce = false;
+  const off = f.ctx.on('agent/pre-step', async (event: any, next: () => Promise<any>) => {
+    if (event.agent === handle.agent && !changedOnce) {
+      changedOnce = true;
+      Object.defineProperty(f.entry, 'disabled', foreign);
+      changed.resolve();
+    }
+    return next();
+  }, { global: true, prepend: true });
+  f.ctx.goals.create(handle.agent, { objective: 'Synthetic native descriptor ownership fence', maxGoalRounds: 1 });
+  await changed.promise;
+  await handle.agent.whenIdle();
+  await raw.await(); off();
+  assert.equal(handle.state.requests.length, 0, 'no offline provider call crossed the invalid lease');
+  assert.equal(raw.uid, null);
+  assert.equal(f.owner.snapshot().phase, 'conflict');
+  await f.owner.close();
+  assert.deepEqual(Object.getOwnPropertyDescriptor(f.entry, 'disabled'), { ...foreign, set: undefined });
+  assert.deepEqual(f.commits, []);
+  Reflect.deleteProperty(f.entry, 'disabled');
+});
+
+test('effective-disabled view remains owned through explicit restore import and releases on a real import failure', async t => {
+  const f = await fixture(t);
+  const before = Object.getOwnPropertyDescriptor(f.entry, 'disabled');
+  const nativeGetter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(f.entry), 'disabled')!.get!;
+  await f.owner.transition({ strategy: 'off' });
+  const blocked = f.blockImport();
+  const closing = f.owner.close(); await blocked.entered.promise;
+  try {
+    assert.equal(f.entry.disabled, true, 'parallel native health checks see intentional suspension until init settles');
+    assert.equal(nativeGetter.call(f.entry), false, 'the users native intent was never disabled');
+  } finally { blocked.release.resolve(); }
+  assert.equal((await closing).effective, 'stock');
+  assert.deepEqual(Object.getOwnPropertyDescriptor(f.entry, 'disabled'), before);
+
+  const g = await fixture(t);
+  const original = g.loader.import.bind(g.loader);
+  await g.owner.transition({ strategy: 'off' });
+  g.loader.import = async (name: string, stack?: () => string[]) => {
+    if (name === '@deepseek-ai/dsh-goal-round-driver') throw new Error('synthetic native restoration import failure');
+    return original(name, stack);
+  };
+  const failed = await g.owner.close();
+  g.loader.import = original;
+  assert.equal(failed.phase, 'failed');
+  assert.equal(failed.effective, 'none');
+  assert.equal(Object.hasOwn(g.entry, 'disabled'), false, 'failure cannot leave an owned health-check mask');
+  assert.equal(g.entry.disabled, false);
+  assert.equal(g.entry.options.disabled, undefined);
+  await g.entry.init(); await g.entry.fiber!.await();
+  assert.equal(g.live().filter((fiber: any) => fiber.state === 2).length, 1);
+});
+
+test('native ancestor disabled intent survives view cleanup and descriptor flags participate in CAS', async t => {
+  const f = await fixture(t, {}, undefined, true);
+  await f.owner.transition({ strategy: 'off' });
+  const ancestor = f.loader.resolve('native-ancestor');
+  await ancestor.update({ disabled: true });
+  assert.equal((await f.owner.close()).effective, 'none');
+  assert.equal(f.entry.disabled, true);
+  assert.equal(f.entry.options.disabled, undefined);
+  assert.equal(ancestor.options.disabled, true);
+  assert.equal(Object.hasOwn(f.entry, 'disabled'), false);
+  assert.equal(f.live().length, 0);
+
+  const g = await fixture(t);
+  await g.owner.transition({ strategy: 'off' });
+  const ours = Object.getOwnPropertyDescriptor(g.entry, 'disabled')!;
+  const external = { ...ours, enumerable: !ours.enumerable };
+  Object.defineProperty(g.entry, 'disabled', external);
+  assert.equal(g.owner.snapshot().phase, 'conflict', 'matching getter identity is insufficient when descriptor flags changed');
+  g.ctx.emit('loader/config-update');
+  await g.owner.close();
+  assert.deepEqual(Object.getOwnPropertyDescriptor(g.entry, 'disabled'), external);
+  Reflect.deleteProperty(g.entry, 'disabled');
 });

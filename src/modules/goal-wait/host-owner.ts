@@ -39,6 +39,13 @@ const claims = (globals[claimsKey] ??= new WeakMap<object, object>()) as WeakMap
 const driverDigest = '1a1cb44cd44363965aca4a288c052df50e6adff0ffdafd0a81fed97b4a7589de';
 const live = (fiber: Fiber | undefined): fiber is Fiber => !!fiber && fiber.uid !== null;
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
+const nativeDisabledDescriptor = Object.getOwnPropertyDescriptor(Entry.prototype, 'disabled');
+function sameDescriptor(left: PropertyDescriptor | undefined, right: PropertyDescriptor | undefined): boolean {
+  return !!left && !!right && left.get === right.get && left.set === right.set
+    && left.value === right.value && left.writable === right.writable
+    && left.configurable === right.configurable && left.enumerable === right.enumerable
+    && Object.hasOwn(left, 'value') === Object.hasOwn(right, 'value');
+}
 
 /**
  * Consumer removes its gate before switching/closing. The adapter drains every
@@ -67,9 +74,13 @@ export function createHostDriverOwner(ctx: Context, options: HostDriverOwnerOpti
   let pendingOwned: Fiber | undefined;
   let offGuard: (() => void) | undefined;
   let offStatus = () => {};
+  const checkpointOff: (() => void)[] = [];
+  let disabledView: { entry: Entry; installed: PropertyDescriptor; before?: PropertyDescriptor; active: boolean } | undefined;
   const draining = new Set<Fiber>();
   const snapshot = (): DriverOwnerSnapshot => {
     const result = { ...state };
+    const descriptorFailure = disabledDescriptorIssue();
+    if (descriptorFailure) return { ...result, effective: 'unknown', phase: 'conflict', reason: descriptorFailure };
     if (!closing && !conflicted && owned && (state.phase === 'active' || state.phase === 'missing-dependency')) {
       const fiber = owned.rawFiber;
       result.effective = live(fiber) && fiber.state === 2 ? 'replacement' : 'none';
@@ -94,14 +105,57 @@ export function createHostDriverOwner(ctx: Context, options: HostDriverOwnerOpti
   const pendingCandidate = (): Fiber | undefined => pendingOwned;
   const isPending = (fiber: Fiber) => fiber === pendingCandidate();
   const currentEntry = () => !!stock && !!loader && [...loader.entries()].includes(stock);
-  const canRestore = () => currentEntry() && !stock!.disabled && ctx.root.fiber.state === 2
+  const disabledDescriptorIssue = (): string | undefined => {
+    if (!stock) return undefined;
+    if (!(stock instanceof Entry) || !sameDescriptor(Object.getOwnPropertyDescriptor(Entry.prototype, 'disabled'), nativeDisabledDescriptor)
+      || !nativeDisabledDescriptor?.get) return 'Unavailable: unverified native effective-disabled getter';
+    const own = Object.getOwnPropertyDescriptor(stock, 'disabled');
+    if (disabledView) {
+      if (disabledView.entry !== stock || !sameDescriptor(own, disabledView.installed)) return 'Native effective-disabled descriptor ownership changed';
+    } else if (own) return 'Unavailable: foreign own effective-disabled descriptor';
+    return undefined;
+  };
+  const nativeDisabled = () => !stock || !!nativeDisabledDescriptor!.get!.call(stock);
+  // Loader Entry.disabled is effective runtime state (entry.ts:75-84); app-boot
+  // inactiveEntries (0.2.2-alpha.3 lib/index.js:5085-5110) consumes it before
+  // classifying a disposed fiber as failure. Entry.options alone remains serialized.
+  const installDisabledView = () => {
+    const issue = disabledDescriptorIssue();
+    if (issue) { conflict(issue); throw new Error(issue); }
+    if (disabledView) { disabledView.active = true; return; }
+    if (!Object.isExtensible(stock!)) throw new Error('Unavailable: native entry cannot hold a runtime disabled view');
+    const record = { entry: stock!, before: Object.getOwnPropertyDescriptor(stock!, 'disabled'), installed: {} as PropertyDescriptor, active: true };
+    record.installed = { configurable: true, enumerable: false, get(this: Entry) {
+      // Delegate native intent/ancestor/expression handling; only the owned runtime bit is additive.
+      return !!nativeDisabledDescriptor!.get!.call(this) || (this === record.entry && record.active);
+    } };
+    Object.defineProperty(record.entry, 'disabled', record.installed);
+    disabledView = record;
+  };
+  const releaseDisabledView = () => {
+    const record = disabledView;
+    if (!record) return;
+    record.active = false; disabledView = undefined;
+    if (!sameDescriptor(Object.getOwnPropertyDescriptor(record.entry, 'disabled'), record.installed)) {
+      conflict('Native effective-disabled descriptor ownership changed');
+      return; // Never overwrite an external descriptor, even on close.
+    }
+    if (record.before) Object.defineProperty(record.entry, 'disabled', record.before);
+    else Reflect.deleteProperty(record.entry, 'disabled');
+  };
+  const canRestore = () => currentEntry() && !disabledDescriptorIssue() && !nativeDisabled() && ctx.root.fiber.state === 2
     && stock!.parent.ctx.fiber.uid !== null && stock!.parent.ctx.fiber.state !== 4;
   const drain = async () => {
+    let failed = false;
+    let failure: unknown;
     while (draining.size) {
       const batch = [...draining];
-      await Promise.all(batch.map(fiber => fiber.await()));
+      const results = await Promise.allSettled(batch.map(fiber => fiber.await()));
       for (const fiber of batch) draining.delete(fiber);
+      const rejected = results.find(result => result.status === 'rejected');
+      if (!failed && rejected?.status === 'rejected') { failed = true; failure = rejected.reason; }
     }
+    if (failed) throw failure;
   };
   const stopOwned = (): Promise<void> => {
     if (stopping) return stopping;
@@ -172,6 +226,7 @@ export function createHostDriverOwner(ctx: Context, options: HostDriverOwnerOpti
     const requireHost = createRequire(profile?.installAnchor ?? requireExtras.resolve('@deepseek-ai/dsh/package.json'));
     if (requireHost(nativeName + '/package.json').version !== '0.2.2-alpha.3'
       || requireHost('@deepseek-ai/cordis/package.json').version !== '4.0.6-alpha.2'
+      || requireHost('@deepseek-ai/cordis-plugin-loader/package.json').version !== '1.0.7-alpha.2'
       || createHash('sha256').update(readFileSync(requireHost.resolve(nativeName))).digest('hex') !== driverDigest) {
       throw new Error('Unavailable: unverified native driver/Cordis artifact');
     }
@@ -180,6 +235,8 @@ export function createHostDriverOwner(ctx: Context, options: HostDriverOwnerOpti
     const entries = [...loader.entries()].filter(entry => entry.options.name === nativeName);
     if (entries.length !== 1) throw new Error('Unavailable: expected exactly one native Loader driver entry');
     stock = entries[0]!;
+    const descriptorFailure = disabledDescriptorIssue();
+    if (descriptorFailure) { conflict(descriptorFailure); throw new Error(descriptorFailure); }
     const module = await stock.parent.tree.import(nativeName);
     const published = await stock.parent.tree.import(pathToFileURL(requireHost.resolve(nativeName)).href);
     const selected = ctx.registry.resolve(loader.unwrapExports(module));
@@ -187,15 +244,25 @@ export function createHostDriverOwner(ctx: Context, options: HostDriverOwnerOpti
     if (!callback || callback !== selected) throw new Error('Unavailable: Loader driver is not the verified published native module');
     if (foreignFibers().length) { conflict('Conflicting foreign goal driver is already mounted'); throw new Error(conflicted); }
   };
+  const checkDisabledOwnership = () => {
+    if (!claimed) return true;
+    const issue = disabledDescriptorIssue();
+    if (!issue) return true;
+    conflict(issue);
+    return false;
+  };
   const ensureGuard = () => {
     offGuard ??= ctx.root.on('internal/plugin', fiber => {
       if (!claimed || !live(fiber)) return;
+      checkDisabledOwnership();
       if (fiber === owned?.rawFiber || fiber === pendingOwned) return;
       if (mountingOwned && !pendingOwned && fiber.parent.fiber === ctx.fiber
         && fiber.runtime?.name === 'goal-wait-owned-replacement-driver') {
         pendingOwned = fiber;
+        if (conflicted || closing) { draining.add(fiber); void Promise.resolve(fiber.dispose()).catch(() => {}); }
         return;
       }
+      if (conflicted && !restoring) return;
       if (fiber.runtime?.callback === callback && fiber.entry === stock && fiber.parent.fiber.entry !== stock) {
         if (restoring && restoreTicket) {
           restoreTicket.candidate = fiber;
@@ -212,38 +279,45 @@ export function createHostDriverOwner(ctx: Context, options: HostDriverOwnerOpti
     }, { global: true });
   };
   const restore = async (epoch: number) => {
-    publish({ phase: 'restoring' });
-    await stopOwned();
-    await drain();
-    suppressed = false; restoring = true;
     const ticket = { epoch } as { epoch: number; candidate?: Fiber };
-    const finishRestore = () => { restoring = false; if (restoreTicket === ticket) restoreTicket = undefined; };
     const stale = () => epoch !== generation || !!conflicted;
     const foreign = () => {
       if (foreignFibers().length) conflict('Foreign driver remains mounted; stock is not duplicated');
       return !!conflicted;
     };
-    if (foreign() || stale()) { finishRestore(); return snapshot(); }
-    if (!canRestore()) {
-      finishRestore(); restoreOwed = false;
-      return publish({ effective: 'none', phase: 'active', reason: 'Stock entry is disabled, removed, or its host is stopping' });
+    publish({ phase: 'restoring' });
+    try {
+      await stopOwned();
+      await drain();
+      suppressed = false; restoring = true;
+      if (foreign() || stale()) return snapshot();
+      if (!canRestore()) {
+        restoreOwed = false;
+        return publish({ effective: 'none', phase: 'active', reason: 'Stock entry is disabled, removed, or its host is stopping' });
+      }
+      if (!live(stock!.fiber) && restoreOwed) {
+        restoreTicket = ticket;
+        await stock!.init(); // Public explicit init bypasses the owned effective-disabled view, not user intent.
+        if (foreign() || stale()) { if (ticket.candidate) cancelRestoreCandidate(ticket.candidate); await drain(); return snapshot(); }
+      }
+      if (live(stock!.fiber)) {
+        await stock!.fiber.await();
+        if (foreign() || stale()) { if (ticket.candidate) cancelRestoreCandidate(ticket.candidate); await drain(); return snapshot(); }
+      }
+      await drain();
+      if (foreign() || stale()) return snapshot();
+      restoreOwed = false;
+      if (!canRestore()) return publish({ effective: 'none', phase: 'active', reason: 'Stock entry was disabled or removed during restoration' });
+      if (!live(stock!.fiber)) return publish({ effective: 'none', phase: 'failed', reason: 'Native driver failed to restore' });
+      return publish({ effective: live(stock!.fiber) && stock!.fiber.state === 2 ? 'stock' : 'none',
+        phase: live(stock!.fiber) && stock!.fiber.state === 2 ? 'active' : 'missing-dependency' });
+    } finally {
+      restoring = false;
+      if (restoreTicket === ticket) restoreTicket = undefined;
+      // A queued newer off/replacement request retains its view. Settled native,
+      // errors, conflict and close always release only our descriptor via CAS.
+      if (closing || conflicted || epoch === generation) releaseDisabledView();
     }
-    if (!live(stock!.fiber) && restoreOwed) {
-      restoreTicket = ticket;
-      await stock!.init();
-      if (foreign() || stale()) { if (ticket.candidate) cancelRestoreCandidate(ticket.candidate); await drain(); finishRestore(); return snapshot(); }
-    }
-    if (live(stock!.fiber)) {
-      await stock!.fiber.await();
-      if (foreign() || stale()) { if (ticket.candidate) cancelRestoreCandidate(ticket.candidate); await drain(); finishRestore(); return snapshot(); }
-    }
-    await drain();
-    if (foreign() || stale()) { finishRestore(); return snapshot(); }
-    restoreOwed = false;
-    finishRestore();
-    if (!canRestore()) return publish({ effective: 'none', phase: 'active', reason: 'Stock entry was disabled or removed during restoration' });
-    return publish({ effective: live(stock!.fiber) && stock!.fiber.state === 2 ? 'stock' : 'none',
-      phase: live(stock!.fiber) && stock!.fiber.state === 2 ? 'active' : 'missing-dependency' });
   };
   const enqueue = (operation: () => Promise<DriverOwnerSnapshot>) => {
     const task = queue.then(operation).catch(error => publish({ phase: conflicted ? 'conflict' : 'failed', reason: message(error) }));
@@ -251,7 +325,7 @@ export function createHostDriverOwner(ctx: Context, options: HostDriverOwnerOpti
     return task;
   };
   const transition = (request: DriverOwnerRequest) => {
-    if (closing || conflicted) return Promise.resolve(snapshot());
+    if (closing || conflicted || !checkDisabledOwnership()) return Promise.resolve(snapshot());
     const epoch = ++generation;
     state.requested = request.strategy;
     return enqueue(async () => {
@@ -263,10 +337,11 @@ export function createHostDriverOwner(ctx: Context, options: HostDriverOwnerOpti
       if (existing && existing !== claimToken) { conflicted = 'Another Extras distribution already owns the native driver lease'; return publish({ phase: 'conflict', reason: conflicted }); }
       claims.set(ctx.root, claimToken); claimed = true; ensureGuard();
       if (request.strategy === 'activation' || request.strategy === 'native') return restore(epoch);
-      if (stock!.disabled) throw new Error('Unavailable: stock native entry is explicitly disabled');
+      if (nativeDisabled()) throw new Error('Unavailable: stock native entry is explicitly disabled');
       await stopOwned();
       if (closing || epoch !== generation) return snapshot();
       if (!canRestore()) throw new Error('Unavailable: native Loader intent changed before suppression');
+      installDisabledView();
       suppressed = true;
       suppress();
       await drain();
@@ -300,20 +375,35 @@ export function createHostDriverOwner(ctx: Context, options: HostDriverOwnerOpti
     if (closeTask) return closeTask;
     closing = true; ++generation;
     closeTask = enqueue(async () => {
-      if (!stock || !claimed) { await stopOwned(); offGuard?.(); offGuard = undefined; offStatus(); return snapshot(); }
-      const result = await restore(generation);
-      offGuard?.(); offGuard = undefined;
-      if (claims.get(ctx.root) === claimToken) claims.delete(ctx.root);
-      claimed = false; offStatus();
-      return result;
+      try {
+        if (!stock || !claimed) { await stopOwned(); return snapshot(); }
+        return await restore(generation);
+      } finally {
+        try { await drain(); } finally {
+          releaseDisabledView();
+          offGuard?.(); offGuard = undefined; offStatus();
+          for (const off of checkpointOff.splice(0)) off();
+          if (claims.get(ctx.root) === claimToken) claims.delete(ctx.root);
+          claimed = false;
+        }
+      }
     });
     return closeTask;
   };
   offStatus = ctx.root.on('internal/status', fiber => {
+    if (!closing) checkDisabledOwnership();
     if (closing || conflicted || fiber !== owned?.rawFiber || (state.phase !== 'active' && state.phase !== 'missing-dependency')) return;
     const actual = snapshot();
     if (actual.phase !== state.phase || actual.effective !== state.effective) publish({ phase: actual.phase, effective: actual.effective });
   }, { global: true });
+  const onCheckpoint = (event: string, listener: (...args: any[]) => unknown) => {
+    checkpointOff.push((ctx.root.on as any)(event, listener, { global: true, prepend: true }));
+  };
+  for (const event of ['loader/config-update', 'goal/changed', 'agent/status', 'agent/turn-stopping']) {
+    onCheckpoint(event, () => { checkDisabledOwnership(); });
+  }
+  onCheckpoint('loader/patch-context', (_entry, next) => { checkDisabledOwnership(); return next(); });
+  onCheckpoint('agent/pre-step', (_event, next) => { checkDisabledOwnership(); return next(); });
   if (options.autoDispose !== false) ctx.effect(() => () => close().then(() => {}));
   return { transition, snapshot, close };
 }
