@@ -12,4 +12,4 @@ The gate source checkout already had local README/research/untracked changes. Th
 
 Audited development host package: @deepseek-ai/dsh 0.2.2-alpha.3, read-only. It is not modified or used to install Extras into the active profile.
 
-Private validation baseline (paths are development-only and not embedded in runtime artifacts): active web profile package manifest SHA-256 4eec5020679e926d320b072d95baa1fd9f92a48903892a9d0c6eba25915e8b68; lock SHA-256 4db34901144ecea0041c587b8b9579b9cc54fe16ff0c64993d8b899a2fcf07ad; patch SHA-256 2047ef0ae4094db168c61f05ad66cc4744a3c10f5e6a97c28616ad733933c22a. These are integrity markers only, not profile contents.
+Private production-profile integrity baselines remain in ignored disposable verification state, never in source or release assets. Validation reports record only the sampled-file count and whether the before/after comparison passed; they do not disclose profile contents, paths or hashes.
