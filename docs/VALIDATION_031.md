@@ -11,7 +11,7 @@ Status: work in progress; no release readiness claimed by this checkpoint. Contr
 
 ## Second red slice: actual installed bin
 
-After the Cordis startup repair, the same parent five-package help regression still failed **0 pass / 5 fail**: direct Node script execution produced usage, but the actual npm `.bin` symlink exited 0 with empty stdout. The artifact agent independently reproduced all five actual installed bins and their missing-argument guard failures. The source agent reproduced a direct symlink too. This revealed the old main-entry comparison used a real module URL but an uncanonicalized argv path; a narrow canonical-entry correction is in progress under CLI-1, not a reason to weaken the bin assertion.
+After the Cordis startup repair, the same parent five-package help regression still failed **0 pass / 5 fail**: direct Node script execution produced usage, but the actual npm `.bin` symlink exited 0 with empty stdout. The artifact agent independently reproduced all five actual installed bins and their missing-argument guard failures. The source agent reproduced a direct symlink too. This revealed the old main-entry comparison used a real module URL but an uncanonicalized argv path; the narrow canonical-entry correction landed as `7698bfb5be98314561d459469afaa3c2466e1da4` under CLI-1, preserving imported-module no-run behavior. The real-bin assertion is retained; full final packed evidence remains pending at this checkpoint.
 
 ## Isolation and pending gates
 
