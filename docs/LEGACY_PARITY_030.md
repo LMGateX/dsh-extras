@@ -1,0 +1,70 @@
+# v0.3.0 legacy-parity implementation contract
+
+Status: fixed before implementation, 2026-11-06 (Asia/Shanghai). The user approved the supplemental research and explicitly authorized documentation, isolated subagent development/testing, Git push and release; installation into the real local DSH remains prohibited. Preserve the baseline specification and apply this amendment when it differs.
+
+## Evidence and release target
+
+- Accepted research: [summary](RESEARCH_LEGACY_PARITY_2026-11-06.md), [goal history](RESEARCH_SESSION_ARMED_2026-11-06.md), [chime/goal matrix](RESEARCH_PARITY_CHIME_GOAL_2026-11-06.md), [compact/retry matrix](RESEARCH_PARITY_COMPACT_RETRY_2026-11-06.md).
+- Goal-wait's updated source is public 0.4.23, cbd86273660893336afaee31794b5fd76487db78, not the checkout's old 0.3.0. Original source checkouts remain read-only. Preserve MIT attribution and exact native-port provenance. Other feature baselines stay unchanged.
+- Target five synchronized distributions at 0.3.0. Node >=24.9, DSH 0.2.2-alpha.3. Do not expand compatibility claims based on version ranges alone. No npm publishing or GitHub Actions.
+
+## 1. Goal-wait module interface and behavior
+
+Keep one Cordis module (name/inject/Config/apply) behind the canonical modules.goalWait envelope and one feature source across combined/split. Fields: enabled, strategy (activation|replacement|native|off, default activation), waitForJobs=true, waitForSubagents=true, maxHoldMs=0. Existing Extras settings without strategy retain activation. Old 0.3.0 imports activation; audited 0.4.23 imports exact effective strategy. Never infer replacement from enabled.
+
+- activation: official native driver plus conventional disarm/resume gate, preserving existing policy. Initial mount/enable sweeps existing live agents; live policy changes do not discard owned holds.
+- replacement: version/artifact-pinned native-derived driver port with background eligibility, preserving native queue reservation, goal revision/phase checks, root/child tool authority, cancellation, persistence and model dispatch. Native-join hosts delegate progressing-descendant waiting to native join instead of blocking all resident/parked agents a second time. Owned jobs still gate as configured. Bring over later incremental job/descendant maintenance, exact epoch/foreign/external-provider handling and wake/cleanup behavior where applicable.
+- native: unmodified native continuation without the gate. off: no automatic goal continuation; not synonymous with disabling Extras.
+- module disabled / Extras row or bundle disabled: no feature gate/port hooks remain; official native continuation is available again. Never leave an unconditional bundle-level native-driver suppression behind when Extras is not running. No arbitrary profile/preset edits or global host package changes.
+- Every transition has one continuation owner. Drain/revoke the old owner before admitting the new one; bounded teardown or failed/unknown ownership must not publish active success or start a second driver. Late foreign driver, duplicate split/combined and unsupported startup ownership fail closed. Use actual native composition mechanisms; do not copy an unconditional old driver-disable patch without its lifecycle restoration.
+- Preserve active goal identity/revision and legitimate continuation eligibility across an owned switch, not through unconditional resume. Completed/blocked/paused goals and goals already externally disarmed before acquisition must never be rearmed. A normal replacement wait leaves activation unchanged.
+
+### Explicit activation limitation, not an invented safety guarantee
+
+The accepted research and old ADR document that repeated external disarm during an existing activation-gate hold can be observationally identical to the gate's own disarm: the host has no owner token and same-value writes produce no event. This release must expose/document that legacy activation limitation, preserve the exact replacement alternative and not claim the absolute external-overlap guarantee from the old prose. No test may be weakened to hide a newly observable authority violation. Where a version-limited authority observer can reliably detect a revocation, fail closed; never fabricate a token, force resume, or alter durable goal phase to disguise waiting. Regression tests distinguish no-owned-hold external disarm, overlap, legitimate owned release, terminal phases, strategy switch and replacement wait. This explicit, evidence-based clarification is part of the user's approved research scope.
+
+### Live diagnostics
+
+Expose side-effect-free fiber-scoped runtimeStatus(ctx) through existing authenticated Extras status, not a new unauthenticated mutating route or home-global status file. Extend the existing result additively to {capabilities, details?}; details.goalWait is {requested, mounted, fallback?, host?}, where mounted is replacement-port|host-driver+gate|host-driver|none. Host identity may include version/Cordis/driver digest, never profile content. Waiting/pending/failed mounts cannot claim an active driver. Browser displays selected and actual behavior and fallback in both languages, separate from saved settings.
+
+## 2. Migration and native driver ownership
+
+- Keep original journals/locks/concurrent-edit/recovery and module-local fail-closed behavior. Accept exact audited goal versions 0.3.0 and 0.4.23; other history remains unsupported until audited. Known source defaults are version-specific. Unknown strategy/dynamic config/multi-instance/overlay remain conflicts.
+- Preserve explicit target precedence, false/0/empty values and disabled state. Never import transient hold/activation authority. Preserve old package files/settings; disable old ownership only after safe import and observe actual host handover before readiness.
+- Detect the *actual* native root/cooperating startup/foreign continuation owner in runtime admission. A caller-supplied startupOwner unit seam is not native detection. CLI inspect/apply must fail closed where programmatic ownership cannot be excluded; report restart/verification requirements rather than claiming live handover.
+- Source 0.4.23 bundle also suppresses native driver; safe handover/recovery must account for that owned composition delta. Deactivation/recovery cannot leave zero or duplicate drivers. Do not overwrite unrelated later native-row edits or other owners.
+- No automatic migration of experimental ./startup lifetime owners: detect/refuse them. Supporting the ordinary 0.4.23 row does not mean silently taking over arbitrary startup callbacks.
+
+## 3. Settings editing parity
+
+- Restore a staged retry group for errorCodes/providers/retryEmptyResponse with one exact-revision mutation for all dirty/reset fields, group Save / Discard / Reset-to-inherited. Booleans participate in the draft and reset sends unset, not a set to the current default. No transient mixed provider/code policy during one group save.
+- Restore a staged compact timeout/retry group for retryAttempts/retryDelayMs/ptcTimeoutMs/ptcModelTimeouts with atomic Save / Discard / Reset. Preserve seconds UI to milliseconds storage, explicit 0 and empty maps.
+- notifyAtRatio and pressureStep get editable, validated controls with truthful live-update descriptions. Every existing feature setting remains editable; reasoning policy stays an independent editor/group. Chime keeps its working custom editor and behavior.
+- Goal strategy selection is staged and revision-fenced with its policy; actual driver status remains independently visible. Switching languages keeps unsaved group drafts. Native configForms and page mutation authority stay canonical; accepted read mirrors must not manufacture revisions or writes. Concurrent foreign changes retain drafts and refuse overwrite.
+- Preserve bilingual styling/native tokens, read-only/loading/error/unavailable fences, cleanup, distribution/module scoping and split/combined equivalence.
+
+## 4. Public package interface and remaining risk closure
+
+- These are new package identities and configuration envelopes, not drop-in aliases for predecessor imports. Document that old package-specific resolveConfig/client-types/locale paths are not automatically the new product interface; no fictitious alias/export for an implementation the distribution does not contain.
+- Ship declarations for the actual supported Extras root (name/inject/Config/apply), client loading entry and migration entry; verify clean TypeScript consumers with the package exports. Keep source/asset selection strict: nonselected modules and goal-port assets/types must not leak into unrelated splits.
+- PTC late/scoped/replaced-runtime behavior was only a hypothesis: execute isolated native evidence through the existing module/tool/native runtime seam, then fix any observed failure without taking timeout authority from explicit request values. Do not assert runtime effect from settings persistence alone. Record any still-unsupported shape accurately.
+- Add empty-stop/unload retry coverage; keep classification/native retry and all compaction/reasoning/chime baseline tests. Do not broaden classification to arbitrary exceptions or change retained-tail policy.
+
+## 5. Agreed test seams and gates
+
+The user approved the research's proposed module/native/browser/clean-consumer validation. Reuse those existing public seams, as in ARCHITECTURE; no new private-method tests are authorized merely to ease implementation. Each red-to-green slice records the actual failing case then focused green outcome.
+
+| ID | Seam | Must catch | Does not alone prove |
+| --- | --- | --- | --- |
+| PAR-G1 | Cordis module Config/apply + runtimeStatus | Four strategy semantics, live save/switch/pending/failure, initial sweep, owner cleanup, phase/activation preservation | Stock native Loader/profile composition |
+| PAR-G2 | Real native host/Agent/goals/jobs/subagents + offline model adapter | Native/activation/replacement/off, progressing vs parked child, external provider/notification/quiet Job settle, external disarm, cancellation/unload/late foreign owner, maxHold policy, no duplicate rounds | Browser persistence or all future host versions |
+| PAR-M1 | Public migration inspect/dry-run/apply/recovery over disposable storage and actual native lifecycle | Both audited goal versions/strategy, disabled state, owned native-driver delta, programmatic startup refusal, interruption/concurrency/rollback/peers | Real active user profiles |
+| PAR-U1 | Native configForms/page form + emitted and packed browser | Retry/compact atomic grouped drafts, boolean unset, watermarks, strategy save and actual status, language preservation, every-setting inventory | Host execution from DOM alone |
+| PAR-P1 | Five packed archives and clean JS/TS consumers | Selected-only payloads/port assets/imports/declarations/exports/native metadata, synchronized version, no secrets or machine paths | Compatibility outside audited baseline |
+| PAR-R1 | Existing compact/PTC tools/native runtime and retry stream interface | PTC execution/dynamic runtime evidence, explicit timeout priority, empty-stop unloading, retained compaction/reasoning/chime invariants | Real provider cost/cache gains |
+
+Run the full source/typecheck suite, serialized native/artifact suite, actual packed browser tests, independent Standards+Spec review and rechecks. Failures in mandatory safety/ownership gates block publication. All installs/hosts use explicit disposable HOME/DSH_HOME/profile, temporary ports and tracked process cleanup, never live GUI 3080. Record executed commands/counts/artifact checksums and remaining limitations before release. Final publish: clean committed main, annotated matching tag, five assets + SHA256SUMS, public download byte/checksum verification; no local production installation.
+
+## 6. Implementation lanes
+
+Goal lane owns src/modules/goal-wait and focused goal tests; migration lane owns src/migration plus ownership integration changes negotiated with parent; browser lane owns settings group editors/status presentation and focused client tests; integration lane owns shared types/runtime coordination, packaging/declarations, independent native/packed tests, docs and publication. Work in separate worktrees and scoped commits. Agree any shared-file edits before making them. Do not overwrite another lane's source or modify original plugin checkouts.

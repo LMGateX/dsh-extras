@@ -1,5 +1,7 @@
 # Release acceptance matrix
 
+For 0.3.0 additionally execute PAR-G1/G2, PAR-M1, PAR-U1, PAR-P1 and PAR-R1 from the [fixed legacy parity contract](LEGACY_PARITY_030.md). Evidence must distinguish inherited activation-overlap limitations from replacement/owner safety failures; the latter block publication.
+
 Preserve every baseline row for 0.2.0 and additionally satisfy REASON-1 through REASON-7 from the [fixed request reasoning contract](COMPACTION_REASONING.md). Exceptional fail-closed scenarios must remain explicit, not partial success. Record exact commands/results and limitations in the release validation report before publication.
 
 | ID | Criterion |

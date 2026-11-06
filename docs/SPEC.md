@@ -4,6 +4,8 @@ Status: implementation contract fixed before development. Date: 2026-11-05. Targ
 
 For 0.2.0, preserve this baseline and apply the approved [amendments](AMENDMENTS.md) and [compaction reasoning contract](COMPACTION_REASONING.md). The canonical module id is now `compact-context` with no old-id compatibility. The only added summary control is the independently enabled, default-off request reasoning policy; native retention, summary routing, transaction and retry authority remain native. The direct user prohibition of GitHub Actions supersedes the original CI reference below.
 
+For 0.3.0, apply the approved [latest legacy parity contract](LEGACY_PARITY_030.md), including the ordinary Goal-wait four-strategy scope and explicit historical activation-overlap limitation. Its additional PAR-* acceptance rows supplement every baseline gate.
+
 ## Required deliverables
 
 1. One combined installable distribution, dsh-extras, one plugin card and unified settings grouped into four independently enabled modules.

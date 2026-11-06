@@ -2,7 +2,7 @@
 
 Changes must cite the observed host/source constraint, explain the trade-off, and state the changed acceptance evidence. Scope cannot be silently reduced.
 
-No amendments at specification freeze.
+No amendments at the original specification freeze. Later approved amendments follow.
 
 ## 2026-11-06 — Context backend follows the selected native agent scope
 
@@ -24,3 +24,9 @@ The replacement release evidence is the complete locally executed isolated sourc
 The user approved the fixed request-wide reasoning policy and required the development-only module id `context` to become `compact-context` without compatibility aliases. This distinguishes native-policy compaction from unrelated context-pruning engines. Rename all owned configuration/status/ownership/client/build/source/test identities before implementing the policy. Native canonical tool names and predecessor package identities do not change. The breaking release is 0.2.0. The direct user instruction authorizes GitHub push (with a lease if force is needed), publication and isolated subagent development, but explicitly excludes installation into the real local profile.
 
 The [fixed implementation contract](COMPACTION_REASONING.md) records source evidence, defaults, exact scope/action semantics, version-limited clone-first adapter constraints, lifecycle/status behavior, agreed public test seams and mandatory all-entry coverage. This narrowly adds an opt-in summary reasoning control without taking retention, summary model routing, transaction or retry authority from the host. The compatibility adapter is not a native transform extension; coverage and recovery must be demonstrated in disposable native engines before publication. Unknown support remains unavailable, not tool-only success. No privacy-bearing sessions or provider configuration enter source/release assets. GitHub Actions remains prohibited.
+
+## 2026-11-06 — Approved latest legacy parity restoration (0.3.0)
+
+The user approved the evidence-based supplemental research and instructed documentation first, isolated subagent development/testing, then push/release without local installation. Goal-wait is updated from the accidentally old 0.3.0 source to the public 0.4.23 ordinary-row four-strategy capability. This supersedes the conventional-only product scope, not the exclusion of arbitrary experimental startup ownership. The [fixed contract](LEGACY_PARITY_030.md) defines configuration, driver ownership/disable restoration, real runtime status, both-version safe migration/recovery, grouped settings and declarations, and PAR-* gates.
+
+The old absolute prose about all external disarms was stronger than the activation boolean seam permits; the accepted research/old ADR already document same-value overlap ambiguity. The contract explicitly records that inherited activation limitation, requires truthful status/docs and the replacement alternative, prohibits invented rearm authority and retains the existing externally-disarmed/terminal-goal safety checks. This is not permission to hide a new regression or waive native owner acceptance. Canonical tool/compaction/retry/chime policy and all previous gates remain. GitHub Actions and production installation remain prohibited.
