@@ -4,6 +4,7 @@ import type { Entry, Loader } from '@deepseek-ai/cordis-plugin-loader';
 import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 
 export type DriverStrategy = 'activation' | 'native' | 'replacement' | 'off';
 export interface DriverOwnerSnapshot {
@@ -23,13 +24,14 @@ export interface HostDriverOwner {
   close(): Promise<DriverOwnerSnapshot>;
 }
 export interface HostDriverOwnerOptions {
+  /** Set false when the mode owns a single observed, awaited teardown transaction. */
+  autoDispose?: boolean;
   /** Synchronous projection only; do not start another driver from this callback. */
   onChange?(snapshot: DriverOwnerSnapshot): void;
   onConflict?(reason: string): void;
 }
 const nativeName = '@deepseek-ai/dsh-goal-round-driver';
 const requireExtras = createRequire(import.meta.url);
-const requireHost = createRequire(requireExtras.resolve('@deepseek-ai/dsh/package.json'));
 // Shared across combined/split bundles and HMR generations; entries are removed on close.
 const claimsKey = Symbol.for('dsh-extras.native-driver-owner.claims.v1');
 const globals = globalThis as unknown as Record<symbol, unknown>;
@@ -58,8 +60,10 @@ export function createHostDriverOwner(ctx: Context, options: HostDriverOwnerOpti
   let owned: OwnedDriver | undefined;
   let stopping: Promise<void> | undefined;
   let suppressed = false;
+  let restoring = false;
   let conflicted: string | undefined;
   let mountingOwned = false;
+  let pendingOwned: Fiber | undefined;
   let offGuard: (() => void) | undefined;
   const draining = new Set<Fiber>();
   const snapshot = (): DriverOwnerSnapshot => {
@@ -81,6 +85,8 @@ export function createHostDriverOwner(ctx: Context, options: HostDriverOwnerOpti
     try { options.onChange?.(snapshot()); } catch { /* Diagnostics cannot break owner cleanup. */ }
     return snapshot();
   };
+  const pendingCandidate = (): Fiber | undefined => pendingOwned;
+  const isPending = (fiber: Fiber) => fiber === pendingCandidate();
   const currentEntry = () => !!stock && !!loader && [...loader.entries()].includes(stock);
   const canRestore = () => currentEntry() && !stock!.disabled && ctx.root.fiber.state === 2
     && stock!.parent.ctx.fiber.uid !== null && stock!.parent.ctx.fiber.state !== 4;
@@ -132,11 +138,15 @@ export function createHostDriverOwner(ctx: Context, options: HostDriverOwnerOpti
     conflicted = reason; ++generation;
     // Revocation is synchronous, before the just-published foreign fiber applies.
     if (owned) void Promise.resolve(owned.rawFiber.dispose()).catch(() => {});
+    if (pendingOwned) { draining.add(pendingOwned); void Promise.resolve(pendingOwned.dispose()).catch(() => {}); }
     publish({ phase: 'conflict', reason });
     try { options.onConflict?.(reason); } catch { /* Keep draining even if projection fails. */ }
     void enqueue(async () => { await stopOwned(); await drain(); return publish({ phase: 'conflict', reason }); });
   };
   const discover = async () => {
+    // Prefer the native profile's installation anchor, not a possibly shadowed peer tree.
+    const profile = ctx.get('profileContext') as { installAnchor?: string } | undefined;
+    const requireHost = createRequire(profile?.installAnchor ?? requireExtras.resolve('@deepseek-ai/dsh/package.json'));
     if (requireHost(nativeName + '/package.json').version !== '0.2.2-alpha.3'
       || requireHost('@deepseek-ai/cordis/package.json').version !== '4.0.6-alpha.2'
       || createHash('sha256').update(readFileSync(requireHost.resolve(nativeName))).digest('hex') !== driverDigest) {
@@ -148,21 +158,32 @@ export function createHostDriverOwner(ctx: Context, options: HostDriverOwnerOpti
     if (entries.length !== 1) throw new Error('Unavailable: expected exactly one native Loader driver entry');
     stock = entries[0]!;
     const module = await stock.parent.tree.import(nativeName);
-    callback = ctx.registry.resolve(loader.unwrapExports(module));
-    if (!callback) throw new Error('Unavailable: invalid native driver export');
+    const published = await stock.parent.tree.import(pathToFileURL(requireHost.resolve(nativeName)).href);
+    const selected = ctx.registry.resolve(loader.unwrapExports(module));
+    callback = ctx.registry.resolve(loader.unwrapExports(published));
+    if (!callback || callback !== selected) throw new Error('Unavailable: Loader driver is not the verified published native module');
     if (foreignFibers().length) { conflict('Conflicting foreign goal driver is already mounted'); throw new Error(conflicted); }
   };
   const restore = async () => {
     publish({ phase: 'restoring' });
     await stopOwned();
     await drain();
-    suppressed = false;
-    offGuard?.(); offGuard = undefined;
-    if (foreignFibers().length) return publish({ phase: 'conflict', reason: conflicted ?? 'Foreign driver remains mounted; stock is not duplicated' });
-    if (!canRestore()) return publish({ effective: 'none', phase: 'active', reason: 'Stock entry is disabled, removed, or its host is stopping' });
+    suppressed = false; restoring = true;
+    const finishGuard = () => { restoring = false; offGuard?.(); offGuard = undefined; };
+    if (foreignFibers().length) {
+      finishGuard();
+      return publish({ phase: 'conflict', reason: conflicted ?? 'Foreign driver remains mounted; stock is not duplicated' });
+    }
+    if (!canRestore()) {
+      finishGuard(); restoreOwed = false;
+      return publish({ effective: 'none', phase: 'active', reason: 'Stock entry is disabled, removed, or its host is stopping' });
+    }
     if (!live(stock!.fiber) && restoreOwed) await stock!.init();
-    restoreOwed = false;
     if (live(stock!.fiber)) await stock!.fiber.await();
+    await drain();
+    restoreOwed = false;
+    finishGuard();
+    if (!canRestore()) return publish({ effective: 'none', phase: 'active', reason: 'Stock entry was disabled or removed during restoration' });
     return publish({ effective: live(stock!.fiber) && stock!.fiber.state === 2 ? 'stock' : 'none',
       phase: live(stock!.fiber) && stock!.fiber.state === 2 ? 'active' : 'missing-dependency' });
   };
@@ -172,7 +193,7 @@ export function createHostDriverOwner(ctx: Context, options: HostDriverOwnerOpti
     return task;
   };
   const transition = (request: DriverOwnerRequest) => {
-    if (closing) return Promise.resolve(snapshot());
+    if (closing || conflicted) return Promise.resolve(snapshot());
     const epoch = ++generation;
     state.requested = request.strategy;
     return enqueue(async () => {
@@ -188,10 +209,17 @@ export function createHostDriverOwner(ctx: Context, options: HostDriverOwnerOpti
       await stopOwned();
       suppressed = true;
       offGuard ??= ctx.root.on('internal/plugin', fiber => {
-        if (!suppressed || !live(fiber)) return;
-        if (fiber === owned?.rawFiber || (mountingOwned && fiber.runtime?.name === 'goal-wait-owned-replacement-driver')) return;
+        if ((!suppressed && !restoring) || !live(fiber)) return;
+        if (fiber === owned?.rawFiber || fiber === pendingOwned) return;
+        if (mountingOwned && !pendingOwned && fiber.parent.fiber === ctx.fiber
+          && fiber.runtime?.name === 'goal-wait-owned-replacement-driver') {
+          pendingOwned = fiber; // One exact direct child, never an entire async name-whitelist window.
+          return;
+        }
         if (fiber.runtime?.callback === callback && fiber.entry === stock && fiber.parent.fiber.entry !== stock) {
-          try { suppress(); } catch (error) { conflict(message(error)); }
+          if (suppressed || !canRestore()) {
+            try { suppress(); } catch (error) { conflict(message(error)); }
+          }
         } else if (fiber.runtime?.name === 'goal-round-driver' || fiber.runtime?.name === 'goal-wait-owned-replacement-driver') {
           conflict('A foreign continuation driver mounted during the native lease');
         }
@@ -201,8 +229,20 @@ export function createHostDriverOwner(ctx: Context, options: HostDriverOwnerOpti
       if (closing || epoch !== generation) return snapshot();
       if (request.strategy === 'replacement') {
         if (!request.mountOwned) throw new Error('Replacement driver factory is required');
-        mountingOwned = true;
-        try { owned = await request.mountOwned(); } finally { mountingOwned = false; }
+        mountingOwned = true; pendingOwned = undefined;
+        try { owned = await request.mountOwned(); }
+        catch (error) {
+          const candidate = pendingCandidate();
+          if (candidate) {
+            draining.add(candidate);
+            await Promise.resolve(candidate.dispose());
+            pendingOwned = undefined;
+            await drain();
+          }
+          throw error;
+        } finally { mountingOwned = false; }
+        if (!isPending(owned.rawFiber)) { await stopOwned(); throw new Error('Replacement factory did not return its exact direct-child candidate'); }
+        pendingOwned = undefined;
         await owned.rawFiber.await();
         if (closing || epoch !== generation) { await stopOwned(); return snapshot(); }
         if (live(owned.rawFiber) && owned.rawFiber.state === 0) return publish({ effective: 'none', phase: 'missing-dependency', reason: 'Replacement driver is waiting for native dependencies' });
@@ -223,6 +263,6 @@ export function createHostDriverOwner(ctx: Context, options: HostDriverOwnerOpti
     });
     return closeTask;
   };
-  ctx.effect(() => () => close().then(() => {}));
+  if (options.autoDispose !== false) ctx.effect(() => () => close().then(() => {}));
   return { transition, snapshot, close };
 }

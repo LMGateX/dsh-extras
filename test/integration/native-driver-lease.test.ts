@@ -2,7 +2,8 @@
 import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import Loader, { type EntryChange } from '@deepseek-ai/cordis-plugin-loader';
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
 import { createRuntime } from '../modules/retry/runtime.ts';
 import { loadHost, requireHost } from './loader-harness.ts';
 import { createHostDriverOwner, type HostDriverOwnerOptions } from '../../src/modules/goal-wait/host-owner.ts';
@@ -13,7 +14,18 @@ async function fixture(t: TestContext, options: HostDriverOwnerOptions = {}) {
   const { ctx } = runtime;
   await ctx.plugin((await loadHost('dsh-goal')).default).await();
   const commits: EntryChange[] = [];
-  class RecordingLoader extends Loader { override commit(change: EntryChange) { commits.push(change); } }
+  let blocked: { entered: ReturnType<typeof Promise.withResolvers<void>>; release: ReturnType<typeof Promise.withResolvers<void>> } | undefined;
+  class RecordingLoader extends Loader {
+    override commit(change: EntryChange) { commits.push(change); }
+    override async import(name: string, stack?: () => string[]) {
+      const block = blocked;
+      if (name === '@deepseek-ai/dsh-goal-round-driver' && block) {
+        block.entered.resolve(); await block.release.promise;
+        if (blocked === block) blocked = undefined;
+      }
+      return super.import(name, stack);
+    }
+  }
   const loader = new RecordingLoader(ctx, { baseUrl: pathToFileURL(requireHost.resolve('@deepseek-ai/dsh/package.json')).href });
   await new Promise<void>(done => setImmediate(done)); // Allow Loader's isolation plugin to install its public hooks.
   await ctx.loader.create({ id: 'goal-round-driver', name: '@deepseek-ai/dsh-goal-round-driver' } as any);
@@ -26,7 +38,11 @@ async function fixture(t: TestContext, options: HostDriverOwnerOptions = {}) {
   const native = await loadHost('dsh-goal-round-driver');
   const live = () => [...ctx.registry.get(native)?.fibers ?? []].filter((fiber: any) => fiber.uid !== null);
   t.after(async () => { await owner.close(); });
-  return { ctx, loader, entry, commits, owner: owner!, row, live, native };
+  const blockImport = () => {
+    blocked = { entered: Promise.withResolvers<void>(), release: Promise.withResolvers<void>() };
+    return blocked;
+  };
+  return { ctx, loader, entry, commits, owner: owner!, row, live, native, blockImport };
 }
 
 test('off suppresses only runtime, then close restores the original enabled Loader entry', async t => {
@@ -181,4 +197,118 @@ test('pending replacement dependency is not reported active, then snapshot follo
   assert.equal(f.owner.snapshot().phase, 'active');
   await raw.dispose();
   assert.notEqual(f.owner.snapshot().phase, 'active');
+});
+
+test('user disable during awaited stock restoration import is respected, not overwritten by late init', async t => {
+  const f = await fixture(t);
+  await f.owner.transition({ strategy: 'off' });
+  const blocked = f.blockImport();
+  const closing = f.owner.close();
+  await blocked.entered.promise;
+  try { await f.entry.update({ disabled: true }); }
+  finally { blocked.release.resolve(); }
+  const state = await closing;
+  assert.equal(f.entry.options.disabled, true);
+  assert.equal(f.live().length, 0, 'late native init cannot resurrect explicitly disabled stock');
+  assert.equal(state.effective, 'none');
+});
+
+test('explicit stock disable/removal is preserved and unmanaged composition stays unavailable', async t => {
+  for (const operation of ['disable', 'remove'] as const) {
+    const f = await fixture(t);
+    await f.owner.transition({ strategy: 'off' });
+    if (operation === 'disable') await f.entry.update({ disabled: true });
+    else f.loader.remove(f.entry.id);
+    const result = await f.owner.close();
+    assert.equal(result.effective, 'none');
+    assert.equal(f.live().length, 0);
+    if (operation === 'disable') assert.equal(f.entry.options.disabled, true);
+  }
+  const runtime = await createRuntime({ product: false, retry: false });
+  t.after(() => runtime.dispose());
+  await runtime.ctx.plugin((await loadHost('dsh-goal')).default).await();
+  const native = runtime.ctx.plugin(await loadHost('dsh-goal-round-driver')); await native.await();
+  const owner = createHostDriverOwner(runtime.ctx);
+  const unavailable = await owner.transition({ strategy: 'off' });
+  assert.equal(unavailable.phase, 'failed');
+  assert.match(unavailable.reason!, /Loader is required/);
+  assert.notEqual(native.uid, null, 'manual native callback is never disposed or adopted');
+  await owner.close();
+});
+
+test('the public native HMR exclusive transaction can contain owner transition and unload without nested locks', async t => {
+  if (!process.execArgv.includes('--expose-internals')) {
+    const child = spawnSync(process.execPath, ['--expose-internals', '--test', '--test-name-pattern=public native HMR', fileURLToPath(import.meta.url)], { encoding: 'utf8', env: process.env, timeout: 15000 });
+    assert.equal(child.status, 0, child.stdout + child.stderr);
+    t.diagnostic('Executed real native HMR in a disposable test process with --expose-internals');
+    return;
+  }
+  const f = await fixture(t);
+  f.ctx.baseUrl = pathToFileURL(requireHost.resolve('@deepseek-ai/dsh/package.json')).href;
+  await f.ctx.plugin((await loadHost('cordis-plugin-timer')).default).await();
+  const Hmr = (await loadHost('dsh-hmr')).default;
+  const hmrFiber = f.ctx.plugin(Hmr, { root: [], debounce: 0 }); await hmrFiber.await();
+  assert.equal(hmrFiber.state, 2, 'actual HMR service starts: ' + JSON.stringify(hmrFiber.inject));
+  assert.ok(f.ctx.get('hmr'), 'actual HMR service is provided');
+  await f.ctx.hmr.runExclusive(async () => {
+    assert.equal((await f.owner.transition({ strategy: 'off' })).effective, 'none');
+    await f.row.dispose();
+    assert.equal(f.owner.snapshot().effective, 'stock');
+  });
+  assert.equal(f.live().length, 1);
+  assert.deepEqual(f.commits, []);
+});
+
+test('a same-name foreign mount during an awaited factory revokes the exact pending candidate before foreign apply', async t => {
+  const f = await fixture(t);
+  const ready = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  let candidate: any;
+  const mounting = f.owner.transition({ strategy: 'replacement', mountOwned: async () => {
+    candidate = f.row.ctx.plugin({ name: 'goal-wait-owned-replacement-driver', apply() {} }).ctx.fiber;
+    await candidate.await(); ready.resolve(); await release.promise;
+    return { rawFiber: candidate, stop: async () => { await candidate.dispose(); } };
+  } });
+  await ready.promise;
+  let revokedBeforeApply = false;
+  const foreign = f.ctx.plugin({ name: 'goal-wait-owned-replacement-driver', apply() { revokedBeforeApply = candidate.uid === null; } });
+  try {
+    assert.equal(candidate.uid, null);
+    await foreign.await();
+    assert.equal(revokedBeforeApply, true);
+  } finally { release.resolve(); }
+  await mounting;
+  assert.equal(f.owner.snapshot().phase, 'conflict');
+  assert.equal(f.live().length, 0);
+});
+
+test('autoDispose false gives the mode exactly one observed unload transaction', async t => {
+  const f = await fixture(t, { autoDispose: false });
+  await f.owner.transition({ strategy: 'off' });
+  const events: string[] = [];
+  let observing = false;
+  const off = f.ctx.on('internal/plugin', (fiber: any) => {
+    if (fiber.uid !== null && fiber.runtime?.name === 'goal-round-driver') events.push(observing ? 'observed-native' : 'unobserved-native');
+  }, { global: true });
+  f.row.ctx.effect(() => async () => {
+    observing = true; events.push('observer-on');
+    try { await f.owner.close(); } finally { observing = false; events.push('observer-off'); }
+  });
+  await f.row.dispose(); off();
+  assert.deepEqual(events, ['observer-on', 'observed-native', 'observer-off']);
+  assert.equal(f.live().length, 1);
+});
+
+test('a factory that mounts then throws cannot leave an unreturned candidate active', async t => {
+  const f = await fixture(t);
+  let raw: any;
+  const result = await f.owner.transition({ strategy: 'replacement', mountOwned: async () => {
+    raw = f.row.ctx.plugin({ name: 'goal-wait-owned-replacement-driver', apply() {} }).ctx.fiber;
+    await raw.await();
+    throw new Error('synthetic factory failure after mount');
+  } });
+  assert.equal(result.phase, 'failed');
+  assert.equal(raw.uid, null);
+  await f.owner.close();
+  assert.equal(f.live().length, 1);
 });
