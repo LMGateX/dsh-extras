@@ -19,6 +19,15 @@ const enabled: boolean = output.modules.retry.enabled.get();
 const providers: readonly string[] = output.modules.retry.providers.get();
 ```
 
+Input and resolved output are distinct. In `compact-context`, the `compactionReasoning` policy object applies its own defaults: `{enabled: true}` inherits `rules: [{scope: "all", mode: "inherit"}]`, while `{rules: []}` inherits `enabled: false`. Either policy field may therefore be omitted in `ConfigInput`. This is a controlled one-level input projection derived from the source policy type, not recursive `DeepPartial`: rule entries still require scope, mode, provider/model where applicable, and effort for fixed mode. Resolved output always has both policy fields.
+
+```ts
+import { Config } from "dsh-extras-compact-context";
+const enabledOnly = Config({modules: {"compact-context": {compactionReasoning: {enabled: true}}}});
+const rulesOnly = Config({modules: {"compact-context": {compactionReasoning: {rules: []}}}});
+const enabled: boolean = rulesOnly.modules["compact-context"].compactionReasoning.get().enabled;
+```
+
 The root schema makes every feature field volatile, including original fields whose feature schema is not volatile. Its returned fields are native `Volatile<T>` references, whose `get()` returns an immutable snapshot, **not plain values**. The migration auto flag is also volatile. `apply` accepts the native Cordis context and resolved root output. Host Loader remains the normal lifecycle owner; the example above only validates configuration.
 
 ## Client: native loading side effect

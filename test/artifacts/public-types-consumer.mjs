@@ -23,6 +23,27 @@ export async function verifyPublicTypes(temp, name, modules) {
     modules.includes('goalWait') ? 'const hold: number = output.modules.goalWait.maxHoldMs.get();\nConfig({modules:{goalWait:{maxHoldMs:0,waitForJobs:false}}});\n// @ts-expect-error wrong goal value\nConfig({modules:{goalWait:{maxHoldMs:"forever"}}});' : '',
     ...['compact-context','retry','chime','goalWait'].filter(id=>!modules.includes(id)).map(id => '// @ts-expect-error non-selected module\nConfig({modules:{' + JSON.stringify(id) + ':{enabled:true}}});'),
   ].join('\n');
+  const reasoningChecks = modules.includes('compact-context') ? [
+    'const enabledOnly = Config({modules:{"compact-context":{compactionReasoning:{enabled:true}}}});',
+    'const enabledOnlyFlag: boolean = enabledOnly.modules["compact-context"].compactionReasoning.get().enabled;',
+    'const enabledOnlyRules: readonly {scope:string;mode:string}[] = enabledOnly.modules["compact-context"].compactionReasoning.get().rules;',
+    'const rulesOnly = Config({modules:{"compact-context":{compactionReasoning:{rules:[]}}}});',
+    'const rulesOnlyFlag: boolean = rulesOnly.modules["compact-context"].compactionReasoning.get().enabled;',
+    '// @ts-expect-error rules keep required scope\nConfig({modules:{"compact-context":{compactionReasoning:{rules:[{mode:"inherit"}]}}}});',
+    '// @ts-expect-error rules keep required mode\nConfig({modules:{"compact-context":{compactionReasoning:{rules:[{scope:"all"}]}}}});',
+    '// @ts-expect-error fixed rules keep required effort\nConfig({modules:{"compact-context":{compactionReasoning:{rules:[{scope:"all",mode:"fixed"}]}}}});',
+    '// @ts-expect-error provider rules keep required provider\nConfig({modules:{"compact-context":{compactionReasoning:{rules:[{scope:"provider",mode:"inherit"}]}}}});',
+    '// @ts-expect-error provider-model rules keep required model\nConfig({modules:{"compact-context":{compactionReasoning:{rules:[{scope:"provider-model",provider:"exact",mode:"inherit"}]}}}});',
+    '// @ts-expect-error unknown rule mode remains invalid\nConfig({modules:{"compact-context":{compactionReasoning:{rules:[{scope:"all",mode:"maybe"}]}}}});',
+  ].join('\n') : '';
+  if (modules.includes('compact-context')) {
+    execFileSync(process.execPath, ['--input-type=module', '-e', [
+      'import assert from "node:assert/strict";',
+      'const {Config}=await import(' + JSON.stringify(name) + ');',
+      'assert.deepEqual(Config({modules:{"compact-context":{compactionReasoning:{enabled:true}}}}).modules["compact-context"].compactionReasoning.get(),{enabled:true,rules:[{scope:"all",mode:"inherit"}]});',
+      'assert.deepEqual(Config({modules:{"compact-context":{compactionReasoning:{rules:[]}}}}).modules["compact-context"].compactionReasoning.get(),{enabled:false,rules:[]});',
+    ].join('\n')], {cwd:temp,encoding:'utf8',stdio:'pipe',env:{...process.env,HOME:temp,DSH_HOME:join(temp,'dsh-home')},timeout:30000});
+  }
   const source = [
     'import {name, inject, Config, apply} from ' + JSON.stringify(name) + ';',
     'import type {ConfigInput, ConfigOutput} from ' + JSON.stringify(name) + ';',
@@ -40,7 +61,7 @@ export async function verifyPublicTypes(temp, name, modules) {
     'const input: ConfigInput = {modules:{' + JSON.stringify(selected) + ':{enabled:false}},migration:{auto:false}};',
     'const output: ConfigOutput = Config(input);',
     'const auto: boolean = output.migration.auto.get();',
-    fields, featureChecks,
+    fields, featureChecks, reasoningChecks,
     'declare const ctx: Context; apply(ctx, output);',
     'declare const host: NativeMigrationHost; declare const discovery: Discovery;',
     'const target: Distribution = {rowId:identity,packageName:identity,moduleIds:[' + modules.map(id=>JSON.stringify(id)).join(',') + ']};',

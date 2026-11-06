@@ -27,7 +27,14 @@ export async function writeDeclarations(root, out, {name, modules}) {
     'interface ModuleValues {',
     ...modules.map((id, index) => JSON.stringify(id) + ': FeatureValues<Feature' + index + '> & { enabled: boolean };'),
     '}',
-    'export interface ConfigInput { modules?: { [K in keyof ModuleValues]?: Partial<ModuleValues[K]> }; migration?: { auto?: boolean } }',
+    // Only the policy object itself has nested defaults. Keep rule elements intact.
+    ...(modules.includes('compact-context') ? ['type DefaultedObjectInput<T, K extends keyof T> = Omit<Partial<T>, K> & { [P in K]?: Partial<T[P]> };'] : []),
+    'interface ModuleInputs {',
+    ...modules.map(id => JSON.stringify(id) + ': ' + (id === 'compact-context'
+      ? 'DefaultedObjectInput<ModuleValues["compact-context"], "compactionReasoning">'
+      : 'Partial<ModuleValues[' + JSON.stringify(id) + ']>') + ';'),
+    '}',
+    'export interface ConfigInput { modules?: Partial<ModuleInputs>; migration?: { auto?: boolean } }',
     'export interface ConfigOutput { modules: { [K in keyof ModuleValues]: { [F in keyof ModuleValues[K]]: Volatile<ModuleValues[K][F]> } }; migration: { auto: Volatile<boolean> } }',
     'export declare const name: ' + JSON.stringify(name) + ';',
     'export declare const inject: string[];',
