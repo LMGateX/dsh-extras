@@ -653,3 +653,34 @@ test('native ancestor disabled intent survives view cleanup and descriptor flags
   assert.deepEqual(Object.getOwnPropertyDescriptor(g.entry, 'disabled'), external);
   Reflect.deleteProperty(g.entry, 'disabled');
 });
+
+test('native user disable at a real owned pre-step also revokes execution without changing that user intent', { timeout: 10000 }, async t => {
+  const f = await fixture(t);
+  let raw: any;
+  await f.owner.transition({ strategy: 'replacement', mountOwned: async () => {
+    raw = f.row.ctx.plugin({ name: 'goal-wait-owned-replacement-driver', inject: f.native.inject, apply: f.native.apply }).ctx.fiber;
+    await raw.await();
+    return { rawFiber: raw, stop: async () => { await raw.dispose(); } };
+  } });
+  const handle = await f.runtime.createAgent({ sessionId: 'native-user-disable-pre-step', adapter: { failures: 0 } });
+  const changed = Promise.withResolvers<void>();
+  let once = false;
+  const off = f.ctx.on('agent/pre-step', async (event: any, next: () => Promise<any>) => {
+    if (event.agent === handle.agent && !once) {
+      once = true;
+      await f.entry.update({ disabled: true });
+      changed.resolve();
+    }
+    return next();
+  }, { global: true, prepend: true });
+  f.ctx.goals.create(handle.agent, { objective: 'Synthetic native user-disabled intent fence', maxGoalRounds: 1 });
+  await changed.promise;
+  await handle.agent.whenIdle(); off();
+  assert.equal(handle.state.requests.length, 0, 'native user-disabled intent fences the next owned provider dispatch');
+  assert.equal(raw.uid, null);
+  await f.owner.close();
+  assert.equal(f.entry.options.disabled, true);
+  assert.equal(f.entry.disabled, true);
+  assert.equal(Object.hasOwn(f.entry, 'disabled'), false);
+  assert.equal(f.live().length, 0);
+});

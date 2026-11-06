@@ -79,7 +79,7 @@ export function createHostDriverOwner(ctx: Context, options: HostDriverOwnerOpti
   const draining = new Set<Fiber>();
   const snapshot = (): DriverOwnerSnapshot => {
     const result = { ...state };
-    const descriptorFailure = disabledDescriptorIssue();
+    const descriptorFailure = ownershipIssue();
     if (descriptorFailure) return { ...result, effective: 'unknown', phase: 'conflict', reason: descriptorFailure };
     if (!closing && !conflicted && owned && (state.phase === 'active' || state.phase === 'missing-dependency')) {
       const fiber = owned.rawFiber;
@@ -244,9 +244,17 @@ export function createHostDriverOwner(ctx: Context, options: HostDriverOwnerOpti
     if (!callback || callback !== selected) throw new Error('Unavailable: Loader driver is not the verified published native module');
     if (foreignFibers().length) { conflict('Conflicting foreign goal driver is already mounted'); throw new Error(conflicted); }
   };
-  const checkDisabledOwnership = () => {
+  const ownedIntentIssue = (): string | undefined => {
+    if (!owned && !pendingOwned) return undefined;
+    if (!currentEntry()) return 'Native Loader entry was removed during owned execution';
+    try { if (nativeDisabled()) return 'Native Loader disabled intent changed during owned execution'; }
+    catch { return 'Native Loader disabled intent is unavailable during owned execution'; }
+    return undefined;
+  };
+  const ownershipIssue = () => disabledDescriptorIssue() ?? ownedIntentIssue();
+  const checkOwnership = () => {
     if (!claimed) return true;
-    const issue = disabledDescriptorIssue();
+    const issue = ownershipIssue();
     if (!issue) return true;
     conflict(issue);
     return false;
@@ -254,11 +262,12 @@ export function createHostDriverOwner(ctx: Context, options: HostDriverOwnerOpti
   const ensureGuard = () => {
     offGuard ??= ctx.root.on('internal/plugin', fiber => {
       if (!claimed || !live(fiber)) return;
-      checkDisabledOwnership();
+      checkOwnership();
       if (fiber === owned?.rawFiber || fiber === pendingOwned) return;
       if (mountingOwned && !pendingOwned && fiber.parent.fiber === ctx.fiber
         && fiber.runtime?.name === 'goal-wait-owned-replacement-driver') {
         pendingOwned = fiber;
+        checkOwnership();
         if (conflicted || closing) { draining.add(fiber); void Promise.resolve(fiber.dispose()).catch(() => {}); }
         return;
       }
@@ -325,7 +334,7 @@ export function createHostDriverOwner(ctx: Context, options: HostDriverOwnerOpti
     return task;
   };
   const transition = (request: DriverOwnerRequest) => {
-    if (closing || conflicted || !checkDisabledOwnership()) return Promise.resolve(snapshot());
+    if (closing || conflicted || !checkOwnership()) return Promise.resolve(snapshot());
     const epoch = ++generation;
     state.requested = request.strategy;
     return enqueue(async () => {
@@ -391,7 +400,7 @@ export function createHostDriverOwner(ctx: Context, options: HostDriverOwnerOpti
     return closeTask;
   };
   offStatus = ctx.root.on('internal/status', fiber => {
-    if (!closing) checkDisabledOwnership();
+    if (!closing) checkOwnership();
     if (closing || conflicted || fiber !== owned?.rawFiber || (state.phase !== 'active' && state.phase !== 'missing-dependency')) return;
     const actual = snapshot();
     if (actual.phase !== state.phase || actual.effective !== state.effective) publish({ phase: actual.phase, effective: actual.effective });
@@ -400,10 +409,10 @@ export function createHostDriverOwner(ctx: Context, options: HostDriverOwnerOpti
     checkpointOff.push((ctx.root.on as any)(event, listener, { global: true, prepend: true }));
   };
   for (const event of ['loader/config-update', 'goal/changed', 'agent/status', 'agent/turn-stopping']) {
-    onCheckpoint(event, () => { checkDisabledOwnership(); });
+    onCheckpoint(event, () => { checkOwnership(); });
   }
-  onCheckpoint('loader/patch-context', (_entry, next) => { checkDisabledOwnership(); return next(); });
-  onCheckpoint('agent/pre-step', (_event, next) => { checkDisabledOwnership(); return next(); });
+  onCheckpoint('loader/patch-context', (_entry, next) => { checkOwnership(); return next(); });
+  onCheckpoint('agent/pre-step', (_event, next) => { checkOwnership(); return next(); });
   if (options.autoDispose !== false) ctx.effect(() => () => close().then(() => {}));
   return { transition, snapshot, close };
 }
