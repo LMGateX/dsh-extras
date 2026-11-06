@@ -158,13 +158,13 @@ const labels: Record<ModuleId, { en: string; zh: string }> = {
 
 function phaseText(phase: string, t: SettingsText): string {
   const names: Record<string, string> = { active: '运行中', disabled: '已禁用', unavailable: '不可用', conflict: '所有权冲突', 'reload-required': '需要刷新页面', 'restart-required': '需要重启', 'saved/restart-required': '已保存，需重启', loading: '加载中', 'missing-dependency': '缺少依赖', 'migration-pending': '等待迁移', failed: '运行失败', 'Status unknown': '状态未知' };
-  return names[phase] ? t(phase, names[phase]) : phase;
+  return Object.hasOwn(names, phase) ? t(phase, names[phase]) : phase;
 }
 const emptyStatus: SettingsStatusStore = { getSnapshot: () => undefined, subscribe: () => () => {} };
 export function capabilityText(label: string, status?: CapabilityStatus, t: SettingsText = en => en): string {
   const phase = ['disabled', 'active', 'unavailable'].includes(status?.phase ?? '') ? status!.phase : 'unavailable';
   const reason = typeof status?.reason === 'string' ? status.reason.slice(0, 200) : '';
-  return label + t(' runtime: ', '运行状态：') + phaseText(phase, t) + (reason ? ' · ' + reason : '');
+  return label + t(' runtime: ', '运行状态：') + phaseText(phase, t) + (reason ? ' · ' + translateSettingsError(reason, t) : '');
 }
 
 /** Uses the platform React instance. The chime component is the preserved custom editor. */

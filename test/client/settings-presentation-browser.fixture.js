@@ -47,6 +47,7 @@ if (requestedLocale !== 'absent') provide('locale', {
 window.setLocale = next => {active=next; for(const fn of localeListeners) fn();};
 window.localeSubscriberCount = () => localeListeners.size;
 window.accepted = () => structuredClone(snapshot);
+window.externalUpdate = () => form.mutate([{op:'set',path:['modules','retry','enabled'],value:false}], snapshot.revision);
 provide('configForms',{get:()=>form,whileServed:(_rows,fn)=>fn()});
 provide('remote',{session:{async modelCatalog(){return {ok:true,value:{groups:[],failures:[]}};}}});
 let View;
@@ -87,7 +88,7 @@ window.setTheme = name => {
     '--dsw-alias-state-business-primary':p.accent,'--dsw-alias-brand-primary':p.accent,
     '--dsw-alias-button-primary-fill':p.accent,'--dsw-alias-interactive-bg-hover-accent':p.hover,
     '--dsw-alias-label-primary-foreground':p.foreground,'--dsw-radius-lg':'12px','--dsw-radius-md':'8px',
-    '--dsw-alias-label-error':'#dc2626','--dsw-alias-state-warn-primary':'#d97706','--dsw-alias-state-success-primary':'#16a34a',
+    '--dsw-alias-state-error-primary':'#dc2626','--dsw-alias-state-warn-primary':'#d97706','--dsw-alias-state-success-primary':'#16a34a',
   };
   for(const [key,value] of Object.entries(tokens)) document.documentElement.style.setProperty(key,value);
 };

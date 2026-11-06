@@ -34,12 +34,19 @@ export function translateSettingsError(error: string, t: SettingsText): string {
     'Configuration changed. Discard this draft before editing again.': '配置已更新，请先放弃草稿并重新读取，再继续编辑。',
     'Invalid value.': '输入值无效。',
     'Invalid policy.': '策略无效。',
+    'tool dependencies are unavailable': '工具所需依赖不可用',
+    'Feature activation failed; inspect the host log.': '功能激活失败，请检查宿主日志。',
+    'Feature lifecycle transition in progress.': '正在切换功能生命周期状态。',
+    'Waiting for safe migration and ownership discovery.': '正在等待安全迁移和所有权检测。',
+    'Feature activation failed': '功能激活失败',
     'Reload this page after the legacy chime has been disabled.': '停用旧版提示音插件后，请刷新此页面。',
     'Save refused. Discard the draft to load the accepted configuration.': '保存未被接受，请放弃草稿以读取已接受的配置。',
     'Could not save. Check the connection and retry.': '无法保存，请检查连接后重试。',
     'Save refused; reload the accepted configuration.': '保存未被接受，请重新读取已接受的配置。',
   };
-  return translations[error] ? t(error, translations[error]) : error;
+  const servicePrefix = 'Waiting for services: ';
+  if (error.startsWith(servicePrefix)) return t(servicePrefix, '等待服务：') + error.slice(servicePrefix.length);
+  return Object.hasOwn(translations, error) ? t(error, translations[error]) : error;
 }
 
 /** Local style element lifetime follows the editor. Never style the shell or preserved chime editor. */
@@ -50,7 +57,7 @@ export const SETTINGS_CSS = `
 [data-extras-settings] .extras-module > h3 { margin:0; padding-left:10px; border-left:3px solid var(--dsw-alias-state-business-primary, #526de1); font-size:15px; font-weight:600; }
 [data-extras-settings] .extras-module > p, [data-extras-settings] .extras-module:not([data-module="chime"]) p { margin:0; overflow-wrap:anywhere; }
 [data-extras-settings] .extras-module > [role="status"], [data-extras-settings] .extras-module:not([data-module="chime"]) small, [data-extras-settings] .extras-module:not([data-module="chime"]) [role="status"] { color:var(--dsw-alias-label-secondary, #5c6370); font-size:12px; }
-[data-extras-settings] .extras-module:not([data-module="chime"]) [role="alert"] { color:var(--dsw-alias-label-error, #b3261e); }
+[data-extras-settings] .extras-module:not([data-module="chime"]) [role="alert"] { color:var(--dsw-alias-state-error-primary, #b3261e); }
 [data-extras-settings] .extras-field { display:grid; gap:8px; min-width:0; }
 [data-extras-settings] .extras-module:not([data-module="chime"]) label { display:grid; gap:7px; min-width:0; font-weight:500; overflow-wrap:anywhere; }
 [data-extras-settings] .extras-module:not([data-module="chime"]) label:has(input[type="checkbox"]) { display:flex; align-items:center; gap:9px; font-weight:400; }

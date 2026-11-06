@@ -22,7 +22,7 @@ const distributions: {name:string;ids:ModuleId[];field: string;draft:string;valu
   {name:'dsh-extras',ids:['compact-context','retry','chime','goalWait'],field:'guidanceText',draft:'Unsaved guidance / 保留草稿',value:'Unsaved guidance / 保留草稿'},
   {name:'dsh-extras-compact-context',ids:['compact-context'],field:'guidanceText',draft:'Unsaved guidance / 保留草稿',value:'Unsaved guidance / 保留草稿'},
   {name:'dsh-extras-retry',ids:['retry'],field:'providers',draft:'Route/Exact-Case',value:['Route/Exact-Case']},
-  {name:'dsh-extras-chime',ids:['chime'],field:'durationMs',draft:'2500',value:2500},
+  {name:'dsh-extras-chime',ids:['chime'],field:'durationMs',draft:'3000',value:3000},
   {name:'dsh-extras-goal-wait',ids:['goalWait'],field:'maxHoldMs',draft:'2500',value:2500},
 ];
 const chinese = /[\u3400-\u9fff]/;
@@ -154,8 +154,8 @@ test('all five actual packed settings localize, retain drafts and use native the
       const name=url.pathname.slice(1).replace(/\.js$/,'');
       if(url.pathname.endsWith('.js') && packedClients.has(name)){res.setHeader('content-type','text/javascript');res.end(packedClients.get(name));return;}
       if(url.pathname.endsWith('/status')) {
-        const status=Object.fromEntries(Object.keys(modules).map(id=>[id,{phase:'active',ready:true,enabled:true,
-          capabilities:{tools:{phase:'disabled'},compactionReasoning:{phase:'active'}}}]));
+        const status=Object.fromEntries(Object.keys(modules).map(id=>[id,{phase:'missing-dependency',ready:false,enabled:true,reason:'Waiting for services: syntheticService',
+          capabilities:{tools:{phase:'unavailable',reason:'tool dependencies are unavailable'},compactionReasoning:{phase:'unavailable',reason:'no native LLM runtime is available'}}}]));
         res.setHeader('content-type','application/json');res.end(JSON.stringify({modules:status}));return;
       }
       if(!packedClients.has(name)){res.statusCode=404;res.end();return;}
@@ -197,6 +197,28 @@ test('all five actual packed settings localize, retain drafts and use native the
           await presentation(page,'light'); await presentation(page,'dark');
           await page.setViewportSize({width:960,height:800});await presentation(page,'light');
           assert.deepEqual(await page.evaluate(()=>(window as any).writes),[]);
+        }));
+        await t.test(name+': owned runtime notices and conflict alerts follow Chinese and native error colors',()=>scenario('zh',async page=>{
+          await page.getByRole('status').filter({hasText:'syntheticService'}).first().waitFor();
+          for (const id of ids) {
+            const notices = await page.locator('[data-module="'+id+'"] [role="status"]').allTextContents();
+            assert.ok(notices.some(text=>text.includes('等待服务：syntheticService')));
+            assert.ok(notices.every(text=>!text.includes('Waiting for services:') && !text.includes('dependencies are unavailable') && !text.includes('no native LLM runtime')));
+          }
+          const id = ids[0]!;
+          const section = page.locator('[data-module="'+id+'"]');
+          const control = id==='chime' ? section.locator('#dsh-session-chime-durationMs') : section.locator('[data-field="'+field+'"] textarea, [data-field="'+field+'"] input');
+          await control.fill(draft);
+          await page.evaluate(()=>(window as any).externalUpdate());
+          const alert = section.getByRole('alert').first(); await alert.waitFor();
+          assert.match(await alert.innerText(),chinese);
+          for (const [theme,color] of [['light','#dc2626'],['dark','#fca5a5']] as const) {
+            await page.evaluate(({theme,color})=>{(window as any).setTheme(theme);document.documentElement.style.setProperty('--dsw-alias-state-error-primary',color);},{theme,color});
+            assert.equal(await alert.evaluate(node=>getComputedStyle(node).color),theme==='light'?'rgb(220, 38, 38)':'rgb(252, 165, 165)');
+          }
+          await page.evaluate(()=>(window as any).setLocale('en'));
+          await page.getByRole('heading',{name:'Extras settings',exact:true}).waitFor();
+          assert.match(await alert.innerText(),/configuration changed/i);
         }));
         await t.test(name+': subscribed locale switches retain drafts and module-scoped writes',()=>scenario('en',async page=>{
           await titles(page,ids,'en');
@@ -246,6 +268,7 @@ test('all five actual packed settings localize, retain drafts and use native the
           assert.equal(await control.inputValue(),original);
           assert.deepEqual(await page.evaluate(()=>(window as any).writes),[],'discard is local-only');
           await control.fill(draft);
+          assert.deepEqual(await control.evaluate((element: HTMLInputElement) => ({valid:element.validity.valid, stepMismatch:element.validity.stepMismatch})), {valid:true,stepMismatch:false}, 'the test enters a valid native control value before submitting');
           await fieldRoot.getByRole('button',{name:'Save',exact:true}).click();
           await page.waitForFunction(()=>(window as any).accepted().revision===8);
           assert.deepEqual(await page.evaluate(()=>(window as any).writes),[{revision:7,ops:[{op:'set',path:['modules',id,field],value}]}]);

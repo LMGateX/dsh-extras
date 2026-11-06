@@ -1594,7 +1594,7 @@ export function createChimeAdapter(React: ReactRuntime) {
         border: '1px solid var(--dsw-alias-state-business-primary)',
         background: 'var(--dsw-alias-interactive-bg-hover-accent)',
       },
-      error: { margin: 0, color: 'var(--dsw-alias-label-error)', lineHeight: 1.6 },
+      error: { margin: 0, color: 'var(--dsw-alias-state-error-primary)', lineHeight: 1.6 },
       resting: {
         padding: '7px 12px', border: '1px solid var(--dsw-alias-border-l2)',
         borderRadius: 'var(--dsw-radius-md)', font: 'inherit',

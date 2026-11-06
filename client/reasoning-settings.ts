@@ -26,8 +26,21 @@ function translateReasoningError(error: string, t: (en: string, zh: string) => s
     'unknown or inapplicable rule field': '规则中存在未知或不适用的字段',
     'duplicate match target': '存在重复的匹配目标',
   };
+  const runtimeMessages: Record<string, string> = {
+    'unverified host version': '未经验证的宿主版本',
+    'unverified Cordis reflection shape': '未经验证的 Cordis 反射接口结构',
+    'unverified compaction request envelope': '未经验证的压缩请求结构',
+    'runtime compatibility probe failed': '运行时兼容性检查失败',
+    'no native LLM runtime is available': '原生 LLM 运行时不可用',
+    'unverified native LlmRuntime lineage': '未经验证的原生 LlmRuntime 类型来源',
+    'unverified incoming LLM context': '未经验证的传入 LLM 上下文',
+    'stream descriptor ownership changed': 'stream 方法描述符的所有权已改变',
+    'unverified or non-replaceable stream descriptor': 'stream 方法描述符未经验证或不可替换',
+  };
+  if (Object.hasOwn(runtimeMessages, error)) return t(error, runtimeMessages[error]);
   const prefix = 'compactionReasoning: ';
-  const message = error.startsWith(prefix) ? messages[error.slice(prefix.length)] : undefined;
+  const key = error.slice(prefix.length);
+  const message = error.startsWith(prefix) && Object.hasOwn(messages, key) ? messages[key] : undefined;
   return message ? t(error, '压缩请求推理策略：' + message) : translateSettingsError(error, t);
 }
 
@@ -69,7 +82,7 @@ export function createReasoningSettingsView(React: any, catalog?: ReasoningCatal
     };
     return h('fieldset', { 'aria-label': t('Compaction-request reasoning', '压缩请求推理'), className: 'extras-group' },
       h('legend', null, t('Compaction-request reasoning', '压缩请求推理')),
-      h('p', {role:'status'}, capabilityText(t('Reasoning', '推理'), runtime, t) + t('. Saved configuration does not confirm runtime activation.', '。保存配置不代表运行时已激活。')),
+      h('p', {role:'status'}, capabilityText(t('Reasoning', '推理'), runtime && { ...runtime, reason: translateReasoningError(runtime.reason ?? '', t) }, t) + t('. Saved configuration does not confirm runtime activation.', '。保存配置不代表运行时已激活。')),
       h('label', null, h('input', {type: 'checkbox', checked: draft.value.enabled, disabled,
         onChange: (event: any) => editor.setEnabled(event.target.checked)}), t(' Enable compaction-request reasoning', ' 启用压缩请求推理')),
       h('p', null, t('Priority: provider + model > provider > all. Rule order is not precedence. The winning rule never falls back to a broader rule.', '优先级：供应商 + 模型 > 供应商 > 全部。规则排列顺序不影响优先级。命中的规则不会回退到匹配范围更广的规则。')),
