@@ -28,7 +28,7 @@ test('actual emitted and packed clients carry reasoning implementation only in s
     // Build/pack only an allowlisted disposable source consumer, never the caller's release outputs.
     const fixture = join(sandbox, 'fixture');
     await mkdir(fixture);
-    for (const path of ['package.json', 'scripts', 'src', 'client', 'assets', 'README.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md']) {
+    for (const path of ['package.json', 'scripts', 'src', 'client', 'assets', 'README.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'docs/PUBLIC_PACKAGE_TYPES.md']) {
       await cp(join(root, path), join(fixture, path), {recursive:true});
     }
     const dependency = createRequire(new URL('../../package.json', import.meta.url));

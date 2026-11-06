@@ -122,7 +122,7 @@ test('all five actual packed settings localize, retain drafts and use native the
   for(const path of Object.values(env)) if(path?.startsWith(sandbox)) await mkdir(path,{recursive:true});
   try {
     const fixture=join(sandbox,'fixture'); await mkdir(fixture);
-    for(const path of ['package.json','scripts','src','client','assets','README.md','LICENSE','THIRD_PARTY_NOTICES.md']) {
+    for(const path of ['package.json','scripts','src','client','assets','README.md','LICENSE','THIRD_PARTY_NOTICES.md','docs/PUBLIC_PACKAGE_TYPES.md']) {
       await cp(join(root,path),join(fixture,path),{recursive:true});
     }
     let dependencyRoot:string|undefined;

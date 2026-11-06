@@ -37,10 +37,12 @@ test('root policy-only goal updates preserve held authority beside the unmodifie
   await ctx.plugin((await loadHost('dsh-goal')).default).await();
   await ctx.plugin((await loadHost('dsh-jobs-local')).default, {}).await();
   const detach = ctx.jobs.attachController('root-gate-lifecycle'); t.after(detach);
-  await ctx.plugin(await loadHost('dsh-goal-round-driver')).await();
+  const nativeName = '@deepseek-ai/dsh-goal-round-driver';
+  const native = await loadHost('dsh-goal-round-driver');
   const d: Distribution = { name: 'dsh-extras-goal-wait', moduleIds: ['goalWait'], modulePlugins: { goalWait } };
   const initial = { modules: { goalWait: { enabled: true, waitForJobs: true, waitForSubagents: true, maxHoldMs: 0 } }, migration: { auto: false } };
-  const f = await loaderFixture(t, d, initial, ctx); await f.ready();
+  const f = await loaderFixture(t, d, initial, ctx, [{id:'goal-round-driver',name:nativeName}], undefined, {[nativeName]:native}); await f.ready();
+  await until(() => f.status().modules.goalWait.capabilities?.continuation?.phase, phase => phase === 'active', 'verified native driver plus activation gate');
   const handle = await runtime.createAgent({ sessionId: 'root-held-goal' });
   const baseline = handle.state.requests.length;
   let finish!: (value: any) => void; const done = new Promise<any>(resolve => { finish = resolve; });

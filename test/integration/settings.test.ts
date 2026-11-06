@@ -34,7 +34,7 @@ test('native SettingsForms exposes and writes every original feature field witho
     'compact-context': { enabled: false, compactionReasoning: { enabled: true, rules: [] }, compactTool: false, statusTool: true, guidance: true, guidanceText: 'Native settings fixture', pressureContext: true, notifyAtRatio: 0.5, pressureStep: 20, retryAttempts: 1, retryDelayMs: 0, ptcTimeoutMs: 300, ptcModelTimeouts: { 'test/model': 700 } },
     retry: { enabled: false, errorCodes: [], providers: ['test'], retryEmptyResponse: false },
     chime: { enabled: false, soundDone: 'bell-bright', soundBlocked: 'chime-soft', soundQuestion: 'marimba', soundError: 'blip', chimeQuestion: false, chimeError: false, volume: 0, durationMs: 0, debounceMs: 0, quietStyle: 'silent', quietShortMs: 0, dndStart: '22:00', dndEnd: '06:00', restMode: true, minRingMs: 0, banner: false, bannerPlacement: 'center' },
-    goalWait: { enabled: false, waitForJobs: false, waitForSubagents: false, maxHoldMs: 99 },
+    goalWait: { enabled: false, strategy: 'activation', waitForJobs: false, waitForSubagents: false, maxHoldMs: 99 },
   }, migration: { auto: false } };
   const owner = f.entry.fiber;
   await settings.update(d.name, next, before.revision);
