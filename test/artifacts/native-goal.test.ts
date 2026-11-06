@@ -44,7 +44,7 @@ async function packedGoal(t:TestContext, packageName:string, strategy='replaceme
     await f.update({...config,modules:{...config.modules,goalWait:{enabled:true,strategy:next}}});
     return until(status,value=>value?.capabilities?.continuation?.phase==='active'&&value.details.goalWait.requested===next,'packed '+next+' owner');
   };
-  const liveNative=()=>[...ctx.registry.get(native).fibers].filter((fiber:any)=>fiber.uid!==null);
+  const liveNative=()=>[...(ctx.registry.get(native)?.fibers??[])].filter((fiber:any)=>fiber.uid!==null);
   return {runtime,ctx,f,stock,status,config,select,liveNative};
 }
 
@@ -113,5 +113,53 @@ for(const packageName of ['dsh-extras','dsh-extras-goal-wait']) {
     assert.equal(f.liveNative().length,1);assert.deepEqual(f.stock.options,stockOptions);
     assert.equal(f.f.request().code,404,'disabled root leaves no authenticated status handler');
     assert.deepEqual(Object.getOwnPropertyDescriptor(f.ctx.goals,'disarm'),descriptor);
+  });
+
+  test(packageName+': packed activation exit cannot bypass an observed external revocation', {timeout:20000}, async t=>{
+    const f=await packedGoal(t,packageName,'activation');
+    const handle=await f.runtime.createAgent({sessionId:'packed-activation-revocation',adapter:{failures:0}});
+    ownedJob(t,f.ctx,handle.agent.session.id);
+    const before=f.ctx.goals.create(handle.agent,{objective:'Synthetic observed transition revocation',maxGoalRounds:1});
+    await until(()=>f.ctx.goals.get(handle.agent).activation,value=>value==='disarmed','activation hold before stock teardown');
+    const stockRaw=f.stock.fiber!.ctx.fiber;
+    let external=0;
+    const stop=f.ctx.on('internal/status',(fiber:any)=>{
+      if(fiber.ctx.fiber===stockRaw&&fiber.state===4&&external++===0)f.ctx.goals.disarm(handle.agent);
+    });
+    try {await f.select('off');} finally {stop();}
+    assert.equal(external,1,'external disarm was actually observed during native stock teardown');
+    const after=f.ctx.goals.get(handle.agent);
+    assert.equal(after.id,before.id);assert.equal(after.revision,before.revision);
+    assert.equal(after.phase,'active');assert.equal(after.activation,'disarmed');
+    assert.equal(handle.state.requests.length,0);assert.equal(f.liveNative().length,0);
+    await f.select('native');
+    assert.equal(f.ctx.goals.get(handle.agent).activation,'disarmed');assert.equal(f.liveNative().length,1);
+  });
+
+  test(packageName+': packed transition preserves an externally replaced observer descriptor', {timeout:20000}, async t=>{
+    const f=await packedGoal(t,packageName,'activation');
+    const handle=await f.runtime.createAgent({sessionId:'packed-descriptor-revocation',adapter:{failures:0}});
+    ownedJob(t,f.ctx,handle.agent.session.id);
+    const before=f.ctx.goals.create(handle.agent,{objective:'Synthetic descriptor revocation',maxGoalRounds:1});
+    await until(()=>f.ctx.goals.get(handle.agent).activation,value=>value==='disarmed','activation hold before descriptor takeover');
+    const stockRaw=f.stock.fiber!.ctx.fiber;
+    let foreign:PropertyDescriptor|undefined;
+    const stop=f.ctx.on('internal/status',(fiber:any)=>{
+      if(fiber.ctx.fiber!==stockRaw||fiber.state!==4||foreign)return;
+      const installed=Object.getOwnPropertyDescriptor(f.ctx.goals,'disarm');assert.ok(installed);
+      foreign={...installed,enumerable:!installed.enumerable};
+      Object.defineProperty(f.ctx.goals,'disarm',foreign);
+    });
+    try {
+      await f.f.update({...f.config,modules:{...f.config.modules,goalWait:{enabled:true,strategy:'off'}}});
+      await until(f.status,value=>value.details?.goalWait?.requested==='off'&&(value.capabilities?.continuation?.phase==='active'||/disarm/i.test(value.details.goalWait.fallback??'')),'settled observer ownership check');
+    } finally {stop();}
+    assert.ok(foreign,'external descriptor attribute replacement actually ran');
+    assert.deepEqual(Object.getOwnPropertyDescriptor(f.ctx.goals,'disarm'),foreign,'do not overwrite a descriptor merely because its function value is unchanged');
+    const after=f.ctx.goals.get(handle.agent);
+    assert.equal(after.id,before.id);assert.equal(after.revision,before.revision);assert.equal(after.activation,'disarmed');
+    assert.equal(handle.state.requests.length,0);
+    assert.equal(f.status().capabilities.continuation.phase,'unavailable');
+    assert.match(f.status().details.goalWait.fallback,/disarm/i);
   });
 }

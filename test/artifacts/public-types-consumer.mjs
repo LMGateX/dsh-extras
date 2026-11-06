@@ -36,6 +36,23 @@ export async function verifyPublicTypes(temp, name, modules) {
     '// @ts-expect-error provider-model rules keep required model\nConfig({modules:{"compact-context":{compactionReasoning:{rules:[{scope:"provider-model",provider:"exact",mode:"inherit"}]}}}});',
     '// @ts-expect-error unknown rule mode remains invalid\nConfig({modules:{"compact-context":{compactionReasoning:{rules:[{scope:"all",mode:"maybe"}]}}}});',
   ].join('\n') : '';
+  const goalChecks = modules.includes('goalWait') ? [
+    'for (const strategy of ["activation","replacement","native","off"] as const) {',
+    '  const goalInput: ConfigInput = {modules:{goalWait:{strategy}}};',
+    '  const accepted: "activation"|"replacement"|"native"|"off" = Config(goalInput).modules.goalWait.strategy.get();',
+    '}',
+    '// @ts-expect-error unsupported startup is not a continuation strategy\nConfig({modules:{goalWait:{strategy:"startup"}}});',
+    '// @ts-expect-error resolved strategy remains a native volatile reference\nconst rawStrategy: "activation"|"replacement"|"native"|"off" = output.modules.goalWait.strategy;',
+  ].join('\n') : '';
+  if (modules.includes('goalWait')) {
+    execFileSync(process.execPath, ['--input-type=module', '-e', [
+      'import assert from "node:assert/strict";',
+      'const {Config}=await import(' + JSON.stringify(name) + ');',
+      'assert.equal(Config({modules:{goalWait:{}}}).modules.goalWait.strategy.get(),"activation");',
+      'for(const strategy of ["activation","replacement","native","off"]) assert.equal(Config({modules:{goalWait:{strategy}}}).modules.goalWait.strategy.get(),strategy);',
+      'assert.throws(()=>Config({modules:{goalWait:{strategy:"startup"}}}));',
+    ].join('\n')], {cwd:temp,encoding:'utf8',stdio:'pipe',env:{...process.env,HOME:temp,DSH_HOME:join(temp,'dsh-home')},timeout:30000});
+  }
   if (modules.includes('compact-context')) {
     execFileSync(process.execPath, ['--input-type=module', '-e', [
       'import assert from "node:assert/strict";',
@@ -61,7 +78,7 @@ export async function verifyPublicTypes(temp, name, modules) {
     'const input: ConfigInput = {modules:{' + JSON.stringify(selected) + ':{enabled:false}},migration:{auto:false}};',
     'const output: ConfigOutput = Config(input);',
     'const auto: boolean = output.migration.auto.get();',
-    fields, featureChecks, reasoningChecks,
+    fields, featureChecks, reasoningChecks, goalChecks,
     'declare const ctx: Context; apply(ctx, output);',
     'declare const host: NativeMigrationHost; declare const discovery: Discovery;',
     'const target: Distribution = {rowId:identity,packageName:identity,moduleIds:[' + modules.map(id=>JSON.stringify(id)).join(',') + ']};',

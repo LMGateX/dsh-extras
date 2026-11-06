@@ -114,6 +114,26 @@ test('native CLI installs packed combined distribution into isolated web profile
     await control.locator('input').fill(value);await control.getByRole('button',{name:'Save',exact:true}).click();
     await waitSaved(modules=>modules['compact-context']?.[field]===Number(value),'editable '+field);
   }
+  const goalGroup=page.locator('[data-group="goal-policy"]');
+  const nativeRows=async()=>parse(await readFile(patchFile,'utf8')).filter((row:any)=>row.id==='goal-round-driver'||row.name==='@deepseek-ai/dsh-goal-round-driver');
+  const nativeBefore=await nativeRows();
+  for(const [strategy,mounted] of [['replacement','replacement-port'],['off','none'],['native','host-driver'],['activation','host-driver+gate']] as const){
+    const beforeDraft=await readFile(patchFile,'utf8');
+    await goalGroup.locator('[data-field="strategy"] select').selectOption(strategy);
+    assert.equal(await readFile(patchFile,'utf8'),beforeDraft,'Goal strategy is staged until group Save');
+    await goalGroup.getByRole('button',{name:'Save',exact:true}).click();
+    await waitSaved(modules=>modules.goalWait?.strategy===strategy,'Goal strategy '+strategy);
+    await page.waitForFunction(async({strategy,mounted})=>{
+      const response=await fetch('/extras/dsh-extras/status',{credentials:'same-origin',cache:'no-store'});
+      if(!response.ok)return false;
+      const state=(await response.json()).modules.goalWait;
+      return state.enabled===true&&state.capabilities?.continuation?.phase==='active'&&state.details?.goalWait?.requested===strategy&&state.details.goalWait.mounted===mounted;
+    },{strategy,mounted},{timeout:10000});
+    await page.waitForFunction(()=>!(document.querySelector('[data-group="goal-policy"] select') as HTMLSelectElement)?.disabled);
+    assert.deepEqual(await goalGroup.getByRole('alert').allTextContents(),[],'native strategy Save must be acknowledged, not only persisted');
+    await page.locator('[data-goal-driver]').getByText('Mounted: '+mounted,{exact:false}).waitFor();
+    assert.deepEqual(await nativeRows(),nativeBefore,'temporary driver suppression never persists native-row overrides');
+  }
   const toolGroup=page.getByRole('group',{name:'Agent-facing compaction tools',exact:true});
   const reasoning=page.getByRole('group',{name:'Compaction-request reasoning',exact:true});
   assert.equal(await reasoning.getByRole('checkbox',{name:'Enable compaction-request reasoning',exact:true}).isChecked(),false);
@@ -175,6 +195,7 @@ test('native CLI installs packed combined distribution into isolated web profile
   assert.equal(accepted['compact-context'].retryDelayMs,3500);
   assert.equal(accepted['compact-context'].retryAttempts,0);assert.equal(accepted['compact-context'].ptcTimeoutMs,300000);
   assert.equal(accepted['compact-context'].notifyAtRatio,0.8);assert.equal(accepted['compact-context'].pressureStep,4);
+  assert.equal(accepted.goalWait.strategy,'activation');
   assert.ok(['errorCodes','providers','retryEmptyResponse'].every(key=>!Object.hasOwn(accepted.retry,key)),'group Reset removed explicit retry overrides');
   assert.equal(accepted['compact-context'].compactTool,false);
   assert.deepEqual(accepted['compact-context'].compactionReasoning,{enabled:true,rules:[{scope:'provider-model',provider:'Synthetic/Exact-Route',model:'Synthetic/Exact-Model',mode:'fixed',effort:'Opaque:Effort/Case'}]});
