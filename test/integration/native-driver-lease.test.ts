@@ -198,6 +198,7 @@ test('pending replacement dependency is not reported active, then snapshot follo
   assert.equal(f.owner.snapshot().effective, 'replacement');
   assert.equal(f.owner.snapshot().phase, 'active');
   assert.equal(changes.at(-1), 'active', 'live status projection also observes native dependency activation');
+  assert.equal(f.owner.snapshot().reason, undefined);
   await raw.dispose();
   assert.notEqual(f.owner.snapshot().phase, 'active');
 });
@@ -452,4 +453,25 @@ test('public native HMR restoration race with concurrent row disposal preserves 
   assert.equal(foreign.uid, uid); assert.equal(foreign.state, 2);
   assert.equal(f.live().filter((fiber: any) => fiber.state === 2).length, 1);
   assert.deepEqual(f.commits, []);
+});
+
+test('late real jobs activation clears only the obsolete dependency reason even before owner status projection runs', async t => {
+  let raw: any;
+  let readOwner: (() => ReturnType<ReturnType<typeof createHostDriverOwner>['snapshot']>) | undefined;
+  let atActivation: ReturnType<ReturnType<typeof createHostDriverOwner>['snapshot']> | undefined;
+  const f = await fixture(t, {}, ctx => ctx.on('internal/status', (fiber: any) => {
+    if (fiber === raw && fiber.state === 2) atActivation = readOwner?.();
+  }, { global: true }));
+  readOwner = () => f.owner.snapshot();
+  const pending = await f.owner.transition({ strategy: 'replacement', mountOwned: async () => {
+    raw = f.row.ctx.plugin({ name: 'goal-wait-owned-replacement-driver', inject: ['jobs'], apply() {} } as any).ctx.fiber;
+    return { rawFiber: raw, stop: async () => { await raw.dispose(); } };
+  } });
+  assert.equal(pending.phase, 'missing-dependency');
+  assert.equal(pending.reason, 'Replacement driver is waiting for native dependencies');
+  await f.ctx.plugin((await loadHost('dsh-jobs-local')).default, {}).await();
+  await raw.await();
+  assert.equal(atActivation?.phase, 'active');
+  assert.equal(atActivation?.reason, undefined, 'active must not retain a dependency fallback before the later projection listener runs');
+  assert.equal(f.owner.snapshot().reason, undefined);
 });

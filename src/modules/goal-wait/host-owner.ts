@@ -74,6 +74,9 @@ export function createHostDriverOwner(ctx: Context, options: HostDriverOwnerOpti
       const fiber = owned.rawFiber;
       result.effective = live(fiber) && fiber.state === 2 ? 'replacement' : 'none';
       result.phase = !live(fiber) || fiber.state === 3 ? 'failed' : fiber.state === 2 ? 'active' : 'missing-dependency';
+      // Retire only this resolved dependency diagnostic, never conflict/failure reasons.
+      if (result.phase === 'active' && state.phase === 'missing-dependency'
+        && result.reason === 'Replacement driver is waiting for native dependencies') delete result.reason;
     } else if (state.effective === 'stock' && state.phase === 'active' && stock && (!live(stock.fiber) || stock.fiber.state !== 2)) {
       result.effective = 'none'; result.phase = 'missing-dependency';
     }
