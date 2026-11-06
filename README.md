@@ -1,0 +1,105 @@
+# DSH Extras
+
+One install, independent enhancements. **一体安装，功能独立开关。**
+
+Context compaction, native retry classification, browser session chimes and goal waiting behind one plugin card. Four genuinely independent single-feature packages are built from the same source, not maintained as forks.
+
+**Target:** DSH `0.2.2-alpha.3`, Node `>=24.9.0`. No unverified broad compatibility claim. Not published to npm: install a GitHub Release tarball.
+
+## Distributions
+
+| Package | Capabilities |
+| --- | --- |
+| dsh-extras | All four, independently selectable |
+| dsh-extras-compact-context | Native-policy compaction, optional status/guidance/pressure, PTC timeout options |
+| dsh-extras-retry | Stream-error and empty-response classification; official DSH retry owns execution |
+| dsh-extras-chime | Completion/blocked/question/error sounds, quiet hours, rest mode, sidebar and banners |
+| dsh-extras-goal-wait | Wait for live jobs and subagent descendants; official goal driver stays mounted |
+
+Choose the combined package **or** any subset of distinct splits. Two distributions claiming the same capability produce a fail-closed ownership conflict, not duplicate hooks/audio. Splits do not require the combined package and omit unrelated feature implementation and audio.
+
+## Install
+
+Choose the intended profile explicitly. Example for an existing web profile:
+
+```sh
+dsh plugin --profile web add https://github.com/LMGateX/dsh-extras/releases/download/v0.1.0/dsh-extras-0.1.0.tgz
+```
+
+For one capability replace the asset name, e.g. `dsh-extras-retry-0.1.0.tgz`. Verify downloads against release SHA256SUMS. The matching DSH runtime must already exist; packages do not install a second host runtime.
+
+Open **Plugins → DSH Extras → Configure**. Combined settings have context, retry, chime and goalWait sections. Each module and every original option is independently editable. Status distinguishes active, disabled, missing dependency, migration-pending, conflict and failed. Enable/disable joins feature disposal before reactivation. Policy-only changes use validated live snapshots without remounting in-flight retry classifiers or releasing goal holds.
+
+Fresh installs use preserved source defaults. When any legacy plugin is discovered, absent capabilities begin disabled and can be explicitly enabled later. Explicit Extras values win over imports. Missing optional services affect only the corresponding module. In native web presets, context operations follow the selected agent’s isolated native compaction backend and policy; Extras does not enable a second global engine or rewrite presets. A preset without a backend returns an explicit unavailable result for that agent.
+
+## Automatic legacy migration / 自动迁移
+
+First active load inspects **only the owning profile**, validates effective configuration, records protected backups/journal and persistently disables old bundle/row owners after preparation. Old packages and configuration are retained. No postinstall effects, profile sweep, forced restart or uninstall.
+
+Known predecessors: dsh-tool-compact-context, dsh-stream-retry, dsh-session-chime and conventional dsh-goal-wait-gate. Unknown versions, dynamic expressions, ambiguous instances, overlays, read-only profiles and experimental startup/replacement owners fail closed: old ownership remains, the affected new module is gated, and the report explains the problem.
+
+**Saved is not active.** If native reconciliation cannot safely finish, restart DSH yourself after finishing ongoing work. Migrating legacy chime requires a fresh host process and **full page reload** because old timers and in-flight decode cannot be reliably cancelled. Extras checks fresh host-index evidence, not browser wall-clock time; it stays silent when proof/status is unavailable.
+
+Read the migration report in Extras settings. Profile `.dsh-extras/` holds permission-restricted journal/backups; these can contain original feature text, so do not publish them. Repeated starts do not reimport over later Extras edits.
+
+### Inspection and selective recovery
+
+Every distribution exports `./migration` and the `dsh-extras-migrate` CLI. Explicit profile/home/install anchor are mandatory; nothing scans all profiles:
+
+```sh
+dsh-extras-migrate inspect --profile-dir /absolute/profile --dsh-home /absolute/dsh-home --install-anchor /absolute/host-package
+dsh-extras-migrate dry-run --profile-dir /absolute/profile --dsh-home /absolute/dsh-home --install-anchor /absolute/host-package
+dsh-extras-migrate retry --profile-dir /absolute/profile --dsh-home /absolute/dsh-home --install-anchor /absolute/host-package
+dsh-extras-migrate rollback --operation OPERATION_UUID --modules retry,chime --profile-dir /absolute/profile --dsh-home /absolute/dsh-home --install-anchor /absolute/host-package
+```
+
+For splits add `--distribution dsh-extras-retry` (or the selected split). Rollback restores only migration-owned values that still match its writes and refuses conflicting later edits. Handover back is staged: first gate Extras, stop the currently recorded owning host processes when instructed, then repeat explicit rollback to restore old selection. Every enabled target host registers before activation; restoration waits for its actual process to stop, not merely the process that originally migrated. An offline CLI-created migration with no later runtime owner can also complete recovery after that CLI exits. New overlapping owners or ambiguous edits refuse restoration. Simply disabling Extras never silently re-enables legacy plugins. The CLI binary lives in the selected profile’s `node_modules/.bin`; invoke its absolute path if it is not on your PATH.
+
+## Configuration shape
+
+```yaml
+modules:
+  context:
+    enabled: true
+    compactTool: true
+    statusTool: false
+  retry:
+    enabled: true
+    errorCodes: [upstream_stream_read_error, stream_timeout, stream error]
+    providers: []
+    retryEmptyResponse: true
+  chime:
+    enabled: true
+    restMode: false
+  goalWait:
+    enabled: true
+    waitForJobs: true
+    waitForSubagents: true
+    maxHoldMs: 0
+migration:
+  auto: true
+```
+
+Splits use this same envelope but expose only their module. `maxHoldMs: 0` means no forced expiry. Context status/guidance/pressure extras remain opt-in. Native retention, provider routing and retry budgets stay native. Goal waiting changes process-local activation only, never durable phase.
+
+## Development
+
+```sh
+npm ci --ignore-scripts
+npx playwright install chromium
+npm run check
+npm run pack
+npm run test:artifacts
+```
+
+Tests resolve the local baseline DSH dev dependency. `DSH_RUNTIME_ROOT` can explicitly select an installed baseline. Native HOME/profile/processes are disposable; no developer live profile is used. The [release specification](<docs/SPEC.md>) and [acceptance matrix](<docs/ACCEPTANCE.md>) define the frozen release gate; [validation evidence](<docs/VALIDATION.md>) records executed results and limitations. `DSH_EXTRAS_CHROMIUM` may select an existing Chromium executable for isolated tests.
+
+## Safety boundaries
+
+- No automatic restart, hidden legacy reactivation or experimental startup-driver migration.
+- Do not delete running journals or copy them into another profile.
+- Audio obeys normal browser gesture/autoplay rules; unlock it in settings. Chime is browser-only.
+- Native management concurrency is not advertised as universally atomic: conflicts fail boundedly and require inspection/retry.
+- This development/release task does **not** install Extras into the author's active local profile.
+
+MIT. Selected source notices are included in each distribution; chime includes unchanged CC0 sounds and third-party attribution.
