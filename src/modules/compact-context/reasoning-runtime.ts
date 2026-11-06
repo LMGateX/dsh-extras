@@ -16,6 +16,17 @@ function baseline(ctx: Context): void {
   if (!(ctx instanceof Context) || !ctx.root?.reflect?.store || typeof ctx.on !== 'function') unsupported('unverified Cordis reflection shape');
 }
 
+/** Verify only the audited top-level envelope; native owns nested payloads and value validation. */
+function verifyEnvelope(options: GenerateOptions): void {
+  const prototype = Object.getPrototypeOf(options);
+  const fields = Object.getOwnPropertyDescriptors(options);
+  if ((prototype !== Object.prototype && prototype !== null)
+    || Reflect.ownKeys(options).some(key => typeof key !== 'string' || !fields[key]?.enumerable || !Object.hasOwn(fields[key]!, 'value'))
+    || typeof fields.provider?.value !== 'string' || typeof fields.model?.value !== 'string' || !Array.isArray(fields.messages?.value)) {
+    unsupported('unverified compaction request envelope');
+  }
+}
+
 function winningRule(policy: CompactionReasoningPolicy, options: GenerateOptions): CompactionReasoningRule | undefined {
   return policy.rules.find(rule => rule.scope === 'provider-model' && rule.provider === options.provider && rule.model === options.model)
     ?? policy.rules.find(rule => rule.scope === 'provider' && rule.provider === options.provider)
@@ -50,6 +61,7 @@ interface Installation { active: boolean; descriptor: PropertyDescriptor; restor
  */
 export function installCompactionReasoning(ctx: Context, policy: CompactionReasoningPolicy, status: (value: ReasoningCapability) => void): () => void {
   let disposed = false;
+  let requestRejected = false;
   const observers: (() => unknown)[] = [];
   const installed = new Map<LlmRuntime, Installation>();
   const restoreAll = (): void => {
@@ -90,11 +102,24 @@ export function installCompactionReasoning(ctx: Context, policy: CompactionReaso
     // invocation, not at the first asynchronous-generator iteration.
     const wrapped: LlmRuntime['stream'] = function (this: LlmRuntime, options: GenerateOptions, ...rest: unknown[]) {
       let outgoing = options;
-      if (record.active && !disposed && options.purpose === 'compaction' && !isAgentLoopRequest(options)) {
-        const rule = winningRule(policy, options);
-        const effort = rule?.mode === 'fixed' ? rule.effort as GenerateOptions['reasoningEffort']
-          : rule?.mode === 'inherit' ? inheritedEffort(this.ctx, options) : undefined;
-        if (effort !== undefined) outgoing = { ...options, reasoningEffort: effort };
+      if (record.active && !disposed && !isAgentLoopRequest(options)) {
+        try {
+          if (Object.getOwnPropertyDescriptor(options, 'purpose')?.value === 'compaction') {
+            if (!sameDescriptor(Object.getOwnPropertyDescriptor(raw, 'stream'), record.descriptor)) unsupported('stream descriptor ownership changed');
+            const callCtx = this.ctx;
+            if (!(this instanceof LlmRuntime) || !(callCtx instanceof Context) || callCtx.root !== ctx.root
+              || typeof callCtx.get !== 'function') unsupported('unverified incoming LLM context');
+            verifyEnvelope(options);
+            const rule = winningRule(policy, options);
+            const effort = rule?.mode === 'fixed' ? rule.effort as GenerateOptions['reasoningEffort']
+              : rule?.mode === 'inherit' ? inheritedEffort(callCtx, options) : undefined;
+            if (effort !== undefined) outgoing = { ...options, reasoningEffort: effort };
+          }
+        } catch (error) {
+          // A required request outside the audited shape cannot prove coverage.
+          // Leave native handling intact; retry only after a new accepted policy.
+          requestRejected = true; fail(error);
+        }
       }
       return Reflect.apply(original, this, [outgoing, ...rest]);
     };
@@ -103,7 +128,7 @@ export function installCompactionReasoning(ctx: Context, policy: CompactionReaso
     installed.set(raw, record);
   };
   const reconcile = (extra?: unknown): void => {
-    if (disposed) return;
+    if (disposed || requestRejected) return;
     try {
       const required = new Set<unknown>();
       for (const key of Reflect.ownKeys(ctx.root.reflect.store)) {
