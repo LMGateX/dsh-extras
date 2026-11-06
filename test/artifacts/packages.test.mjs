@@ -60,6 +60,7 @@ for(const {name,modules} of distributions) test('packed installable distribution
     const resolved = entry.Config({modules: {'compact-context': {enabled: false, retryAttempts: 0}}});
     assert.equal(resolved.modules['compact-context'].enabled.get(), false);
     assert.equal(resolved.modules['compact-context'].retryAttempts.get(), 0);
+    assert.deepEqual(entry.Config({}).modules['compact-context'].compactionReasoning.get(), {enabled:false,rules:[{scope:'all',mode:'inherit'}]}, 'packed defaults keep request reasoning disabled and tool-independent');
   }
   const migration=await import(pathToFileURL(join(packageDir,'lib/migration.js')).href);
   assert.equal(typeof migration.startAutomaticMigration,'function');
@@ -67,4 +68,16 @@ for(const {name,modules} of distributions) test('packed installable distribution
   assert.ok(help.includes('profile')&&help.includes('inspect'));
   assert.ok(help.includes('--modules compact-context,retry,chime,goalWait'));
   assert.ok(!help.includes('--modules context,'));
+});
+
+test('packed server imports declare every external host dependency', () => {
+  for (const {name} of distributions) {
+    const archive = join(artifactDir, name + '-' + version + '.tgz');
+    const pkg = JSON.parse(execFileSync('tar', ['-xOf', archive, 'package/package.json'], {encoding:'utf8'}));
+    const server = execFileSync('tar', ['-xOf', archive, 'package/lib/index.js'], {encoding:'utf8'});
+    for (const match of server.matchAll(/from ["'](@deepseek-ai\/[^"']+)["']/g)) {
+      const dependency = match[1].split('/').slice(0, 2).join('/');
+      assert.ok(pkg.dependencies?.[dependency] || pkg.peerDependencies?.[dependency], name + ' must declare ' + dependency);
+    }
+  }
 });

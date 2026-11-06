@@ -7,7 +7,7 @@ const root = resolve(import.meta.dirname, '..');
 const source = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
 const rootRequire = createRequire(join(root, 'package.json'));
 const hostRequire = createRequire(rootRequire.resolve('@deepseek-ai/dsh/package.json'));
-const hostPackages = ['cordis', 'cordis-plugin-loader', 'dsh-agent', 'dsh-app-boot', 'dsh-compaction', 'dsh-goal', 'dsh-jobs', 'dsh-llm', 'dsh-system-prompt', 'dsh-token-meter', 'dsh-tools', 'dsh-ptc-runtime', 'dsh-host-webserver', 'dsh-client-connection', 'dsh-hmr', 'schemastery'];
+const hostPackages = ['cosmokit', 'cordis', 'cordis-plugin-loader', 'dsh-agent', 'dsh-app-boot', 'dsh-compaction', 'dsh-goal', 'dsh-jobs', 'dsh-llm', 'dsh-system-prompt', 'dsh-token-meter', 'dsh-tools', 'dsh-ptc-runtime', 'dsh-host-webserver', 'dsh-client-connection', 'dsh-hmr', 'schemastery'];
 for (const { name, modules } of distributions) {
   const out = join(root, 'dist', name);
   await mkdir(join(out, 'lib'), {recursive: true});
