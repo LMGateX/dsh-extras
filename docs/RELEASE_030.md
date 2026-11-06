@@ -1,6 +1,6 @@
 # DSH Extras 0.3.0 — legacy parity restoration
 
-> Release-candidate notes. Publication is gated by the completed [validation report](<VALIDATION_030.md>); the current integration checkpoint is not release approval.
+Engineering acceptance: **569/569 source tests and 23/23 artifact/native/browser/clean-consumer tests passed**, with independent Standards and Spec findings closed. See the [validation report and exact tested checksums](<https://github.com/LMGateX/dsh-extras/blob/v0.3.0/docs/VALIDATION_030.md>).
 
 ## 本次恢复 / Restored parity
 
@@ -21,6 +21,6 @@ Compaction reasoning remains off by default, tool-independent and an audited exp
 
 ## Assets and installation
 
-Five independent, synchronized distributions: `dsh-extras`, `dsh-extras-compact-context`, `dsh-extras-retry`, `dsh-extras-chime`, `dsh-extras-goal-wait`. Choose combined **or** non-overlapping splits. Verify each archive against SHA256SUMS before an explicitly profile-targeted installation; see the [installation instructions](<../README.md#install>).
+Five independent, synchronized distributions: `dsh-extras`, `dsh-extras-compact-context`, `dsh-extras-retry`, `dsh-extras-chime`, `dsh-extras-goal-wait`. Choose combined **or** non-overlapping splits. Verify each archive against SHA256SUMS before an explicitly profile-targeted installation; see the [installation instructions](<https://github.com/LMGateX/dsh-extras/blob/v0.3.0/README.md#install>).
 
 Direct GitHub Release publication only: no npm publication or GitHub Actions execution. **本次开发/发版不为作者当前本机 DSH/profile 安装、升级或重启。** All acceptance installs and native/browser processes use disposable isolated environments.
