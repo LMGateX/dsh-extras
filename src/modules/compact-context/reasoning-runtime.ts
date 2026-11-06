@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { Context, symbols } from '@deepseek-ai/cordis';
 import LlmRuntime, { isAgentLoopRequest, type GenerateOptions } from '@deepseek-ai/dsh-llm';
 import type { CompactionReasoningPolicy, CompactionReasoningRule } from './reasoning-policy.ts';
+import type { SessionId } from '@deepseek-ai/dsh-session';
 
 export interface ReasoningCapability { phase: 'disabled' | 'active' | 'unavailable'; reason?: string }
 const requireHost = createRequire(import.meta.url);
@@ -17,6 +18,16 @@ function winningRule(policy: CompactionReasoningPolicy, options: GenerateOptions
   return policy.rules.find(rule => rule.scope === 'provider-model' && rule.provider === options.provider && rule.model === options.model)
     ?? policy.rules.find(rule => rule.scope === 'provider' && rule.provider === options.provider)
     ?? policy.rules.find(rule => rule.scope === 'all');
+}
+
+/** Exact live-map lookup only; a missing durable value does not select a broader rule. */
+function inheritedEffort(ctx: Context, options: GenerateOptions): GenerateOptions['reasoningEffort'] {
+  if (typeof options.sessionId !== 'string' || options.sessionId.length === 0) return undefined;
+  try {
+    const session = ctx.get('sessions')?.get(options.sessionId as SessionId);
+    if (!session || session.id !== options.sessionId) return undefined;
+    return session.requestHeader()?.config.reasoningEffort;
+  } catch { return undefined; }
 }
 
 /** Mount on current native runtimes. Returned cleanup never overwrites a later owner. */
@@ -43,7 +54,9 @@ export function installCompactionReasoning(ctx: Context, policy: CompactionReaso
         let outgoing = options;
         if (active && options.purpose === 'compaction' && !isAgentLoopRequest(options)) {
           const rule = winningRule(policy, options);
-          if (rule?.mode === 'fixed') outgoing = { ...options, reasoningEffort: rule.effort as GenerateOptions['reasoningEffort'] };
+          const effort = rule?.mode === 'fixed' ? rule.effort as GenerateOptions['reasoningEffort']
+            : rule?.mode === 'inherit' ? inheritedEffort(this.ctx, options) : undefined;
+          if (effort !== undefined) outgoing = { ...options, reasoningEffort: effort };
         }
         return Reflect.apply(original, this, [outgoing, ...rest]);
       };
