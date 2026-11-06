@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { resolve, join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
+import { realpathSync } from 'node:fs';
 import { dryRunMigration, rollbackMigration, runMigration } from './engine.ts';
 import { MODULE_IDS, type Distribution, type ModuleId, type NativeMigrationHost } from './types.ts';
 
@@ -32,6 +33,13 @@ export async function migrationMain(args = process.argv.slice(2)): Promise<void>
   } else throw new Error('expected inspect, dry-run, apply, retry or rollback');
   console.log(JSON.stringify(output, null, 2));
 }
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+// npm installs the bin as a symlink. Canonicalize both sides, including when
+// Node preserves the main-module symlink; imported/-e callers must not run it.
+function isDirectEntry(): boolean {
+  if (!process.argv[1]) return false;
+  try { return realpathSync(fileURLToPath(import.meta.url)) === realpathSync(resolve(process.argv[1])); }
+  catch { return false; }
+}
+if (isDirectEntry()) {
   migrationMain().catch(() => { console.error('Migration refused or failed; no unsafe overwrite was attempted. Inspect the private profile journal and retry.'); process.exitCode = 1; });
 }
