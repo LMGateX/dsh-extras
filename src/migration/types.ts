@@ -1,3 +1,4 @@
+import type { Context } from '@deepseek-ai/cordis';
 /** Public migration seam. Native lifecycle is observed, never entered recursively. */
 export const MODULE_IDS = ['compact-context', 'retry', 'chime', 'goalWait'] as const;
 export type ModuleId = typeof MODULE_IDS[number];
@@ -19,9 +20,13 @@ export interface NativeMigrationHost {
   logger?: { warn(...args: unknown[]): void; debug?(...args: unknown[]): void };
   /** Fail closed if a nonstandard startup owner cannot be excluded. */
   startupOwner?: string | null;
+  /** Actual host realm, absent in offline CLI. Never fabricated from profile rows. */
+  continuationContext?: Context;
 }
-export interface Source { moduleId: ModuleId; packageName: string; moduleName?: string; bundleName?: string; version?: string; rowId?: string; raw: Values; effective: Values; disabled: boolean; active: boolean; bundleSelected: boolean; problem?: string }
+export interface NativeDriverDelta { rowId: string; moduleName: string; restored: Values }
+export interface Source { nativeDriverDelta?: NativeDriverDelta; moduleId: ModuleId; packageName: string; moduleName?: string; bundleName?: string; version?: string; rowId?: string; raw: Values; effective: Values; disabled: boolean; active: boolean; bundleSelected: boolean; problem?: string }
 export interface Discovery {
+  goalOwner?: { verified: boolean; stockActive: boolean; reason?: string };
   profileId: string; profile: ProfileFacts; revision: string; manifest: Values; patchText: string; manifestText: string;
   moduleProblems?: Partial<Record<ModuleId, string[]>>;
   /** Detached immutable input evidence, including absent optional files. */

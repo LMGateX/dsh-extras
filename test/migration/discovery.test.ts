@@ -87,6 +87,14 @@ async function snapshot(root: string): Promise<Record<string, string>> {
   return values;
 }
 
+test('public discovery admits exact latest goal row and preserves disabled effective strategy', async t => {
+  const f = await fixture(t);
+  await f.pkg('dsh-goal-wait-gate', '0.4.23', [{ insert: [{ id: 'goal-wait-gate', name: 'dsh-goal-wait-gate', disabled: true, config: { strategy: 'replacement', waitForJobs: false } }] }], { selected: true });
+  const input = await inspectMigration(f.host, target);
+  assert.equal(input.sources[0].problem, undefined);
+  assert.equal(input.sources[0].disabled, true);
+  assert.deepEqual(input.sources[0].effective, {strategy:'replacement',waitForJobs:false});
+});
 test('composes raw inherited config; preserves groups, disabled rows, exact text and profile scope', async t => {
   const f = await fixture(t);
   await f.pkg('dsh-stream-retry', '0.1.9', [{ insert: [{ id: 'disabled-group', name: 'cordis:group', group: true, disabled: true, config: [{ id: 'my-retry', name: 'dsh-stream-retry', config: { providers: ['old'], retryEmptyResponse: true } }] }] }], { selected: true });

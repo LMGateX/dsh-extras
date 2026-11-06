@@ -14,9 +14,15 @@ import type { Decision, Discovery, Distribution, MigrationPlan, MigrationReport,
 interface Step { kind: 'target' | 'disable' | 'bundles'; before: string; after: string; done: boolean }
 interface JournalEnvironment { identity: string; files: { path: string; hash: string | null }[]; paths: string[] }
 interface RollbackEvidence { packageDir?: string; files?: { path: string; hash: string }[]; patchPaths?: string[]; problem?: string }
-interface Journal { rollbackEvidence?: Partial<Record<ModuleId, RollbackEvidence>>; environment?: JournalEnvironment; ownershipVersion?: 1; owners?: Partial<Record<ModuleId, string[]>>; schemaVersion: 1; operationId: string; profileId: string; targetRowId: string; runtimeObserved?: boolean; browserFenceFinalized?: boolean; browserReloadAfter?: number; origin: string; phase: 'prepared' | 'saved'; plan: MigrationPlan; steps: Step[]; backup: string; previous: Partial<Record<ModuleId, unknown>>; rollback?: Partial<Record<ModuleId, { origin: string; done: boolean; conflict?: string }>>; recoveryWrites?: { patchBefore: string; patchAfter: string; manifestBefore: string; manifestAfter: string; restoreModules?: ModuleId[] } }
+interface Journal { nativeDriverVerifiedOrigin?: string; rollbackEvidence?: Partial<Record<ModuleId, RollbackEvidence>>; environment?: JournalEnvironment; ownershipVersion?: 1; owners?: Partial<Record<ModuleId, string[]>>; schemaVersion: 1; operationId: string; profileId: string; targetRowId: string; runtimeObserved?: boolean; browserFenceFinalized?: boolean; browserReloadAfter?: number; origin: string; phase: 'prepared' | 'saved'; plan: MigrationPlan; steps: Step[]; backup: string; previous: Partial<Record<ModuleId, unknown>>; rollback?: Partial<Record<ModuleId, { origin: string; done: boolean; conflict?: string }>>; recoveryWrites?: { patchBefore: string; patchAfter: string; manifestBefore: string; manifestAfter: string; restoreModules?: ModuleId[] } }
 /** Stable across HMR but different after a genuine process restart, without process-global state. */
 const processOrigin = () => process.pid + ':' + performance.timeOrigin;
+// Durable process evidence is diagnostic, not a transferable root-realm grant.
+const nativeDriverVerifications = new WeakMap<object, Set<string>>();
+function verifiedStockInRoot(host: NativeMigrationHost, journal: Journal): boolean {
+  const root = host.continuationContext?.root;
+  return !!root && journal.nativeDriverVerifiedOrigin === processOrigin() && nativeDriverVerifications.get(root)?.has(journal.operationId) === true;
+}
 const document = (text: string) => {
   const doc = parseDocument(text, { customTags: [{ tag: 'tag:yaml.org,2002:js', resolve: (value: string) => value }] });
   if (doc.errors.length || !isSeq(doc.contents)) throw new Error('profile patch must be a valid YAML sequence');
@@ -151,6 +157,15 @@ async function observeOwners(host: NativeMigrationHost, journal: Journal, curren
   const target = [...host.loader.entries()].find(entry => entry.options.id === journal.targetRowId && entry.options.name === (journal.plan.target.packageName ?? journal.targetRowId));
   if (!target?.fiber) return; // A CLI process is not a target runtime owner.
   let changed = journal.runtimeObserved !== true;
+  if (journal.plan.decisions.some(decision => decision.source?.moduleId === 'goalWait' && decision.source.version === '0.4.23' && !liveLegacy(host, decision)) && current.goalOwner?.verified && current.goalOwner.stockActive) {
+    const root = host.continuationContext?.root;
+    if (root) {
+      let operations = nativeDriverVerifications.get(root);
+      if (!operations) nativeDriverVerifications.set(root, operations = new Set());
+      operations.add(journal.operationId);
+    }
+    if (journal.nativeDriverVerifiedOrigin !== processOrigin()) { journal.nativeDriverVerifiedOrigin = processOrigin(); changed = true; }
+  }
   journal.runtimeObserved = true;
   journal.owners ??= {};
   for (const decision of journal.plan.decisions) {
@@ -177,7 +192,12 @@ export function reportJournal(host: NativeMigrationHost, journal: Journal, curre
     const id = decision.moduleId;
     if (journal.recoveryWrites) { modules[id] = { phase: 'prepared', ready: false, enabled: false, reason: 'recovery write replay requires explicit retry' }; continue; }
     if (journal.rollback?.[id]?.conflict) { modules[id] = { phase: 'conflict', enabled: false, ready: false, reason: journal.rollback[id]!.conflict }; continue; }
-    if (journal.rollback?.[id]) { modules[id] = { phase: journal.rollback[id]!.done ? 'rolled-back' : 'restart-required', enabled: false, ready: false, reason: journal.rollback[id]!.done ? 'selectively restored legacy settings' : 'restart host, then repeat rollback to restore old ownership' }; continue; }
+    if (journal.rollback?.[id]) {
+      if (journal.rollback[id]!.done && decision.source?.nativeDriverDelta && (!current?.goalOwner?.verified || current.goalOwner.stockActive || !current.sources.some(source => source.moduleId === id && source.active && !source.disabled && !source.problem))) {
+        modules[id] = {phase:'restart-required',enabled:false,ready:false,reason:'legacy native driver composition restored in storage; actual runtime verification required'}; continue;
+      }
+      modules[id] = { phase: journal.rollback[id]!.done ? 'rolled-back' : 'restart-required', enabled: false, ready: false, reason: journal.rollback[id]!.done ? 'selectively restored legacy settings' : 'restart host, then repeat rollback to restore old ownership' }; continue;
+    }
     const enabled = current?.explicit[id]?.enabled === undefined ? decision.enabled : current.explicit[id]!.enabled === true;
     if (current?.peers[id]?.length || current?.moduleProblems?.[id]?.length || current?.sources.some(source => source.moduleId === id && !!source.problem) || current?.problems.length) { modules[id] = { phase: 'conflict', ready: false, enabled, reason: 'current profile ownership changed; inspect before retry' }; continue; }
     if (!decision.source && current?.sources.some(source => source.moduleId === id && !source.disabled)) { modules[id] = { phase: 'conflict', ready: false, enabled, reason: 'new legacy ownership was added after migration' }; continue; }
@@ -189,6 +209,7 @@ export function reportJournal(host: NativeMigrationHost, journal: Journal, curre
     if (decision.source && liveLegacy(host, decision)) { modules[id] = { phase: 'restart-required', ready: false, enabled, reason: 'legacy runtime has not stopped' }; continue; }
     if (decision.source && id === 'chime' && (!journal.browserFenceFinalized || journal.origin === processOrigin())) { modules[id] = { phase: 'restart-required', ready: false, enabled, reason: 'fresh host and page required to discard legacy audio work' }; continue; }
     if (decision.source && host.get?.('hmr') === undefined && journal.origin === processOrigin()) { modules[id] = { phase: 'restart-required', ready: false, enabled, reason: 'no native reload acknowledgment; restart required' }; continue; }
+    if (decision.source?.moduleId === 'goalWait' && decision.source.version === '0.4.23' && !verifiedStockInRoot(host, journal)) { modules[id] = { phase: 'restart-required', ready: false, enabled, reason: 'native driver restoration requires an actual active stock callback after legacy disposal' }; continue; }
     modules[id] = { phase: decision.source ? 'applied' : 'fresh', ready: true, enabled };
   }
   return { browserReloadAfter: journal.browserReloadAfter, schemaVersion: 1, operationId: journal.operationId, profileId: journal.profileId, targetRowId: journal.targetRowId, modules, problems: [...journal.plan.problems] };
@@ -338,6 +359,14 @@ async function rollbackConflict(host: NativeMigrationHost, target: Distribution,
   const remotePeer = await peerJournalConflict(host, target, id, current.profileId);
   if (remotePeer) return remotePeer;
   if (!source) return undefined;
+  if (source.moduleId === 'goalWait' && source.version === '0.4.23' && source.bundleSelected) {
+    const delta = source.nativeDriverDelta;
+    if (!delta) return 'journal lacks native driver composition provenance; restoration refused';
+    const selected = current.sources.find(value => value.moduleId === id && value.bundleSelected);
+    const rows = sourceRows(current.rows).filter(value => value.row.id === delta.rowId);
+    const actual = selected ? selected.nativeDriverDelta?.restored : rows.length === 1 ? rows[0]!.row : undefined;
+    if (!actual || !isDeepStrictEqual(actual, delta.restored)) return 'native driver row changed after migration; owned suppression restoration refused';
+  }
   const candidates = current.sources.filter(value => value.moduleId === id);
   if (candidates.length !== 1 || candidates[0]!.problem) return 'current legacy source is ambiguous or unsupported';
   if (candidates[0]!.packageName !== source.packageName || candidates[0]!.version !== source.version) return 'legacy package identity or version changed';

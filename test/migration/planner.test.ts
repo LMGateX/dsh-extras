@@ -11,6 +11,43 @@ test('all four current versions import exact known defaults without mutating inp
   assert.deepEqual(input,before);
   for(const decision of plan.decisions){assert.equal(decision.phase,'prepared');assert.deepEqual(decision.config,{...LEGACY_DEFAULTS[decision.moduleId],enabled:true});}
 });
+test('audited latest goal source imports its exact strategy with target precedence and disabled state',()=>{
+  const input=snapshot(); input.target.moduleIds=['goalWait'];
+  const source=input.sources.find(s=>s.moduleId==='goalWait')!;
+  source.version='0.4.23'; source.disabled=true;
+  source.raw={strategy:'replacement',waitForJobs:false}; source.effective={strategy:'replacement',waitForJobs:false,maxHoldMs:23};
+  input.explicit.goalWait={strategy:'off',waitForSubagents:false,maxHoldMs:0};
+  const decision=planMigration(input).decisions[0];
+  assert.equal(decision.phase,'prepared');
+  assert.deepEqual(decision.config,{enabled:false,strategy:'off',waitForJobs:false,waitForSubagents:false,maxHoldMs:0});
+});
+test('historical goal source imports activation only and cannot smuggle latest-only strategy',()=>{
+  const input=snapshot(); input.target.moduleIds=['goalWait'];
+  const source=input.sources.find(s=>s.moduleId==='goalWait')!;
+  assert.deepEqual(planMigration(input).decisions[0].config,{enabled:true,strategy:'activation',waitForJobs:true,waitForSubagents:true,maxHoldMs:0});
+  source.raw={strategy:'replacement'}; source.effective={strategy:'replacement'};
+  assert.equal(planMigration(input).decisions[0].phase,'conflict');
+});
+test('latest four strategies are exact while unaudited versions and unknown strategies stay conflicts',()=>{
+  for(const strategy of ['activation','replacement','native','off']) {
+    const input=snapshot(); input.target.moduleIds=['goalWait'];
+    const source=input.sources.find(s=>s.moduleId==='goalWait')!;
+    source.version='0.4.23';source.effective={strategy};
+    const decision=planMigration(input).decisions[0];
+    assert.equal(decision.phase,'prepared');
+    assert.deepEqual(decision.config,{enabled:true,strategy,waitForJobs:true,waitForSubagents:true,maxHoldMs:0});
+    for(const version of ['0.4.22','0.4.24','0.3.1',undefined]) {
+      source.version=version;
+      const refused=planMigration(input).decisions[0];
+      assert.equal(refused.phase,'conflict');assert.match(refused.reason??'',/unsupported legacy version/);
+    }
+  }
+  for(const strategy of ['unknown','',null,{__jsExpr:'throw new Error()'}]) {
+    const input=snapshot();input.target.moduleIds=['goalWait'];
+    const source=input.sources.find(s=>s.moduleId==='goalWait')!;source.version='0.4.23';source.effective={strategy};
+    assert.equal(planMigration(input).decisions[0].phase,'conflict');
+  }
+});
 test('disabled sources preserve config but never imply activation',()=>{
   const input=snapshot();input.sources.forEach(source=>source.disabled=true);
   assert.ok(planMigration(input).decisions.every(d=>d.config?.enabled===false));

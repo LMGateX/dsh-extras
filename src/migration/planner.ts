@@ -8,9 +8,9 @@ export const LEGACY_DEFAULTS: Record<ModuleId, Values> = {
   'compact-context': { compactTool: true, statusTool: false, guidance: false, guidanceText: '', pressureContext: false, notifyAtRatio: 0.25, pressureStep: 10, retryAttempts: 2, retryDelayMs: 1000, ptcTimeoutMs: 0, ptcModelTimeouts: {} },
   retry: { errorCodes: ['upstream_stream_read_error', 'stream_timeout', 'stream error'], providers: [], retryEmptyResponse: true },
   chime: { enabled: true, soundDone: 'chime-soft', soundBlocked: 'alert-low', soundQuestion: 'bell-bright', soundError: 'alert-sharp', chimeQuestion: true, chimeError: true, volume: 0.8, durationMs: 0, debounceMs: 1500, quietStyle: 'short', quietShortMs: 600, dndStart: '', dndEnd: '', restMode: false, minRingMs: 3000, banner: true, bannerPlacement: 'bottom-center' },
-  goalWait: { waitForJobs: true, waitForSubagents: true, maxHoldMs: 0 },
+  goalWait: { strategy: 'activation', waitForJobs: true, waitForSubagents: true, maxHoldMs: 0 },
 };
-const VERSIONS: Record<ModuleId, string[]> = { 'compact-context': ['0.4.7'], retry: ['0.1.9'], chime: ['0.6.0'], goalWait: ['0.3.0'] };
+export const LEGACY_VERSIONS: Record<ModuleId, readonly string[]> = { 'compact-context': ['0.4.7'], retry: ['0.1.9'], chime: ['0.6.0'], goalWait: ['0.3.0', '0.4.23'] };
 /** Detached deep merge: arrays replace; prototype-bearing keys are never admitted. */
 export function mergeValues(...layers: Values[]): Values {
   const out: Values = {};
@@ -46,9 +46,12 @@ export function planMigration(input: Discovery): MigrationPlan {
       try { validateKnownConfig(moduleId, config); input.target.validateModule?.(moduleId, config); } catch { return conflict('target schema validation failed'); }
       return { moduleId, phase: 'fresh', enabled, config };
     }
-    if (!source.version || !VERSIONS[moduleId].includes(source.version)) return conflict('unsupported legacy version: ' + (source.version ?? 'unknown'));
+    if (!source.version || !LEGACY_VERSIONS[moduleId].includes(source.version)) return conflict('unsupported legacy version: ' + (source.version ?? 'unknown'));
     const defaults = LEGACY_DEFAULTS[moduleId];
-    const unknown = Object.keys(source.effective).filter(key => !Object.hasOwn(defaults, key));
+    // The historical activation gate had no strategy field. Normalize its target
+    // default, but do not admit later configuration under an older version identity.
+    const fields = moduleId === 'goalWait' && source.version === '0.3.0' ? ['waitForJobs', 'waitForSubagents', 'maxHoldMs'] : Object.keys(defaults);
+    const unknown = [...Object.keys(source.raw), ...Object.keys(source.effective)].filter(key => !fields.includes(key));
     if (unknown.length) return conflict('unsupported legacy configuration fields');
     const imported = mergeValues(defaults, source.effective);
     const config = mergeValues(imported, { enabled: !source.disabled && imported.enabled !== false }, explicit);

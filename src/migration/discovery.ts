@@ -4,6 +4,8 @@ import { createRequire } from 'node:module';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { Discovery, Distribution, ModuleId, NativeMigrationHost, Source, Values } from './types.ts';
+import { LEGACY_VERSIONS } from './planner.ts';
+import { inspectNativeGoalOwner } from './native-owner.ts';
 
 /** Only these read-only native operations are admitted. Never load legacy plugin code. */
 export interface NativeDiscoveryFacade {
@@ -16,7 +18,6 @@ const LEGACY: Record<ModuleId, string> = {
   'compact-context': 'dsh-tool-compact-context', retry: 'dsh-stream-retry',
   chime: 'dsh-session-chime', goalWait: 'dsh-goal-wait-gate',
 };
-const KNOWN_VERSIONS: Record<ModuleId, string> = { 'compact-context': '0.4.7', retry: '0.1.9', chime: '0.6.0', goalWait: '0.3.0' };
 const OLD_ROWS: Record<ModuleId, string[]> = {
   'compact-context': ['dsh-tool-compact-context'], retry: ['stream-retry'],
   chime: ['dsh-session-chime', 'session-chime'], goalWait: ['goal-wait-gate'],
@@ -141,6 +142,7 @@ export async function inspectMigration(host: NativeMigrationHost, target: Distri
     } catch { packageCache.set(name, undefined); return undefined; }
   };
   const bundleLayers: unknown[][] = [];
+  const namedLayers = new Map<string, unknown[]>();
   for (const name of bundles) {
     const info = await metadata(name);
     if (!info) {
@@ -156,7 +158,7 @@ export async function inspectMigration(host: NativeMigrationHost, target: Distri
       if (!Array.isArray(paths) || paths.some(path => typeof path !== 'string')) throw new Error('invalid dsh.bundle.patch');
       const patches: unknown[] = [];
       for (const path of paths as string[]) patches.push(...await layer(join(info.dir, path)));
-      bundleLayers.push(patches);
+      bundleLayers.push(patches); namedLayers.set(name, patches);
     } catch {
       const id = (Object.keys(LEGACY) as ModuleId[]).find(id => LEGACY[id] === info.manifest.name);
       if (id) addProblem([id], 'cannot inspect legacy bundle patches: ' + name);
@@ -184,7 +186,7 @@ export async function inspectMigration(host: NativeMigrationHost, target: Distri
   const live = [...host.loader.entries()];
   const active = (rowId: unknown, name: unknown): boolean => live.some(entry => {
     const options = own(entry, 'options');
-    return own(options, 'id') === rowId && own(options, 'name') === name && own(own(entry, 'fiber'), 'state') === 2;
+    return own(options, 'id') === rowId && own(options, 'name') === name && (own(entry, 'fiber') as { state?: number } | undefined)?.state === 2;
   });
   for (const row of flat) {
     const name = row.value.name;
@@ -204,7 +206,7 @@ export async function inspectMigration(host: NativeMigrationHost, target: Distri
       if (row.value.config != null && !record(row.value.config)) reasons.push('legacy configuration must be an object');
       if (patchesTouch(higher, ids)) reasons.push('higher-priority HOME or launcher overlay owns this legacy row');
       const version = typeof info?.manifest.version === 'string' ? info.manifest.version : undefined;
-      if (version !== KNOWN_VERSIONS[moduleId]) reasons.push('unsupported legacy version: ' + (version ?? 'unknown'));
+      if (!version || !LEGACY_VERSIONS[moduleId].includes(version)) reasons.push('unsupported legacy version: ' + (version ?? 'unknown'));
       const bundleName = bundles.find(bundle => bundle === name || identity !== undefined && packageCache.get(bundle)?.manifest.name === identity);
       sources.push({ moduleId, packageName: LEGACY[moduleId], moduleName: name, bundleName, version, rowId,
         raw: record(rawConfig) ? structuredClone(rawConfig) : {},
@@ -235,6 +237,22 @@ export async function inspectMigration(host: NativeMigrationHost, target: Distri
       }
     }
   }
+  // The audited latest bundle owns only a native-row disabled override. Deselecting
+  // that exact bundle removes the suppression; never append a permanent native edit.
+  for (const source of sources) if (source.moduleId === 'goalWait' && source.version === '0.4.23' && source.bundleName) {
+    const patches = namedLayers.get(source.bundleName) ?? [];
+    const suppression = patches.filter(value => record(value) && value.id === 'goal-round-driver');
+    if (!suppression.length) continue; // Manual/alternate bundles need no invented delta.
+    const patch = suppression[0];
+    const without = flatten(native.composeEntries([...bundles.filter(name => name !== source.bundleName).map(name => namedLayers.get(name) ?? []), profilePatches, homePatches, launcherPatches]));
+    const nativeRows = without.filter(row => row.value.id === 'goal-round-driver');
+    const row = nativeRows[0];
+    if (suppression.length !== 1 || !record(patch) || Object.keys(patch).some(key => !['id', 'disabled'].includes(key)) || patch.disabled !== true || nativeRows.length !== 1 || !row || row.dynamic || row.disabled || row.value.name !== '@deepseek-ai/dsh-goal-round-driver' || expression(row.value.config) || patchesTouch(higher, new Set(['goal-round-driver', ...row.ancestors]))) {
+      source.problem = [source.problem, 'native driver suppression delta is ambiguous or owned by another overlay'].filter(Boolean).join('; ');
+      continue;
+    }
+    source.nativeDriverDelta = {rowId:'goal-round-driver',moduleName:'@deepseek-ai/dsh-goal-round-driver',restored:structuredClone(row.value)};
+  }
   // Installed, deselected legacy packages still establish migration mode and disabled state.
   // Do not use their shipped bundle config as live effective config: only persisted overrides apply.
   const dependencies = Object.assign({}, record(manifest.dependencies) ? manifest.dependencies : {}, record(manifest.optionalDependencies) ? manifest.optionalDependencies : {});
@@ -249,7 +267,7 @@ export async function inspectMigration(host: NativeMigrationHost, target: Distri
     const reasons: string[] = [];
     if (configs.length > 1) reasons.push('multiple legacy override instances require explicit recovery');
     if (expression(config?.value)) reasons.push('dynamic legacy configuration is not imported');
-    if (version !== KNOWN_VERSIONS[moduleId]) reasons.push('unsupported legacy version: ' + (version ?? 'unknown'));
+    if (!version || !LEGACY_VERSIONS[moduleId].includes(version)) reasons.push('unsupported legacy version: ' + (version ?? 'unknown'));
     sources.push({ moduleId, packageName: LEGACY[moduleId], moduleName: name, bundleName: bundles.includes(name) ? name : undefined, version, rowId: config?.rowId,
       raw: record(config?.value) ? structuredClone(config.value) : {}, effective: record(config?.value) ? structuredClone(config.value) : {},
       disabled: true, active: false, bundleSelected: bundles.includes(name), ...(reasons.length ? { problem: reasons.join('; ') } : {}) });
@@ -258,6 +276,8 @@ export async function inspectMigration(host: NativeMigrationHost, target: Distri
     const matches = sources.filter(source => source.moduleId === id);
     if (matches.length > 1) for (const source of matches) source.problem = [source.problem, 'multiple legacy instances require explicit recovery'].filter(Boolean).join('; ');
   }
+  const goalOwner = target.moduleIds.includes('goalWait') ? await inspectNativeGoalOwner(host, target, sources) : undefined;
+  if (goalOwner?.reason) addProblem(['goalWait'], goalOwner.reason);
   if (host.startupOwner && host.startupOwner !== 'native') addProblem(['goalWait'], 'unsupported custom startup owner: ' + host.startupOwner);
   const targetRows = flat.filter(row => row.value.id === target.rowId);
   if (targetRows.length === 0) addProblem(target.moduleIds, 'target row is absent from the active profile');
@@ -274,5 +294,5 @@ export async function inspectMigration(host: NativeMigrationHost, target: Distri
   const inputFiles = [...texts].map(([path, value]) => ({ path, hash: value === null ? null : createHash('sha256').update(value).digest('hex') }));
   const environmentIdentity = createHash('sha256').update(JSON.stringify({ profileId, installAnchor: profile.installAnchor, home: profile.home, overlays: launcherPatches, startupOwner: host.startupOwner ?? null, target: { rowId: target.rowId, packageName: target.packageName, moduleIds: target.moduleIds } })).digest('hex');
   return { profileId, profile, revision, manifest, patchText, manifestText, rows, sources, target, explicit, peers,
-    problems, legacyMode: sources.length > 0, moduleProblems, inputFiles, environmentIdentity };
+    problems, legacyMode: sources.length > 0, moduleProblems, inputFiles, environmentIdentity, goalOwner };
 }

@@ -75,7 +75,7 @@ const rules: Record<ModuleId, Record<string, Rule>> = {
     restMode: boolean, minRingMs: duration, banner: boolean,
     bannerPlacement: choice(['bottom-center', 'bottom-right', 'bottom-left', 'top-right', 'top-left', 'center', 'modal']),
   },
-  goalWait: { enabled: boolean, waitForJobs: boolean, waitForSubagents: boolean, maxHoldMs: number(0, Infinity, true, true) },
+  goalWait: { enabled: boolean, strategy: choice(['activation', 'replacement', 'native', 'off']), waitForJobs: boolean, waitForSubagents: boolean, maxHoldMs: number(0, Infinity, true, true) },
 };
 
 /** Validate detached raw module fields without defaults, coercion, mutation, or code evaluation. */
