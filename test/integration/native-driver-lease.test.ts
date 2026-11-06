@@ -8,7 +8,7 @@ import { createRuntime } from '../modules/retry/runtime.ts';
 import { loadHost, requireHost } from './loader-harness.ts';
 import { createHostDriverOwner, type HostDriverOwnerOptions } from '../../src/modules/goal-wait/host-owner.ts';
 
-async function fixture(t: TestContext, options: HostDriverOwnerOptions = {}) {
+async function fixture(t: TestContext, options: HostDriverOwnerOptions = {}, beforeOwner?: (ctx: any, entry: any) => (() => void)) {
   const runtime = await createRuntime({ product: false, retry: false });
   t.after(() => runtime.dispose());
   const { ctx } = runtime;
@@ -32,6 +32,7 @@ async function fixture(t: TestContext, options: HostDriverOwnerOptions = {}) {
   const entry = loader.resolve('goal-round-driver');
   await entry.fiber!.await();
   commits.length = 0;
+  if (beforeOwner) t.after(beforeOwner(ctx, entry));
   let owner: ReturnType<typeof createHostDriverOwner>;
   const row = ctx.plugin({ name: 'synthetic-extras-row', apply(scope: any) { owner = createHostDriverOwner(scope, options); } });
   await row.await();
@@ -328,4 +329,127 @@ test('native stock intent is revalidated after drain before a replacement factor
   assert.equal(mounted, false);
   assert.notEqual(f.owner.snapshot().phase, 'active');
   await f.owner.close(); assert.equal(f.live().length, 0);
+});
+
+test('foreign native arriving inside blocked restoration import is not duplicated or killed by close', async t => {
+  const conflicts: string[] = [];
+  const f = await fixture(t, { onConflict: reason => conflicts.push(reason) });
+  await f.owner.transition({ strategy: 'off' });
+  const blocked = f.blockImport();
+  const closing = f.owner.close();
+  await blocked.entered.promise;
+  const foreign = f.ctx.plugin(f.native); await foreign.await();
+  const foreignUid = foreign.uid;
+  blocked.release.resolve();
+  const result = await closing;
+  assert.equal(f.live().filter((fiber: any) => fiber.state === 2).length, 1, 'restoration must not create a second executable native callback');
+  assert.equal(foreign.uid, foreignUid, 'foreign fiber is not ours to kill');
+  assert.equal(foreign.state, 2);
+  assert.equal(result.phase, 'conflict');
+  assert.notEqual(result.effective, 'stock');
+  assert.equal(f.owner.snapshot().phase, 'conflict');
+  assert.equal(conflicts.length, 1);
+  assert.deepEqual(f.commits, []);
+  // Failed speculative restoration neither poisons the original entry nor leaves
+  // a root-lifetime claim: after the foreign owner exits a fresh mode can recover.
+  await foreign.dispose();
+  await f.entry.init(); await f.entry.fiber!.await();
+  let fresh: ReturnType<typeof createHostDriverOwner>;
+  const freshRow = f.ctx.plugin({ name: 'fresh-mode-after-conflict', apply(scope: any) { fresh = createHostDriverOwner(scope); } });
+  await freshRow.await();
+  assert.equal((await fresh!.transition({ strategy: 'native' })).effective, 'stock');
+  await fresh!.close();
+  assert.equal(f.live().filter((fiber: any) => fiber.state === 2).length, 1);
+  assert.deepEqual(f.commits, []);
+});
+
+test('activation/native retain read-only foreign observation without stopping either externally managed native fiber', async t => {
+  for (const strategy of ['activation', 'native'] as const) {
+    let withdrewGate = false;
+    const f = await fixture(t, { onConflict: () => { withdrewGate = true; } });
+    await f.owner.transition({ strategy });
+    const stock = f.entry.fiber!.ctx.fiber;
+    const stockUid = stock.uid;
+    const foreign = f.ctx.plugin(f.native); await foreign.await();
+    assert.equal(withdrewGate, true, strategy + ' must synchronously notify the feature to withdraw its gate');
+    assert.equal(f.owner.snapshot().phase, 'conflict');
+    assert.equal(stock.uid, stockUid, 'observer does not own the original stock callback');
+    assert.notEqual(foreign.uid, null);
+    assert.equal(f.live().filter((fiber: any) => fiber.state === 2).length, 2, 'observer reports the pre-existing foreign composition instead of pretending to repair unknown owners');
+    await f.owner.close();
+    assert.equal(f.owner.snapshot().phase, 'conflict');
+    assert.equal(f.live().length, 2, 'close adds no third driver and kills neither existing native fiber');
+    assert.deepEqual(f.commits, []);
+  }
+});
+
+test('foreign arriving before restoration publication cancels only the exact PENDING candidate before apply', async t => {
+  let pending: any;
+  let publishedState: number | undefined;
+  const f = await fixture(t, {}, (ctx, entry) => ctx.on('internal/plugin', (fiber: any) => {
+    if (fiber.uid === null || fiber.entry !== entry || fiber.runtime?.name !== 'goal-round-driver') return;
+    pending = fiber; publishedState = fiber.state;
+  }, { global: true }));
+  await f.owner.transition({ strategy: 'off' });
+  const blocked = f.blockImport();
+  const closing = f.owner.close();
+  await blocked.entered.promise;
+  const foreign = f.ctx.plugin(f.native); await foreign.await();
+  blocked.release.resolve();
+  const result = await closing;
+  assert.equal(publishedState, 0, 'only a not-yet-applied candidate is cancelled');
+  assert.equal(pending.uid, null);
+  assert.equal(pending.entry === undefined, true, 'candidate remains detached after Loader disposal observers');
+  assert.notEqual(foreign.uid, null); assert.equal(foreign.state, 2);
+  assert.equal(f.live().filter((fiber: any) => fiber.state === 2).length, 1);
+  assert.equal(result.phase, 'conflict');
+  assert.deepEqual(f.commits, []);
+});
+
+test('a newer strategy epoch cancels stale native restoration before apply and the following close still recovers', async t => {
+  const f = await fixture(t);
+  await f.owner.transition({ strategy: 'off' });
+  let activeNativePublications = 0;
+  const off = f.ctx.on('internal/status', (fiber: any) => {
+    if (fiber.runtime?.name === 'goal-round-driver' && fiber.state === 2) activeNativePublications++;
+  }, { global: true });
+  const blocked = f.blockImport();
+  const restoring = f.owner.transition({ strategy: 'native' });
+  await blocked.entered.promise;
+  const backOff = f.owner.transition({ strategy: 'off' });
+  blocked.release.resolve();
+  await restoring;
+  assert.equal((await backOff).effective, 'none');
+  assert.equal(activeNativePublications, 0, 'stale restore never executes native apply');
+  assert.equal(f.live().length, 0);
+  assert.equal((await f.owner.close()).effective, 'stock'); off();
+  assert.equal(f.live().filter((fiber: any) => fiber.state === 2).length, 1);
+  assert.deepEqual(f.commits, []);
+});
+
+test('public native HMR restoration race with concurrent row disposal preserves only the arriving foreign driver', async t => {
+  if (!process.execArgv.includes('--expose-internals')) {
+    const child = spawnSync(process.execPath, ['--expose-internals', '--test', '--test-name-pattern=public native HMR restoration race', fileURLToPath(import.meta.url)], { encoding: 'utf8', env: process.env, timeout: 15000 });
+    assert.equal(child.status, 0, child.stdout + child.stderr);
+    return;
+  }
+  const f = await fixture(t);
+  f.ctx.baseUrl = pathToFileURL(requireHost.resolve('@deepseek-ai/dsh/package.json')).href;
+  await f.ctx.plugin((await loadHost('cordis-plugin-timer')).default).await();
+  await f.ctx.plugin((await loadHost('dsh-hmr')).default, { root: [], debounce: 0 }).await();
+  assert.ok(f.ctx.get('hmr'));
+  await f.owner.transition({ strategy: 'off' });
+  const blocked = f.blockImport();
+  const restoring = f.ctx.hmr.runExclusive(() => f.owner.close());
+  await blocked.entered.promise;
+  const unloading = f.row.dispose();
+  const foreign = f.ctx.plugin(f.native); await foreign.await();
+  const uid = foreign.uid;
+  blocked.release.resolve();
+  const [result] = await Promise.all([restoring, unloading]);
+  assert.equal(result.phase, 'conflict');
+  assert.equal(f.owner.snapshot().phase, 'conflict');
+  assert.equal(foreign.uid, uid); assert.equal(foreign.state, 2);
+  assert.equal(f.live().filter((fiber: any) => fiber.state === 2).length, 1);
+  assert.deepEqual(f.commits, []);
 });
