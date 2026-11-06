@@ -1,6 +1,6 @@
 {
   "name": "dsh-extras",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Modular DSH enhancements with safe automatic legacy migration",
   "type": "module",
   "license": "MIT",

@@ -23,10 +23,10 @@ Choose the combined package **or** any subset of distinct splits. Two distributi
 Choose the intended profile explicitly. Example for an existing web profile:
 
 ```sh
-dsh plugin --profile web add https://github.com/LMGateX/dsh-extras/releases/download/v0.2.0/dsh-extras-0.2.0.tgz
+dsh plugin --profile web add https://github.com/LMGateX/dsh-extras/releases/download/v0.2.1/dsh-extras-0.2.1.tgz
 ```
 
-For one capability replace the asset name, e.g. `dsh-extras-retry-0.2.0.tgz`. Verify downloads against release SHA256SUMS. The matching DSH runtime must already exist; packages do not install a second host runtime.
+For one capability replace the asset name, e.g. `dsh-extras-retry-0.2.1.tgz`. Verify downloads against release SHA256SUMS. The matching DSH runtime must already exist; packages do not install a second host runtime.
 
 Open **Plugins → DSH Extras → Configure**. All module settings, including the compaction reasoning editor, follow the native Chinese/English language preference and theme. With no locale service, settings use Chinese, matching the preserved Chime editor. Switching language keeps unsaved drafts; technical configuration keys, native route/model/effort IDs, and raw migration diagnostics are not translated. Combined settings have compact-context, retry, chime and goalWait sections. Each module and every original option is independently editable. Status distinguishes active, disabled, missing dependency, migration-pending, conflict and failed. Enable/disable joins feature disposal before reactivation. Policy-only changes use validated live snapshots without remounting in-flight retry classifiers or releasing goal holds.
 
