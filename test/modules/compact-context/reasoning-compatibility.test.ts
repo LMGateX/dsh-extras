@@ -2,7 +2,7 @@ import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { Context, symbols } from '@deepseek-ai/cordis';
-import LlmRuntime, { type GenerateOptions, type StreamChunk } from '@deepseek-ai/dsh-llm';
+import LlmRuntime, { markAgentLoopRequest, type GenerateOptions, type StreamChunk } from '@deepseek-ai/dsh-llm';
 import * as plugin from '../../../src/modules/compact-context/index.ts';
 
 globalThis.fetch = (async () => { throw new Error('reasoning compatibility tests forbid network'); }) as typeof fetch;
@@ -98,6 +98,15 @@ test('an unverified public package version fails closed without modifying native
     assert.equal(Object.getOwnPropertyDescriptor(raw, 'stream'), undefined);
     const original = request(); await consume(ctx.llm.stream(original)); assert.equal(seen.at(-1), original);
   } finally { metadata.version = version; }
+});
+
+test('ordinary and LOOP-owned requests bypass envelope guards and retain exact identity even with unsupported fields', async t => {
+  const { ctx, seen, mount } = await fixture(t); const fork = await mount(); let reads = 0;
+  const field = { enumerable: true, get() { reads++; return 'route'; } };
+  const ordinary = Object.freeze(Object.defineProperty({ ...request(), purpose: undefined }, 'provider', field)) as GenerateOptions;
+  const loop = markAgentLoopRequest(Object.freeze(Object.defineProperty({ ...request() }, 'provider', field)) as GenerateOptions);
+  for (const value of [ordinary, loop]) { await consume(ctx.llm.stream(value)); assert.equal(seen.at(-1), value); }
+  assert.equal(reads, 0); assert.equal(plugin.runtimeStatus(fork.ctx).capabilities.compactionReasoning.phase, 'active');
 });
 
 test('an unsupported compaction envelope is passed through without getter evaluation and withdraws the modifier', async t => {
