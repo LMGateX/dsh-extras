@@ -20,7 +20,7 @@ const version = JSON.parse(await readFile(join(root,'package.json'),'utf8')).ver
 const artifacts = resolve(process.env.DSH_EXTRAS_ARTIFACT_DIR ?? join(root, 'artifacts'));
 
 function environment(temp: string): NodeJS.ProcessEnv {
-  return { PATH: process.env.PATH, HOME:temp, DSH_HOME:join(temp,'dsh-home'), XDG_CACHE_HOME:join(temp,'cache'), XDG_CONFIG_HOME:join(temp,'config'), XDG_DATA_HOME:join(temp,'data'), npm_config_cache:join(temp,'npm-cache'), CI:'1', NO_COLOR:'1' };
+  return { PATH: process.env.PATH, HOME:temp, DSH_HOME:join(temp,'dsh-home'), TMPDIR:process.env.TMPDIR, XDG_CACHE_HOME:join(temp,'cache'), XDG_CONFIG_HOME:join(temp,'config'), XDG_DATA_HOME:join(temp,'data'), npm_config_cache:join(temp,'npm-cache'), CI:'1', NO_COLOR:'1' };
 }
 
 async function native(temp: string, args: string[]) {
@@ -78,15 +78,50 @@ test('native CLI installs packed combined distribution into isolated web profile
   assert.equal(moduleStatus.body.modules['compact-context'].phase,'active','context adapter activates without a global engine in stock web presets');
   assert.deepEqual(Object.keys(moduleStatus.body.modules).sort(),['chime','compact-context','goalWait','retry']);
   console.log('Native module phases:',Object.fromEntries(Object.entries(moduleStatus.body.modules).map(([id,value])=>[id,(value as any).phase])));
-  const delay=page.locator('[data-module="compact-context"] [data-field="retryDelayMs"]');
-  await delay.locator('input').fill('3.5');await delay.getByRole('button',{name:'Save',exact:true}).click();
-  await page.waitForFunction(()=>!(document.querySelectorAll('[data-module="compact-context"] [data-field="retryDelayMs"] button')[2] as HTMLButtonElement)?.disabled);
-  assert.deepEqual(await delay.getByRole('alert').allTextContents(),[]);
+  const patchFile=join(environment(temp).DSH_HOME!,'profiles',profile,'cordis.patch.yml');
+  const readModules=async()=>parse(await readFile(patchFile,'utf8')).find((row:any)=>row.id==='dsh-extras')?.config?.modules ?? {};
+  const waitSaved=async(predicate:(modules:any)=>boolean,label:string)=>{
+    const deadline=Date.now()+8000;
+    for(;;){const modules=await readModules();if(predicate(modules))return modules;
+      assert.ok(Date.now()<deadline,'Native ConfigEditor did not persist '+label);
+      await new Promise(resolve=>setTimeout(resolve,25));}
+  };
+  const timeoutGroup=page.locator('[data-group="compact-timeouts"]');
+  const delay=timeoutGroup.locator('[data-field="retryDelayMs"]');
+  const beforeTimeoutDraft=await readFile(patchFile,'utf8');
+  await delay.locator('input').fill('3.5');
+  await timeoutGroup.locator('[data-field="retryAttempts"] input').fill('0');
+  await timeoutGroup.locator('[data-field="ptcTimeoutMs"] input').fill('300');
+  assert.equal(await readFile(patchFile,'utf8'),beforeTimeoutDraft,'group draft does not write before Save');
+  await timeoutGroup.getByRole('button',{name:'Save',exact:true}).click();
+  await waitSaved(modules=>modules['compact-context']?.retryDelayMs===3500&&modules['compact-context']?.retryAttempts===0&&modules['compact-context']?.ptcTimeoutMs===300000,'atomic timeout group');
+  assert.deepEqual(await timeoutGroup.getByRole('alert').allTextContents(),[]);
+  const retryGroup=page.locator('[data-group="retry-policy"]');
+  const beforeRetryDraft=await readFile(patchFile,'utf8');
+  await retryGroup.getByRole('checkbox',{name:'Retry empty model responses',exact:true}).uncheck();
+  await retryGroup.locator('[data-field="providers"] textarea').fill('parity-offline-route');
+  assert.equal(await readFile(patchFile,'utf8'),beforeRetryDraft,'retry flag and route are staged together');
+  await retryGroup.getByRole('button',{name:'Save',exact:true}).click();
+  await waitSaved(modules=>modules.retry?.retryEmptyResponse===false&&modules.retry?.providers?.[0]==='parity-offline-route','atomic retry flag and route');
+  const beforeReset=await readFile(patchFile,'utf8');
+  await retryGroup.getByRole('button',{name:'Reset to inherited',exact:true}).click();
+  assert.equal(await readFile(patchFile,'utf8'),beforeReset,'group reset is staged');
+  await retryGroup.getByRole('button',{name:'Save',exact:true}).click();
+  await waitSaved(modules=>modules.retry&&['errorCodes','providers','retryEmptyResponse'].every(key=>!Object.hasOwn(modules.retry,key)),'inherited retry policy including boolean unset');
+  await page.waitForFunction(()=>Boolean((document.querySelector('[data-group="retry-policy"] [data-field="retryEmptyResponse"] input') as HTMLInputElement)?.checked));
+  for(const [field,value] of [['notifyAtRatio','0.8'],['pressureStep','4']] as const){
+    const control=page.locator('[data-module="compact-context"] [data-field="'+field+'"]');
+    await control.locator('input').fill(value);await control.getByRole('button',{name:'Save',exact:true}).click();
+    await waitSaved(modules=>modules['compact-context']?.[field]===Number(value),'editable '+field);
+  }
   const toolGroup=page.getByRole('group',{name:'Agent-facing compaction tools',exact:true});
   const reasoning=page.getByRole('group',{name:'Compaction-request reasoning',exact:true});
   assert.equal(await reasoning.getByRole('checkbox',{name:'Enable compaction-request reasoning',exact:true}).isChecked(),false);
   await toolGroup.getByRole('checkbox',{name:'Expose compact_context',exact:true}).click();
-  await toolGroup.getByRole('status').filter({hasText:'Tools runtime: disabled'}).waitFor();
+  await toolGroup.getByRole('status').filter({hasText:'Tools runtime: disabled'}).waitFor().catch(async error=>{
+    const runtime=await page.evaluate(async()=> (await (await fetch('/extras/dsh-extras/status',{credentials:'same-origin',cache:'no-store'})).json()).modules['compact-context']);
+    throw new Error('Compaction tool disable was not confirmed: '+JSON.stringify({saved:(await readModules())['compact-context'],runtime,ui:await toolGroup.getByRole('status').allTextContents(),alerts:await page.getByRole('alert').allTextContents(),browserErrors:errors}),{cause:error});
+  });
   await reasoning.getByRole('checkbox',{name:'Enable compaction-request reasoning',exact:true}).check();
   await reasoning.getByRole('button',{name:'Save policy',exact:true}).click();
   await reasoning.getByRole('status').filter({hasText:'Reasoning runtime: active'}).waitFor();
@@ -138,6 +173,9 @@ test('native CLI installs packed combined distribution into isolated web profile
   const persisted=await readFile(join(environment(temp).DSH_HOME!,'profiles',profile,'cordis.patch.yml'),'utf8');
   const accepted=parse(persisted).find((row:any)=>row.id==='dsh-extras').config.modules;
   assert.equal(accepted['compact-context'].retryDelayMs,3500);
+  assert.equal(accepted['compact-context'].retryAttempts,0);assert.equal(accepted['compact-context'].ptcTimeoutMs,300000);
+  assert.equal(accepted['compact-context'].notifyAtRatio,0.8);assert.equal(accepted['compact-context'].pressureStep,4);
+  assert.ok(['errorCodes','providers','retryEmptyResponse'].every(key=>!Object.hasOwn(accepted.retry,key)),'group Reset removed explicit retry overrides');
   assert.equal(accepted['compact-context'].compactTool,false);
   assert.deepEqual(accepted['compact-context'].compactionReasoning,{enabled:true,rules:[{scope:'provider-model',provider:'Synthetic/Exact-Route',model:'Synthetic/Exact-Model',mode:'fixed',effort:'Opaque:Effort/Case'}]});
   assert.equal(accepted.retry.enabled,false);assert.equal(accepted.chime.restMode,true);assert.equal(accepted.chime.enabled,false);

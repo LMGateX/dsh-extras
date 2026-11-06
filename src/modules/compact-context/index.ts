@@ -602,7 +602,8 @@ export function apply(ctx: Context, rawConfig: Record<string, unknown> = {}): vo
   let disposeReasoning: (() => void) | undefined;
   let updateTools: ((next: ResolvedConfig) => void) | undefined;
   const refreshToolsStatus = (): void => {
-    const requested = accepted.compactTool || accepted.statusTool || accepted.ptcTimeoutMs > 0 || Object.keys(accepted.ptcModelTimeouts).length > 0;
+    // PTC defaults share the dependent lifetime but are not agent-facing tools.
+    const requested = accepted.compactTool || accepted.statusTool;
     state.tools = !requested ? { phase: 'disabled' } : updateTools ? { phase: 'active' }
       : { phase: 'unavailable', reason: 'tool dependencies are unavailable' };
   };

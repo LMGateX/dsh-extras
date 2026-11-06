@@ -139,7 +139,8 @@ test('tool capability reports disabled, missing, ready, withdrawn and recovered 
   assert.equal(status().tools.phase, 'unavailable'); assert.equal(status().compactionReasoning.phase, 'active');
   const restored = ctx.plugin(TokenMeter); await restored.await();
   assert.ok(ctx.tools.get('compact_context')); assert.equal(status().tools.phase, 'active');
-  await fork.update({ compactTool: false, statusTool: false, compactionReasoning: fixed }); await fork.await();
+  await fork.update({ compactTool: false, statusTool: false, ptcTimeoutMs: 300000, compactionReasoning: fixed }); await fork.await();
+  assert.equal(ctx.tools.get('compact_context'), undefined, 'a PTC timeout policy does not keep agent-facing compaction tools registered');
   assert.equal(status().tools.phase, 'disabled'); assert.equal(status().compactionReasoning.phase, 'active');
   await restored.dispose(); assert.equal(status().tools.phase, 'disabled');
   await fork.dispose();
