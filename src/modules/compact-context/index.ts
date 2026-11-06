@@ -40,7 +40,7 @@ export const name = 'extras-compact-context';
 /** Request reasoning is independent of tool-only service availability. */
 export const inject: string[] = [];
 const toolDependencies = ['tools', 'tokenMeter', 'systemPrompt', 'llm'];
-interface CapabilityState { compactionReasoning: ReasoningCapability; tools: ReasoningCapability }
+type CapabilityState = { compactionReasoning: ReasoningCapability; tools: ReasoningCapability };
 const runtimeStates = new WeakMap<Context['fiber'], CapabilityState>();
 
 /** Status is scoped to the exact feature fiber, never inferred from enabled config. */
@@ -489,7 +489,7 @@ function statusTool(ctx: Context): ToolDefinition {
  * @param ctx plugin context
  * @param rawConfig loader-resolved row config (plain values or volatile accessors)
  */
-function applyTools(ctx: Context, rawConfig: Record<string, unknown> = {}): (next: ResolvedConfig) => void {
+function applyTools(ctx: Context, rawConfig: Record<string, unknown> = {}, observeVolatile = true): (next: ResolvedConfig) => void {
   const config = resolveConfig(rawConfig);
   validateConfig(config);
 
@@ -568,7 +568,7 @@ function applyTools(ctx: Context, rawConfig: Record<string, unknown> = {}): (nex
     // typed event surface.
     const on = ctx.on as unknown as (event: string, listener: () => void) => void;
     on('tools/change', resetVisibility);
-    on('loader/volatile-update', () => {
+    if (observeVolatile) on('loader/volatile-update', () => {
       let next: ResolvedConfig;
       try {
         next = resolveConfig(rawConfig);
@@ -596,10 +596,16 @@ export function apply(ctx: Context, rawConfig: Record<string, unknown> = {}): vo
   if (typeof ctx.plugin !== 'function') { applyTools(ctx, rawConfig); return; }
   let accepted = resolveConfig(rawConfig);
   validateConfig(accepted);
-  const state: CapabilityState = { compactionReasoning: { phase: 'disabled' }, tools: { phase: 'unavailable', reason: 'tool dependencies are unavailable' } };
+  const state: CapabilityState = { compactionReasoning: { phase: 'disabled' }, tools: { phase: 'disabled' } };
   runtimeStates.set(ctx.fiber, state);
   let disposeReasoning: (() => void) | undefined;
   let updateTools: ((next: ResolvedConfig) => void) | undefined;
+  const refreshToolsStatus = (): void => {
+    const requested = accepted.compactTool || accepted.statusTool || accepted.ptcTimeoutMs > 0 || Object.keys(accepted.ptcModelTimeouts).length > 0;
+    state.tools = !requested ? { phase: 'disabled' } : updateTools ? { phase: 'active' }
+      : { phase: 'unavailable', reason: 'tool dependencies are unavailable' };
+  };
+  refreshToolsStatus();
   const mountReasoning = (): void => {
     disposeReasoning?.();
     state.compactionReasoning = { phase: 'disabled' };
@@ -610,9 +616,9 @@ export function apply(ctx: Context, rawConfig: Record<string, unknown> = {}): vo
   const child = {
     name: 'extras-compact-context-tools', inject: toolDependencies,
     apply(toolCtx: Context) {
-      updateTools = applyTools(toolCtx, accepted as unknown as Record<string, unknown>);
-      state.tools = { phase: accepted.compactTool || accepted.statusTool ? 'active' : 'disabled' };
-      toolCtx.effect(() => () => { updateTools = undefined; state.tools = { phase: 'unavailable', reason: 'tool dependencies are unavailable' }; });
+      updateTools = applyTools(toolCtx, accepted as unknown as Record<string, unknown>, false);
+      refreshToolsStatus();
+      toolCtx.effect(() => () => { updateTools = undefined; refreshToolsStatus(); });
     },
   };
   ctx.plugin(child);
@@ -623,7 +629,7 @@ export function apply(ctx: Context, rawConfig: Record<string, unknown> = {}): vo
     accepted = next;
     mountReasoning();
     updateTools?.(next);
-    if (updateTools) state.tools = { phase: next.compactTool || next.statusTool ? 'active' : 'disabled' };
+    refreshToolsStatus();
   });
   ctx.effect(() => () => { disposeReasoning?.(); runtimeStates.delete(ctx.fiber); }, 'compaction request reasoning');
 }

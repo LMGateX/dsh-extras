@@ -4,6 +4,8 @@ import { Context, symbols } from '@deepseek-ai/cordis';
 import { SessionStore, type Session, type SessionId } from '@deepseek-ai/dsh-session';
 import LlmRuntime, { markAgentLoopRequest, type GenerateOptions, type StreamChunk } from '@deepseek-ai/dsh-llm';
 import * as plugin from '../../../src/modules/compact-context/index.ts';
+import TokenMeter from '@deepseek-ai/dsh-token-meter';
+import { createRuntime } from '../retry/runtime.ts';
 
 globalThis.fetch = (async () => { throw new Error('reasoning runtime tests forbid network'); }) as typeof fetch;
 
@@ -119,4 +121,27 @@ test('native discovery covers preexisting and late isolated LLMs, first dependen
   assert.equal(Object.hasOwn(rootRaw, 'stream'), false); assert.equal(Object.hasOwn(preRaw, 'stream'), false);
   const after = ctx.isolate('llm'); await after.plugin(LlmRuntime).await();
   await consume(after.llm.stream(request())); assert.equal(seen.at(-1)!.reasoningEffort, undefined);
+});
+
+test('tool capability reports disabled, missing, ready, withdrawn and recovered independently from reasoning', async t => {
+  const runtime = await createRuntime({ product: false, retry: false }); t.after(() => runtime.dispose());
+  const ctx = runtime.ctx as Context;
+  const fork = ctx.plugin(plugin, { compactTool: false, compactionReasoning: fixed }); await fork.await();
+  const status = () => plugin.runtimeStatus(fork.ctx).capabilities;
+  assert.equal(status().compactionReasoning.phase, 'active'); assert.equal(status().tools.phase, 'disabled');
+  await fork.update({ compactTool: true, compactionReasoning: fixed }); await fork.await();
+  assert.equal(status().compactionReasoning.phase, 'active'); assert.equal(status().tools.phase, 'unavailable');
+  assert.equal(ctx.tools.get('compact_context'), undefined);
+  const meter = ctx.plugin(TokenMeter); await meter.await();
+  assert.ok(ctx.tools.get('compact_context')); assert.equal(status().tools.phase, 'active');
+  await meter.dispose();
+  assert.equal(ctx.tools.get('compact_context'), undefined);
+  assert.equal(status().tools.phase, 'unavailable'); assert.equal(status().compactionReasoning.phase, 'active');
+  const restored = ctx.plugin(TokenMeter); await restored.await();
+  assert.ok(ctx.tools.get('compact_context')); assert.equal(status().tools.phase, 'active');
+  await fork.update({ compactTool: false, statusTool: false, compactionReasoning: fixed }); await fork.await();
+  assert.equal(status().tools.phase, 'disabled'); assert.equal(status().compactionReasoning.phase, 'active');
+  await restored.dispose(); assert.equal(status().tools.phase, 'disabled');
+  await fork.dispose();
+  assert.equal(status().tools.phase, 'disabled'); assert.equal(status().compactionReasoning.phase, 'disabled');
 });
