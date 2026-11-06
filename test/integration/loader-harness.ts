@@ -22,13 +22,13 @@ export async function until<T>(read: () => T, accepts: (value: T) => boolean, la
 export function response() {
   return { code: 0, headers: {} as Record<string, any>, body: '', writeHead(code: number, headers: Record<string, any> = {}) { this.code = code; this.headers = headers; }, end(value = '') { this.body += value; } };
 }
-export async function loaderFixture(t: TestContext, distribution: Distribution, config: Record<string, any>, suppliedContext?: Context, extraRows: Record<string, any>[] = [], suppliedPlugin?: FeaturePlugin) {
+export async function loaderFixture(t: TestContext, distribution: Distribution, config: Record<string, any>, suppliedContext?: Context, extraRows: Record<string, any>[] = [], suppliedPlugin?: FeaturePlugin, suppliedImports: Record<string, unknown> = {}) {
   const root = await mkdtemp(join(tmpdir(), 'extras-root-lifecycle-'));
   const profile = join(root, 'home', 'profiles', 'isolated');
   const home = join(root, 'home'); await mkdir(profile, { recursive: true });
   const ctx = suppliedContext ?? new Context();
   ctx.baseUrl = pathToFileURL(requireHost.resolve('@deepseek-ai/dsh/package.json')).href;
-  const routes = new Map<string, any>(); const importTable = new Map<string, any>();
+  const routes = new Map<string, any>(); const importTable = new Map<string, any>(Object.entries(suppliedImports));
   const initial = structuredClone(config);
   const plugin = suppliedPlugin ?? createExtrasPlugin(distribution);
   importTable.set(distribution.name, plugin);
