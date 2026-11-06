@@ -642,6 +642,17 @@ test('does not retry a deterministic max-tokens summary', async () => {
   assert.equal(attempts, 1);
 });
 
+test('does not retry unsupported native reasoning effort even when the message looks transient', async () => {
+  const harness = makeHarness({ retryAttempts: 5, retryDelayMs: 0 });
+  let attempts = 0;
+  harness.ctx.compaction.compactIfNeeded = async () => {
+    attempts++;
+    throw Object.assign(new Error('upstream 503 overloaded'), { code: 'UNSUPPORTED_REASONING_EFFORT' });
+  };
+  const result = await harness.tool().execute({}, { agent: { session: harness.session, options: {} }, signal: new AbortController().signal });
+  assert.equal(result.ok, false); assert.equal(attempts, 1);
+});
+
 test('stops after the configured transient retry budget', async () => {
   const harness = makeHarness({ retryAttempts: 1 });
   let attempts = 0;

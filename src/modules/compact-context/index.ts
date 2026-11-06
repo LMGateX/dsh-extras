@@ -95,6 +95,7 @@ function isDeterministicFailure(error: unknown): boolean {
   if (typeof code === 'string') {
     if (code === 'MAX_TOKENS'
       || code === 'UNSUPPORTED_CONTENT'
+      || code === 'UNSUPPORTED_REASONING_EFFORT'
       || code === 'INVALID_MODEL_INFO'
       || code === 'INVALID_MODEL_CONTEXT'
       || code === 'INVALID_MODEL_MAX_TOKENS'
