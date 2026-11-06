@@ -91,3 +91,32 @@ test('inheritance captures only the exact use-site session durable header before
   const all = request({ provider: 'Route' }); await consume(scoped.llm.stream(all));
   assert.equal(seen.at(-1)!.options.reasoningEffort, 'broader-must-not-win');
 });
+
+test('native discovery covers preexisting and late isolated LLMs, first dependency use, HMR and disposal', async t => {
+  const ctx = new Context(); t.after(() => ctx.fiber.dispose());
+  await ctx.plugin(LlmRuntime).await();
+  const pre = ctx.isolate('llm'); await pre.plugin(LlmRuntime).await();
+  const raw = (scope: Context) => (scope.llm as unknown as Record<symbol, unknown>)[symbols.original] as LlmRuntime;
+  const rootRaw = raw(ctx); const preRaw = raw(pre); assert.notEqual(rootRaw, preRaw);
+  const seen: GenerateOptions[] = [];
+  ctx.on('llm/stream', options => { seen.push(options); return (async function* () { yield { type: 'finish', reason: { kind: 'stop' } } as StreamChunk; })(); }, { global: true });
+  const fork = ctx.plugin(plugin, { compactTool: false, compactionReasoning: fixed }); await fork.await();
+  await consume(pre.llm.stream(request())); assert.equal(seen.at(-1)!.reasoningEffort, 'opaque-effort');
+  const late = ctx.isolate('llm');
+  let firstUses = 0;
+  const dependent = late.plugin({ name: 'first-native-llm-use', inject: ['llm'], async apply(scope: Context) { firstUses++; await consume(scope.llm.stream(request())); } });
+  const provision = late.plugin(LlmRuntime); await provision.await(); await dependent.await();
+  assert.equal(firstUses, 1); assert.equal(seen.at(-1)!.reasoningEffort, 'opaque-effort');
+  const previous = raw(late); assert.ok(Object.hasOwn(previous, 'stream'));
+  await provision.update({}); await provision.await(); await dependent.await();
+  assert.equal(firstUses, 2); assert.equal(seen.at(-1)!.reasoningEffort, 'opaque-effort');
+  assert.equal(Object.hasOwn(previous, 'stream'), false);
+  const replaced = raw(late); assert.notEqual(replaced, previous);
+  await dependent.dispose(); await provision.dispose();
+  assert.equal(Object.hasOwn(replaced, 'stream'), false);
+  assert.equal(plugin.runtimeStatus(fork.ctx).capabilities.compactionReasoning.phase, 'active');
+  await fork.dispose();
+  assert.equal(Object.hasOwn(rootRaw, 'stream'), false); assert.equal(Object.hasOwn(preRaw, 'stream'), false);
+  const after = ctx.isolate('llm'); await after.plugin(LlmRuntime).await();
+  await consume(after.llm.stream(request())); assert.equal(seen.at(-1)!.reasoningEffort, undefined);
+});
