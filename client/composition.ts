@@ -24,7 +24,9 @@ export function createExtrasClient(descriptor: ExtrasClientDescriptor, React: an
     owned.ctx.effect(() => status.start(), 'extras: host status');
     const chime = descriptor.moduleIds.includes('chime') ? makeChime?.(React) : undefined;
     const reasoning = descriptor.moduleIds.includes('compact-context') ? makeReasoning?.(React) : undefined;
-    const View = createSettingsView(React, descriptor, chime?.createView(owned.ctx), status, reasoning?.createView(owned.ctx));
+    // Read the exact served namespace's accepted store; page.mutate remains the only page write endpoint.
+    const accepted = { getSnapshot: () => root.getSnapshot(), subscribe: (listener: () => void) => root.subscribe(listener) };
+    const View = createSettingsView(React, descriptor, chime?.createView(owned.ctx), status, reasoning?.createView(owned.ctx), accepted);
     owned.ctx.effect(() => ctx.configForms.whileServed([descriptor.rowId], () => {
       const offRow = ctx.slots.inject('plugins.row.config', () => ctx.slots.register({
         name: 'plugins.row.config', key: descriptor.packageName + '#' + descriptor.rowId,

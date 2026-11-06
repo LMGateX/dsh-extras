@@ -1,6 +1,6 @@
 import { bindSection, createPageFormAdapter } from './forms.ts';
 import type { CapabilityStatus } from './status.ts';
-import type { ConfigForm, ConfigFormSnapshot, ConfigPageForm, PathOperation } from './forms.ts';
+import type { ConfigForm, ConfigFormSnapshot, ConfigPageForm, PathOperation, AcceptedConfigSource } from './forms.ts';
 
 export type ModuleId = 'compact-context' | 'retry' | 'chime' | 'goalWait';
 export interface SettingsDescriptor {
@@ -162,6 +162,7 @@ export function capabilityText(label: string, status?: CapabilityStatus): string
 /** Uses the platform React instance. The chime component is the preserved custom editor. */
 export function createSettingsView(
   React: any, descriptor: SettingsDescriptor, chimeEditor?: unknown, status?: SettingsStatusStore, reasoningEditor?: unknown,
+  accepted?: AcceptedConfigSource,
 ): (props: SettingsProps) => unknown {
   const h = React.createElement;
   const formCallbacks = new WeakMap<ConfigForm, { subscribe: ConfigForm['subscribe']; getSnapshot: ConfigForm['getSnapshot'] }>();
@@ -285,7 +286,7 @@ export function createSettingsView(
       report !== undefined && h('details', null, h('summary', null, 'Migration report'), h('pre', null, JSON.stringify(report, null, 2))));
   }
   function PageEditor({ form, status }: { form: ConfigPageForm; status?: SettingsStatusStore }) {
-    const [adapter] = React.useState(() => createPageFormAdapter(form));
+    const [adapter] = React.useState(() => createPageFormAdapter(form, accepted));
     React.useEffect(() => { adapter.update(form); }, [adapter, form, form.state]);
     return h(Editor, { root: adapter, status });
   }

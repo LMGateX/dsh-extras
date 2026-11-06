@@ -34,26 +34,60 @@ function writable(snapshot: ConfigFormSnapshot, revision?: number): boolean {
     && (revision === undefined || revision === snapshot.revision);
 }
 
-/** Adapt page props without inventing, incrementing, or rebasing Host revisions. */
-export function createPageFormAdapter<T = unknown>(initial: ConfigPageForm<T>): PageFormAdapter<T> {
+/** The exact served namespace's public native store, used only for accepted reads. */
+export type AcceptedConfigSource<T = unknown> = Pick<ConfigForm<T>, 'getSnapshot' | 'subscribe'>;
+
+/** Adapt page writes without inventing or rebasing Host revisions. */
+export function createPageFormAdapter<T = unknown>(
+  initial: ConfigPageForm<T>, accepted?: AcceptedConfigSource<T>,
+): PageFormAdapter<T> {
   let page = initial;
-  let snapshot = initial.state;
+  let raw = accepted ? accepted.getSnapshot() : initial.state;
+  let snapshot = raw;
+  let busy = false;
+  let projectedBusy = false;
+  let projectedPage: ConfigFormSnapshot<T> | undefined;
   const listeners = new Set<() => void>();
+  const getSnapshot = () => {
+    const next = accepted ? accepted.getSnapshot() : page.state;
+    if (raw !== next || projectedBusy !== busy || projectedPage !== page.state) {
+      raw = next;
+      projectedBusy = busy;
+      projectedPage = page.state;
+      // The native store supplies accepted data/revisions, never permission to bypass the page.
+      const pageBlocked = accepted && !writable(page.state);
+      snapshot = busy || pageBlocked ? {
+        ...next, writable: false,
+        status: page.state.status === 'ready' ? next.status : page.state.status,
+      } : next;
+    }
+    return snapshot;
+  };
+  const notify = () => { for (const listener of listeners) listener(); };
   return {
-    getSnapshot: () => snapshot,
+    getSnapshot,
     subscribe(listener) {
       listeners.add(listener);
-      return () => { listeners.delete(listener); };
+      const stop = accepted?.subscribe(listener);
+      return () => { listeners.delete(listener); stop?.(); };
     },
     async mutate(ops, expectedRevision) {
-      if (!writable(snapshot, expectedRevision) || ops.length === 0) return false;
-      return page.mutate(ops, expectedRevision ?? snapshot.revision);
+      const current = getSnapshot();
+      if (!writable(current, expectedRevision) || ops.length === 0) return false;
+      const endpoint = page;
+      const revision = expectedRevision ?? current.revision;
+      // Native mutate folds its accepted view before resolving. Page props may render later.
+      // One shared wire-call fence prevents sibling fixed-revision writes in that window.
+      if (accepted) { busy = true; notify(); }
+      try { return await endpoint.mutate(ops, revision); }
+      finally {
+        if (accepted) { busy = false; notify(); }
+      }
     },
     update(next) {
+      const previous = getSnapshot();
       page = next;
-      if (snapshot === next.state) return;
-      snapshot = next.state;
-      for (const listener of listeners) listener();
+      if (getSnapshot() !== previous) notify();
     },
   };
 }
