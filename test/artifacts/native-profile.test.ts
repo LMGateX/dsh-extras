@@ -82,6 +82,32 @@ test('native CLI installs packed combined distribution into isolated web profile
   await delay.locator('input').fill('3.5');await delay.getByRole('button',{name:'Save',exact:true}).click();
   await page.waitForFunction(()=>!(document.querySelectorAll('[data-module="compact-context"] [data-field="retryDelayMs"] button')[2] as HTMLButtonElement)?.disabled);
   assert.deepEqual(await delay.getByRole('alert').allTextContents(),[]);
+  const toolGroup=page.getByRole('group',{name:'Agent-facing compaction tools',exact:true});
+  const reasoning=page.getByRole('group',{name:'Compaction-request reasoning',exact:true});
+  assert.equal(await reasoning.getByRole('checkbox',{name:'Enable compaction-request reasoning',exact:true}).isChecked(),false);
+  await toolGroup.getByRole('checkbox',{name:'Expose compact_context',exact:true}).click();
+  await toolGroup.getByRole('status').filter({hasText:'Tools runtime: disabled'}).waitFor();
+  await reasoning.getByRole('checkbox',{name:'Enable compaction-request reasoning',exact:true}).check();
+  await reasoning.getByRole('button',{name:'Save policy',exact:true}).click();
+  await reasoning.getByRole('status').filter({hasText:'Reasoning runtime: active'}).waitFor();
+  const rule=reasoning.getByRole('group',{name:'Rule 1',exact:true});
+  await rule.getByRole('combobox',{name:'Match scope',exact:true}).selectOption('provider-model');
+  await rule.getByRole('textbox',{name:'Provider route ID',exact:true}).fill('Synthetic/Exact-Route');
+  await rule.getByRole('textbox',{name:'Model ID',exact:true}).fill('Synthetic/Exact-Model');
+  await rule.getByRole('combobox',{name:'Action',exact:true}).selectOption('fixed');
+  await rule.getByRole('textbox',{name:'Native effort ID',exact:true}).fill('Opaque:Effort/Case');
+  await reasoning.getByRole('button',{name:'Save policy',exact:true}).click();
+  // Native ConfigEditor persistence, not an optimistic checkbox or a fake form, is the oracle.
+  const readPolicy=async()=>parse(await readFile(join(environment(temp).DSH_HOME!,'profiles',profile,'cordis.patch.yml'),'utf8')).find((row:any)=>row.id==='dsh-extras')?.config?.modules?.['compact-context'];
+  await assert.doesNotReject(async()=>{
+    const deadline=Date.now()+5000;
+    while((await readPolicy())?.compactionReasoning?.rules?.[0]?.effort!=='Opaque:Effort/Case'){
+      if(Date.now()>deadline)throw new Error('Native policy was not persisted');
+      await new Promise(resolve=>setTimeout(resolve,25));
+    }
+  });
+  const nativePolicyStatus=await page.evaluate(async()=> (await (await fetch('/extras/dsh-extras/status',{credentials:'same-origin',cache:'no-store'})).json()).modules['compact-context'].capabilities);
+  assert.equal(nativePolicyStatus.compactionReasoning.phase,'active');assert.equal(nativePolicyStatus.tools.phase,'disabled');
   await page.getByRole('checkbox',{name:'Enable Stream and empty-response retry',exact:true}).click();
   await page.waitForFunction(()=>!(document.querySelector('[data-module=retry] input[data-field=enabled]') as HTMLInputElement)?.checked);
   await page.getByRole('button',{name:'🔔 正常',exact:true}).click();
@@ -94,6 +120,11 @@ test('native CLI installs packed combined distribution into isolated web profile
   await page.locator('[data-package="dsh-extras"]').waitFor();
   assert.equal(await page.locator('[data-module="compact-context"] [data-field="retryDelayMs"] input').inputValue(),'3.5');
   assert.equal(await page.getByRole('checkbox',{name:'Enable Stream and empty-response retry',exact:true}).isChecked(),false);
+  assert.equal(await toolGroup.getByRole('checkbox',{name:'Expose compact_context',exact:true}).isChecked(),false);
+  assert.equal(await reasoning.getByRole('checkbox',{name:'Enable compaction-request reasoning',exact:true}).isChecked(),true);
+  assert.equal(await rule.getByRole('textbox',{name:'Provider route ID',exact:true}).inputValue(),'Synthetic/Exact-Route');
+  assert.equal(await rule.getByRole('textbox',{name:'Model ID',exact:true}).inputValue(),'Synthetic/Exact-Model');
+  assert.equal(await rule.getByRole('textbox',{name:'Native effort ID',exact:true}).inputValue(),'Opaque:Effort/Case');
   const chimeSection=page.locator('[data-module="chime"]');
   await chimeSection.locator('#dsh-session-chime-enabled').uncheck();
   await chimeSection.getByRole('button',{name:'Save',exact:true}).click();
@@ -102,7 +133,10 @@ test('native CLI installs packed combined distribution into isolated web profile
   assert.deepEqual(await chimeSection.getByRole('alert').allTextContents(),[]);
   const persisted=await readFile(join(environment(temp).DSH_HOME!,'profiles',profile,'cordis.patch.yml'),'utf8');
   const accepted=parse(persisted).find((row:any)=>row.id==='dsh-extras').config.modules;
-  assert.equal(accepted['compact-context'].retryDelayMs,3500);assert.equal(accepted.retry.enabled,false);assert.equal(accepted.chime.restMode,true);assert.equal(accepted.chime.enabled,false);
+  assert.equal(accepted['compact-context'].retryDelayMs,3500);
+  assert.equal(accepted['compact-context'].compactTool,false);
+  assert.deepEqual(accepted['compact-context'].compactionReasoning,{enabled:true,rules:[{scope:'provider-model',provider:'Synthetic/Exact-Route',model:'Synthetic/Exact-Model',mode:'fixed',effort:'Opaque:Effort/Case'}]});
+  assert.equal(accepted.retry.enabled,false);assert.equal(accepted.chime.restMode,true);assert.equal(accepted.chime.enabled,false);
   assert.deepEqual(errors,[]);
   console.log('Native startup log:',clean(log).slice(-3000));
 });
