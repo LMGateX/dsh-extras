@@ -7,7 +7,7 @@ import { join, resolve, dirname, basename } from 'node:path';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
 import type { TestContext } from 'node:test';
-import type { Distribution, ModuleId } from '../../src/types.ts';
+import type { Distribution, ModuleId, FeaturePlugin } from '../../src/types.ts';
 import { createExtrasPlugin } from '../../src/runtime.ts';
 
 export const requireHost = createRequire(process.env.DSH_RUNTIME_ROOT ? join(resolve(process.env.DSH_RUNTIME_ROOT), 'package.json') : createRequire(new URL('../../package.json', import.meta.url)).resolve('@deepseek-ai/dsh/package.json'));
@@ -22,7 +22,7 @@ export async function until<T>(read: () => T, accepts: (value: T) => boolean, la
 export function response() {
   return { code: 0, headers: {} as Record<string, any>, body: '', writeHead(code: number, headers: Record<string, any> = {}) { this.code = code; this.headers = headers; }, end(value = '') { this.body += value; } };
 }
-export async function loaderFixture(t: TestContext, distribution: Distribution, config: Record<string, any>, suppliedContext?: Context, extraRows: Record<string, any>[] = []) {
+export async function loaderFixture(t: TestContext, distribution: Distribution, config: Record<string, any>, suppliedContext?: Context, extraRows: Record<string, any>[] = [], suppliedPlugin?: FeaturePlugin) {
   const root = await mkdtemp(join(tmpdir(), 'extras-root-lifecycle-'));
   const profile = join(root, 'home', 'profiles', 'isolated');
   const home = join(root, 'home'); await mkdir(profile, { recursive: true });
@@ -30,7 +30,7 @@ export async function loaderFixture(t: TestContext, distribution: Distribution, 
   ctx.baseUrl = pathToFileURL(requireHost.resolve('@deepseek-ai/dsh/package.json')).href;
   const routes = new Map<string, any>(); const importTable = new Map<string, any>();
   const initial = structuredClone(config);
-  const plugin = createExtrasPlugin(distribution);
+  const plugin = suppliedPlugin ?? createExtrasPlugin(distribution);
   importTable.set(distribution.name, plugin);
   const NativeInclude = (await loadHost('cordis-plugin-include')).default;
   class FixtureInclude extends NativeInclude {
