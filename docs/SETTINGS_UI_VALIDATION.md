@@ -22,7 +22,7 @@ The user reported that only Chime had styled, Chinese settings; the other module
 
 ## Verification boundary and maintenance notes
 
-Tests run only in dedicated Git worktrees and disposable native HOME/DSH_HOME/profiles, with temporary ports distinct from the live GUI. No installation or test targeted the real DSH home/profile. No GitHub Actions, npm publication, GitHub push or release replacement is part of this repair.
+Tests run only in dedicated Git worktrees and disposable native HOME/DSH_HOME/profiles, with temporary ports distinct from the live GUI. No installation or test targeted the real DSH home/profile. The initial local repair did not push or publish; the subsequent user-authorized 0.2.1 release preparation is recorded below. GitHub Actions, npm publication and production-profile installation remain excluded.
 
 Standards review found no hard documented violation. Two nonblocking maintenance observations remain: optional locale service arrival/replacement after Extras activation requires an Extras reload (the existing Chime behavior); selected validator translations intentionally map the current owned diagnostic prose, so wording changes must update the translation tests. Ordinary language preference changes on an existing service are exercised without reload and retain drafts.
 
@@ -51,6 +51,31 @@ This executed an actual native CLI installation into a disposable web profile, s
 
 Configuration/feature behavior preservation was additionally checked with `git diff --exit-code fcdadb504be69e3623fa490f94b03d1fab984751...HEAD -- src client/forms.ts client/reasoning.ts client/status.ts`: no changes. The Chime diff is exactly the error-token correction described above.
 
-The patch and this evidence record are committed locally; candidate artifacts remain unpublished. The released 0.2.0 tag/assets have not been changed.
+At the initial repair checkpoint, the patch was committed locally and candidate artifacts were unpublished. The subsequent release request authorizes pushing and publishing 0.2.1 without local installation; it does not replace the released 0.2.0 tag/assets.
 
+## 0.2.1 release-candidate revalidation — 2026-11-06 (+08:00)
 
+The user explicitly requested push and release, with no installation into the local DSH. A dedicated release worktree prepared synchronized version 0.2.1 at `7467ddfe297433e222838b1d04ff809095cbf9c4`. Relative to the reviewed repair checkpoint `977913c2497de566438696e1c9ec8c3f8b3f756d`, only the root manifest/lockfile version and README download examples changed before these gates. This final evidence update is documentation-only and is not packed into the tarballs.
+
+| Re-executed command / check | Result |
+| --- | --- |
+| `npm run typecheck` | Passed against version 0.2.1. |
+| `npm test` | **470/470 passed**, zero failed/skipped/cancelled; 14.6 seconds. Includes actual five-package packed Chromium presentation coverage. |
+| `npm run build && npm run pack` | Five synchronized 0.2.1 archives generated with isolated HOME/DSH_HOME/XDG roots/npm cache. |
+| `node --test --test-concurrency=1 test/artifacts/native-profile.test.ts test/artifacts/native-reasoning.test.ts test/artifacts/packages.test.mjs` | **10/10 passed**, zero failed/skipped/cancelled; 89.4 seconds. Real disposable native Web used port 44913, not the live GUI. |
+| `sha256sum -c SHA256SUMS` in the artifact directory | All five accepted archives passed. |
+| Actual tar manifest/content audit | All five report version 0.2.1 and native locale dependency; no node_modules, sandbox/profile/environment payload or emitted `/home/dev/` paths. |
+| `git diff --exit-code 977913c -- src client test scripts` | No changes to accepted runtime, browser, tests or packaging scripts. |
+| `git diff --check` | Passed. |
+
+GitHub repository Actions were confirmed disabled via `gh api repos/LMGateX/dsh-extras/actions/permissions`; no workflow files are tracked. Direct Git/gh publication must preserve the matching annotated tag and the exact accepted archives below, followed by downloading the six release assets and verifying both their checksums and their equality to the accepted local bytes. No npm publication or real-profile installation is authorized.
+
+Accepted artifact SHA-256 values:
+
+```text
+c41e698fe86c0e21481c0b2952485db4198896b8ec8c988d9285d5f591a34fef  dsh-extras-0.2.1.tgz
+f340b555daf7e80edf85bda9a17537afee4ce48db1d710531565cdb3ef320faf  dsh-extras-compact-context-0.2.1.tgz
+d43754cc379ee45df5a90d9a224db8850fa4f141fb19ca93fbf296ed123d2dce  dsh-extras-retry-0.2.1.tgz
+7ae37072526f4054eb07ba818ec6c29c73c8b6c5eecb32f9e6ec3e00ab0355d1  dsh-extras-chime-0.2.1.tgz
+bd5faf9d6c29a5ec40e8846e6bbae2e23632f6720709e132deef1c9e41689004  dsh-extras-goal-wait-0.2.1.tgz
+```
