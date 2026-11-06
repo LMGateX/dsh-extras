@@ -11,7 +11,7 @@ Compact-context, native retry classification, browser session chimes and goal wa
 | Package | Capabilities |
 | --- | --- |
 | dsh-extras | All four, independently selectable |
-| dsh-extras-compact-context | Native-policy compaction, optional status/guidance/pressure, PTC timeout options |
+| dsh-extras-compact-context | Native-policy compaction tools, independent request reasoning policy, optional status/guidance/pressure and PTC timeouts |
 | dsh-extras-retry | Stream-error and empty-response classification; official DSH retry owns execution |
 | dsh-extras-chime | Completion/blocked/question/error sounds, quiet hours, rest mode, sidebar and banners |
 | dsh-extras-goal-wait | Wait for live jobs and subagent descendants; official goal driver stays mounted |
@@ -23,10 +23,10 @@ Choose the combined package **or** any subset of distinct splits. Two distributi
 Choose the intended profile explicitly. Example for an existing web profile:
 
 ```sh
-dsh plugin --profile web add https://github.com/LMGateX/dsh-extras/releases/download/v0.1.0/dsh-extras-0.1.0.tgz
+dsh plugin --profile web add https://github.com/LMGateX/dsh-extras/releases/download/v0.2.0/dsh-extras-0.2.0.tgz
 ```
 
-For one capability replace the asset name, e.g. `dsh-extras-retry-0.1.0.tgz`. Verify downloads against release SHA256SUMS. The matching DSH runtime must already exist; packages do not install a second host runtime.
+For one capability replace the asset name, e.g. `dsh-extras-retry-0.2.0.tgz`. Verify downloads against release SHA256SUMS. The matching DSH runtime must already exist; packages do not install a second host runtime.
 
 Open **Plugins → DSH Extras → Configure**. Combined settings have compact-context, retry, chime and goalWait sections. Each module and every original option is independently editable. Status distinguishes active, disabled, missing dependency, migration-pending, conflict and failed. Enable/disable joins feature disposal before reactivation. Policy-only changes use validated live snapshots without remounting in-flight retry classifiers or releasing goal holds.
 
@@ -65,6 +65,11 @@ modules:
     enabled: true
     compactTool: true
     statusTool: false
+    compactionReasoning:
+      enabled: false
+      rules:
+        - scope: all
+          mode: inherit
   retry:
     enabled: true
     errorCodes: [upstream_stream_read_error, stream_timeout, stream error]
@@ -83,6 +88,18 @@ migration:
 ```
 
 Splits use this same envelope but expose only their module. `maxHoldMs: 0` means no forced expiry. Compact-context status/guidance/pressure extras remain opt-in. Native retention, provider routing and retry budgets stay native. Goal waiting changes process-local activation only, never durable phase.
+
+## Compaction request reasoning / 压缩请求推理强度
+
+In **Compact-context** settings, agent-facing tools and the request reasoning policy have separate controls. The policy is **off by default**, including legacy imports. Enabling it does not require `compactTool`; keeping `compactTool: false` still allows the policy to cover native pressure, `/compact`, overflow and model-switch summaries. Agent tool/range summaries use the same request boundary. Pruner-only/no-op operations have no LLM request to modify. Disabling the module withdraws both capabilities.
+
+Rules match the **actual outgoing summary provider/model**, not the conversation model. The fixed priority is `provider-model > provider > all`; duplicate targets are invalid. `inherit` reads the exact request session latest durable reasoning effort; a missing value leaves the original request/default untouched and does not try a broader rule. `fixed` supplies an exact adapter-owned effort id and may replace an existing effort. An explicit `rules: []` matches nothing. Identifiers are case-sensitive; no wildcard, alias, effort remapping or silent fallback. `off` is not a universal disable-thinking switch. Native exact-model validation rejects unsupported efforts without an extra retry.
+
+The editor uses advertised effort choices for an exact model when available, with explicit native-id entry when discovery is unavailable. Save/discard/reset and revision conflicts follow native configuration forms. Runtime policy availability is reported independently from tool availability: saved or enabled does not mean active.
+
+**Experimental compatibility boundary:** clone-first wrapping of the native public LLM stream, audited for DSH LLM `0.2.2-alpha.3` / Cordis `4.0.6-alpha.2`; not an official request-transform hook. Unsupported versions/runtime shapes withdraw this policy and preserve original compaction. Audited native provision, isolation, replacement and HMR are included; arbitrary third-party engines or silent service replacement/cached-method paths bypassing native stream access are not a compatibility guarantee. Ordinary conversation/title calls, native retention/routing and cancellation are unchanged. Matching effort can remove one upstream cache-namespace mismatch; it does not guarantee cache hits or lower latency/cost.
+
+See the [fixed contract and synthetic rule examples](<docs/COMPACTION_REASONING.md>) for exact defaults, matching, lifecycle and coverage gates.
 
 ## Development
 

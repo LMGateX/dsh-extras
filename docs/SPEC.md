@@ -2,6 +2,8 @@
 
 Status: implementation contract fixed before development. Date: 2026-11-05. Target: 0.1.0. Repository: LMGateX/dsh-extras, public. Audited host baseline: DSH 0.2.2-alpha.3; Node >=24.9. Later versions require validation before broad compatibility claims.
 
+For 0.2.0, preserve this baseline and apply the approved [amendments](AMENDMENTS.md) and [compaction reasoning contract](COMPACTION_REASONING.md). The canonical module id is now `compact-context` with no old-id compatibility. The only added summary control is the independently enabled, default-off request reasoning policy; native retention, summary routing, transaction and retry authority remain native. The direct user prohibition of GitHub Actions supersedes the original CI reference below.
+
 ## Required deliverables
 
 1. One combined installable distribution, dsh-extras, one plugin card and unified settings grouped into four independently enabled modules.
