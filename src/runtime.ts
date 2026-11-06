@@ -151,10 +151,10 @@ export function createExtrasPlugin(distribution: Distribution) {
         name: '__DSH_EXTRAS_PAGE_' + distribution.name.replace(/[^a-zA-Z0-9_]/g, '_') + '__',
         value: {servedAt: Date.now()},
       }));
-      const capabilities = (id: ModuleId): ModuleState['capabilities'] => {
+      const diagnostics = (id: ModuleId): Pick<ModuleState, 'capabilities' | 'details'> | undefined => {
         const current = scopes.get(id);
         if (!current || current.fiber.state !== 2 || statuses[id]?.phase !== 'active') return undefined;
-        try { return distribution.modulePlugins[id]?.runtimeStatus?.(current.fiber.ctx).capabilities; }
+        try { return distribution.modulePlugins[id]?.runtimeStatus?.(current.fiber.ctx); }
         catch { return undefined; } // A status reader must never break the authenticated status route.
       };
       const status = () => {
@@ -163,10 +163,10 @@ export function createExtrasPlugin(distribution: Distribution) {
         return {
           distribution: distribution.name,
           modules: Object.fromEntries(distribution.moduleIds.map(id => [id, {
+            ...diagnostics(id),
             ...state.modules[id], ...statuses[id],
             ready: state.modules[id]?.ready === true && statuses[id]?.phase === 'active',
             enabled: moduleConfig(id).enabled !== false,
-            capabilities: capabilities(id),
           }])),
           report: state.report,
           browserReloadAfter: state.report?.browserReloadAfter,

@@ -43,13 +43,14 @@ test('owner status reports independent live capabilities only while their exact 
   let mounted: any;
   let reads = 0;
   let phase: 'active' | 'unavailable' = 'active';
+  const details = { goalWait: { requested: 'replacement', mounted: 'host-driver+gate', fallback: 'Unsupported host artifact.' } };
   const feature = {
     name: 'capability-status-fixture', Config: context.Config, inject: [],
     apply(ctx: any) { mounted = ctx; },
     runtimeStatus(ctx: any) {
       reads++;
       assert.equal(ctx.fiber, mounted.fiber, 'status belongs to the mounted feature, not the shell fiber');
-      return { capabilities: { compactionReasoning: { phase }, tools: { phase: 'unavailable' as const, reason: 'Tool services are absent.' } } };
+      return { capabilities: { compactionReasoning: { phase }, tools: { phase: 'unavailable' as const, reason: 'Tool services are absent.' } }, details };
     },
   };
   const d: Distribution = { name: 'dsh-extras-compact-context', moduleIds: ['compact-context'], modulePlugins: { 'compact-context': feature } };
@@ -58,6 +59,9 @@ test('owner status reports independent live capabilities only while their exact 
   assert.deepEqual(f.status().modules['compact-context'].capabilities, {
     compactionReasoning: { phase: 'active' }, tools: { phase: 'unavailable', reason: 'Tool services are absent.' },
   });
+  const previousReads = reads;
+  assert.deepEqual(f.status().modules['compact-context'].details, details, 'authenticated diagnostics retain selected versus actual behavior');
+  assert.equal(reads, previousReads + 1, 'capabilities and details come from one exact-fiber snapshot');
   phase = 'unavailable';
   assert.equal(f.status().modules['compact-context'].phase, 'active', 'a capability failure does not masquerade as shell disposal');
   assert.equal(f.status().modules['compact-context'].capabilities.compactionReasoning.phase, 'unavailable');
@@ -65,5 +69,6 @@ test('owner status reports independent live capabilities only while their exact 
   await until(() => f.status().modules['compact-context'].phase, value => value === 'disabled', 'feature disable');
   const before = reads;
   assert.equal(f.status().modules['compact-context'].capabilities, undefined, 'disabled features expose no stale capability snapshot');
+  assert.equal(f.status().modules['compact-context'].details, undefined, 'disabled features expose no stale diagnostic snapshot');
   assert.equal(reads, before, 'disabled features are not inspected');
 });

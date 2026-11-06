@@ -11,7 +11,7 @@ export interface FeaturePlugin {
   readonly Config?: unknown;
   apply(ctx: any, config?: any): unknown;
   /** Side-effect-free, non-secret capability state for this exact mounted fiber. */
-  runtimeStatus?(ctx: any): { capabilities: Record<string, CapabilityStatus> };
+  runtimeStatus?(ctx: any): { capabilities: Record<string, CapabilityStatus>; details?: Record<string, unknown> };
 }
 export interface Distribution {
   readonly name: string;
@@ -22,4 +22,6 @@ export interface ModuleState {
   phase: 'active' | 'disabled' | 'missing-dependency' | 'migration-pending' | 'conflict' | 'failed';
   reason?: string;
   capabilities?: Record<string, CapabilityStatus>;
+  /** Read-only non-secret feature diagnostics; present only for the exact active fiber. */
+  details?: Record<string, unknown>;
 }
