@@ -8,6 +8,10 @@ New Extras split distributions are peers, not legacy sources. Detect selected/ac
 
 The target capability id is `compact-context` in configuration, status, ownership, CLI selection and new journals. The former development-only `context` id is not an alias and receives no configuration/journal translation. This does not rename the predecessor package or its loader identity.
 
+For the approved 0.3.0 parity extension, ordinary Goal-wait rows are audited at source 0.3.0 and 0.4.23. Defaults are version-specific: 0.3.0 maps to activation; 0.4.23 keeps its effective strategy (activation/replacement/native/off). Module disabled and strategy off are different states. The latest old bundle suppresses the stock native driver, so removing that bundle owner must also be observed restoring the stock composition before target admission. Do not replace this with a permanent target bundle patch. Unknown historical versions and experimental startup entrypoints remain unsupported.
+
+Runtime discovery receives the actual continuation Context, inspects cooperating root-lifetime/owner-callback markers and correlates native callbacks with verified Loader entries. A caller-supplied startupOwner=null does not overrule an observed owner. Offline CLI inspection may still produce a useful plan, but cannot prove absence of a live programmatic goal owner: affected Goal-wait operations fail closed with an explicit runtime/restart verification requirement. Other independently valid modules are not disabled merely by this missing goal evidence.
+
 ## Precedence and state
 
 Explicit target Extras fields > migrated old effective values > known legacy defaults. Preserve enabled/disabled state, false, zero, empty strings/arrays, durations in original units and replacement array semantics. With any legacy migration context, absent capabilities remain off. Never copy transient holds, timers, playback queues, credentials or a live gate's continuation authority. Do not execute dynamic expressions to import them.

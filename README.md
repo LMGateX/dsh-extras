@@ -14,7 +14,7 @@ Compact-context, native retry classification, browser session chimes and goal wa
 | dsh-extras-compact-context | Native-policy compaction tools, independent request reasoning policy, optional status/guidance/pressure and PTC timeouts |
 | dsh-extras-retry | Stream-error and empty-response classification; official DSH retry owns execution |
 | dsh-extras-chime | Completion/blocked/question/error sounds, quiet hours, rest mode, sidebar and banners |
-| dsh-extras-goal-wait | Wait for live jobs and subagent descendants; official goal driver stays mounted |
+| dsh-extras-goal-wait | Four goal-continuation strategies: activation gate, pinned background-aware replacement, native, or off |
 
 Choose the combined package **or** any subset of distinct splits. Two distributions claiming the same capability produce a fail-closed ownership conflict, not duplicate hooks/audio. Splits do not require the combined package and omit unrelated feature implementation and audio.
 
@@ -36,7 +36,7 @@ Fresh installs use preserved source defaults. When any legacy plugin is discover
 
 First active load inspects **only the owning profile**, validates effective configuration, records protected backups/journal and persistently disables old bundle/row owners after preparation. Old packages and configuration are retained. No postinstall effects, profile sweep, forced restart or uninstall.
 
-Known predecessors: dsh-tool-compact-context, dsh-stream-retry, dsh-session-chime and conventional dsh-goal-wait-gate. Unknown versions, dynamic expressions, ambiguous instances, overlays, read-only profiles and experimental startup/replacement owners fail closed: old ownership remains, the affected new module is gated, and the report explains the problem.
+Known predecessors: dsh-tool-compact-context, dsh-stream-retry, dsh-session-chime and the ordinary dsh-goal-wait-gate row at audited versions **0.3.0 and 0.4.23**. Version 0.3.0 imports the activation strategy; 0.4.23 preserves its selected strategy. Unknown versions, dynamic expressions, ambiguous instances, overlays, read-only profiles and experimental **startup** lifetime owners fail closed: old ownership remains, the affected new module is gated, and the report explains the problem. The ordinary 0.4.23 replacement strategy is not the unsupported experimental startup entrypoint.
 
 **Saved is not active.** If native reconciliation cannot safely finish, restart DSH yourself after finishing ongoing work. Migrating legacy chime requires a fresh host process and **full page reload** because old timers and in-flight decode cannot be reliably cancelled. Extras checks fresh host-index evidence, not browser wall-clock time; it stays silent when proof/status is unavailable.
 
@@ -80,6 +80,7 @@ modules:
     restMode: false
   goalWait:
     enabled: true
+    strategy: activation
     waitForJobs: true
     waitForSubagents: true
     maxHoldMs: 0
@@ -88,6 +89,33 @@ migration:
 ```
 
 Splits use this same envelope but expose only their module. `maxHoldMs: 0` means no forced expiry. Compact-context status/guidance/pressure extras remain opt-in. Native retention, provider routing and retry budgets stay native. Goal waiting changes process-local activation only, never durable phase.
+
+## Grouped editing / 分组编辑
+
+Retry codes, provider routes and empty-response classification share one staged draft. Compact-context retry count/delay and PTC default/per-model timeouts share another; Goal-wait strategy and waiting policy are saved together. **Save** submits each group in one native revision-fenced mutation; **Discard** drops local edits. **Reset to inherited** stages removal of explicit fields and takes effect only after Save, including boolean fields. A concurrent configuration change retains your draft but blocks overwriting the newer revision. Language changes do not discard drafts.
+
+重试、压缩超时和 Goal-wait 策略采用分组草稿：保存时整组原子提交；放弃只清除本地修改；“恢复继承值”先暂存字段移除，再点保存，不会把当前默认值写成永久覆盖。界面的超时单位为秒，存储仍为毫秒，显式 0 与空列表/映射保留原有含义。水位阈值 notifyAtRatio / pressureStep 也可直接编辑，下一次相应提示/状态读取使用新值。请求推理策略仍有独立编辑器，不会因启用工具而自动启用。
+
+## Goal continuation strategies / Goal 续跑策略
+
+Durable goal phase (active/paused/complete/blocked), process-local armed/disarmed activation, gate-owned holds and native progressing-descendant joins are different concepts. Waiting must not masquerade as changing durable goal phase.
+
+| Strategy | Actual behavior |
+| --- | --- |
+| activation (default) | Keep the official stock driver; the conventional gate disarms while configured jobs or registered descendants remain and releases its owned hold afterward. This deliberately retains the older all-live-descendant policy. |
+| replacement | Temporarily suspend the verified stock driver and run the exact-artifact-pinned native-derived driver. Job eligibility waits without disarming; the audited native join handles progressing descendants without imposing a second hold on idle/parked resident children. |
+| native | Keep/restore the official driver with no Extras wait gate. |
+| off | Suppress automatic goal continuation while the module is enabled. This is **not** equivalent to disabling the module. |
+
+Disabling the module or Extras removes its gate/port effects and releases temporary stock-driver suppression. It does not rewrite the official row to permanently disabled and does not re-enable legacy plugins. A native row explicitly disabled or removed by the user is not forcibly restored. Ownership switches join the previous driver teardown before starting another; busy/failed/unknown transitions are reported rather than silently mounting a second continuation driver. Saved **Requested** strategy and live **Mounted** behavior/fallback are displayed separately; a mounted feature shell alone is not proof its continuation driver is active.
+
+**Known activation limitation:** the native boolean seam cannot identify an overlapping, repeated external disarm during an already-owned gate hold. Such a same-value call can be indistinguishable from the gate hold, so activation cannot offer an unconditional external-overlap ownership guarantee. Replacement waiting avoids this gate disarm/resume pattern. Ordinary external disarm before acquisition and paused/completed/blocked goals remain protected. Driver switching uses a temporary descriptor-owned, exact-artifact lifecycle observer; unknown/changed call-frame shapes never grant permission to resume. This is a narrow compatibility adapter, not an official native authority token.
+
+**激活门控的已知限制：** 门控已持有 disarmed 状态时，外部再次写入同一个 disarm 可能没有事件或修订变化，因此无法给出绝对的重叠撤权归属保证。replacement 等待不靠临时 disarm/resume，且在当前宿主上沿用原生“正在推进的子任务”汇合语义，不会因仅常驻、闲置或已停放的子 agent 再额外卡住父级。off 会关闭自动续跑；关闭模块则释放 Extras 的临时驱动接管，二者不可混同。
+
+## Public imports / 公共导入
+
+The supported package entries are the Cordis root (name/inject/Config/apply), the native browser-loading side-effect entry **./client**, and the public **./migration** API. The client script is loaded by DSH’s module loader; it is not a standalone React application or an exported server apply function. Declarations describe these actual entries and only the selected distribution’s configuration. Predecessor resolveConfig/client-types/locale subpaths are **not** drop-in compatibility aliases under the new package identities.
 
 ## Compaction request reasoning / 压缩请求推理强度
 
