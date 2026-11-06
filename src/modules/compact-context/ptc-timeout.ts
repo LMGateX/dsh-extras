@@ -1,5 +1,5 @@
 // Adapted from dsh-tool-compact-context; original MIT license retained in NOTICE.txt.
-import type { Context } from '@deepseek-ai/cordis';
+import { Context, symbols, type Events } from '@deepseek-ai/cordis';
 import type { ResolvedConfig } from './config.ts';
 
 /** Minimal structural view of the PTC runtime's public resolve() seam. */
@@ -46,46 +46,87 @@ function routeOf(owner: object | undefined): { provider: string; model: string }
  * returned restore function so a volatile config change can replace it.
  * @param ctx plugin context
  * @param config plain resolved row config
- * @returns a disposer restoring the original resolve(), or undefined when
- *   nothing was configured or the runtime seam is unavailable
+ * Native service provision/lookup is observed so late and isolated preset
+ * runtimes participate too. No prototype or unrelated service is patched.
+ * @returns a disposer restoring owned resolve descriptors and observers, or
+ *   undefined when no deadline defaults were configured
  */
 export function installPtcTimeoutOverride(ctx: Context, config: ResolvedConfig): (() => void) | undefined {
   const hasModelTimeouts = Object.keys(config.ptcModelTimeouts).length > 0;
   if (config.ptcTimeoutMs <= 0 && !hasModelTimeouts) return undefined;
-  const context = ctx as unknown as {
-    ptcRuntime?: PtcRuntimeLike;
-    get?: (name: string) => unknown;
+  const restores = new Map<PtcRuntimeLike, () => void>();
+  const install = (runtime: PtcRuntimeLike | undefined): void => {
+    if (!runtime || typeof runtime.resolve !== 'function' || restores.has(runtime)) return;
+    const restore = wrap(runtime);
+    if (restore) restores.set(runtime, restore);
   };
-  let runtime: PtcRuntimeLike | undefined;
-  try {
-    runtime = (context.get?.('ptcRuntime') ?? context.ptcRuntime) as PtcRuntimeLike | undefined;
-  } catch {
-    return undefined;
-  }
-  if (runtime === undefined || typeof runtime.resolve !== 'function') return undefined;
-  const original = runtime.resolve;
-  const choose = (request: PtcRunRequestLike): number | undefined => {
-    if (request.timeoutMs !== undefined) return undefined;
-    let exact: number | undefined;
-    if (hasModelTimeouts) {
-      const route = routeOf(request.stateOwner);
-      if (route !== undefined) exact = config.ptcModelTimeouts[`${route.provider}/${route.model}`];
+  const wrap = (runtime: PtcRuntimeLike): (() => void) | undefined => {
+    const original = runtime.resolve;
+    const own = Object.getOwnPropertyDescriptor(runtime, 'resolve');
+    let active = true;
+    const choose = (request: PtcRunRequestLike): number | undefined => {
+      if (request.timeoutMs !== undefined) return undefined;
+      let exact: number | undefined;
+      if (hasModelTimeouts) {
+        const route = routeOf(request.stateOwner);
+        if (route !== undefined) exact = config.ptcModelTimeouts[`${route.provider}/${route.model}`];
+      }
+      const desired = exact ?? config.ptcTimeoutMs;
+      if (desired <= 0) return undefined;
+      const max = runtime.timeout?.maxMs;
+      return max === undefined ? desired : Math.min(desired, max);
+    };
+    const wrapped = function wrappedResolve(this: PtcRuntimeLike, request: PtcRunRequestLike): PtcRunSpecLike {
+      const chosen = active ? choose(request) : undefined;
+      return chosen === undefined ? original.call(this, request) : original.call(this, { ...request, timeoutMs: chosen });
+    };
+    try {
+      runtime.resolve = wrapped;
+    } catch {
+      return undefined;
     }
-    const desired = exact ?? config.ptcTimeoutMs;
-    if (desired <= 0) return undefined;
-    const max = runtime.timeout?.maxMs;
-    return max === undefined ? desired : Math.min(desired, max);
+    const installed = Object.getOwnPropertyDescriptor(runtime, 'resolve');
+    return () => {
+      active = false;
+      const current = Object.getOwnPropertyDescriptor(runtime, 'resolve');
+      if (!current || !installed || current.value !== wrapped || current.writable !== installed.writable
+        || current.configurable !== installed.configurable || current.enumerable !== installed.enumerable
+        || Object.hasOwn(current, 'get') || Object.hasOwn(current, 'set')) return;
+      if (own) Object.defineProperty(runtime, 'resolve', own);
+      else Reflect.deleteProperty(runtime, 'resolve');
+    };
   };
-  const wrapped = function wrappedResolve(this: PtcRuntimeLike, request: PtcRunRequestLike): PtcRunSpecLike {
-    const chosen = choose(request);
-    return chosen === undefined ? original.call(this, request) : original.call(this, { ...request, timeoutMs: chosen });
+  const observers: (() => unknown)[] = [];
+  const raw = (value: unknown): PtcRuntimeLike | undefined => {
+    if (!value || (typeof value !== 'object' && typeof value !== 'function')) return undefined;
+    return ((value as Record<symbol, unknown>)[symbols.original] ?? value) as PtcRuntimeLike;
   };
-  try {
-    runtime.resolve = wrapped;
-  } catch {
-    return undefined;
+  if (ctx instanceof Context) {
+    const reconcile = (extra?: unknown): void => {
+      const required = new Set<PtcRuntimeLike>();
+      for (const key of Reflect.ownKeys(ctx.root.reflect.store)) {
+        const entry = ctx.root.reflect.store[key as symbol];
+        if (entry?.name === 'ptcRuntime') { const value = raw(entry.value); if (value) required.add(value); }
+      }
+      const value = raw(extra); if (value) required.add(value);
+      for (const [runtime, restore] of restores) if (!required.has(runtime)) { restore(); restores.delete(runtime); }
+      for (const runtime of required) install(runtime);
+    };
+    const onService: Events['internal/service'] = name => { if (name === 'ptcRuntime') reconcile(); };
+    const onGet: Events['internal/get'] = (_lookup, name, _error, next) => {
+      const result = next(); if (name === 'ptcRuntime') reconcile(result); return result;
+    };
+    observers.push(ctx.on('internal/service', onService, { global: true, prepend: true }));
+    observers.push(ctx.on('internal/get', onGet, { global: true, prepend: true }));
+    reconcile();
+  } else {
+    // Retain the documented minimal direct-module composition.
+    const context = ctx as unknown as { get?: (name: string) => unknown; ptcRuntime?: PtcRuntimeLike };
+    try { install(raw(context.get?.('ptcRuntime') ?? context.ptcRuntime)); } catch { /* optional runtime */ }
   }
   return () => {
-    if (runtime.resolve === wrapped) runtime.resolve = original;
+    for (const off of observers.splice(0).reverse()) off();
+    for (const restore of restores.values()) restore();
+    restores.clear();
   };
 }

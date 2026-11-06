@@ -262,6 +262,21 @@ test('live config references are reread for each terminal error', async () => {
   assert.equal(await collect(), input);
 });
 
+test('unloading keeps a captured empty-stop stream as identity-preserving pass-through', async () => {
+  const mounted = install();
+  const thinking: Chunk = Object.freeze({ type: 'thinking-delta', index: 0, text: 'internal only' });
+  const stop: Chunk = Object.freeze({ type: 'finish', reason: Object.freeze({ kind: 'stop' }), replay: Object.freeze({ seq: 7 }) });
+  let calls = 0;
+  const source = async function* () { calls++; yield thinking; yield stop; };
+  const iterator = mounted.handler({ provider: 'test' }, source)[Symbol.asyncIterator]();
+  assert.equal((await iterator.next()).value, thinking);
+  mounted.dispose();
+  assert.equal((await iterator.next()).value, stop);
+  assert.equal((await iterator.next()).done, true);
+  assert.equal(calls, 1, 'unload does not redispatch the provider');
+  assert.equal(mounted.logs.length, 0);
+});
+
 test('unloading stops previously captured streams from making new compatibility mappings', async () => {
   const mounted = install();
   const input = failure('upstream_stream_read_error', 'x');
