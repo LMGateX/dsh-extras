@@ -1,5 +1,7 @@
 # Release validation evidence — 0.1.0
 
+Historical evidence: the executions below predate the canonical module rename. Their `context` module/status name is historical (now `compact-context`); recorded commands, counts, checksums and outcomes are not new rename-validation results.
+
 **Local release acceptance passed on 2026-11-06 (+08:00)** against DSH `0.2.2-alpha.3`, Node `24.17.0` (minimum `>=24.9.0`) and strict TypeScript `5.9.3`. The SHA-256 values at the end identify the exact accepted artifacts; the published Release serves these bytes unchanged.
 
 ## Contract and isolation

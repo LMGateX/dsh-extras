@@ -8,7 +8,7 @@ import test, { type TestContext } from 'node:test';
 import { inspectMigration, type NativeDiscoveryFacade } from '../../src/migration/discovery.ts';
 import type { Distribution, LoaderEntry, NativeMigrationHost, Values } from '../../src/migration/types.ts';
 
-const target: Distribution = { rowId: 'dsh-extras', packageName: 'dsh-extras', moduleIds: ['context', 'retry', 'chime', 'goalWait'] };
+const target: Distribution = { rowId: 'dsh-extras', packageName: 'dsh-extras', moduleIds: ['compact-context', 'retry', 'chime', 'goalWait'] };
 const targetRow = { id: target.rowId, name: 'dsh-extras', config: { modules: {} } };
 // A deliberately small JSON-only native facade. Real native YAML coverage is separate below.
 const facade: NativeDiscoveryFacade = {
@@ -109,7 +109,7 @@ test('composes raw inherited config; preserves groups, disabled rows, exact text
 
 test('profile-only explicit target fields exclude bundle defaults and higher layers', async t => {
   const f = await fixture(t);
-  await f.pkg('dsh-extras', '0.1.0', [{ insert: [{ ...targetRow, config: { modules: { retry: { enabled: true, providers: ['bundle'] }, context: { enabled: true } } } }] }], { selected: true });
+  await f.pkg('dsh-extras', '0.1.0', [{ insert: [{ ...targetRow, config: { modules: { retry: { enabled: true, providers: ['bundle'] }, 'compact-context': { enabled: true } } } }] }], { selected: true });
   await f.patch([{ id: target.rowId, config: { modules: { retry: { enabled: false, providers: [] } } } }]);
   await writeFile(join(f.dshHome, 'cordis.patch.yml'), JSON.stringify([{ id: target.rowId, config: { modules: { retry: { providers: ['home'] } } } }]));
   const result = await inspectMigration(f.host, target);
@@ -160,17 +160,17 @@ test('dynamic expressions, plural instances and custom startup ownership fail cl
   assert.match(result.sources[0].problem ?? '', /dynamic.*multiple legacy instances/);
   assert.equal(result.sources[0].active, true);
   assert.match(result.moduleProblems?.goalWait?.join(';') ?? '', /custom startup/);
-  assert.equal(result.moduleProblems?.context, undefined); assert.deepEqual(result.problems, []);
+  assert.equal(result.moduleProblems?.['compact-context'], undefined); assert.deepEqual(result.problems, []);
 });
 
 test('distinct split owners coexist while duplicate module peers are detected', async t => {
   const f = await fixture(t);
   await f.pkg('dsh-extras-compact-context', '0.1.0'); await f.pkg('dsh-extras-retry', '0.1.0'); await f.pkg('dsh-extras-chime', '0.1.0');
   await f.patch([{ insert: [{ id: 'context-target', name: 'dsh-extras-compact-context', config: { modules: {} } }, { id: 'retry-peer', name: 'dsh-extras-retry', config: { modules: {} } }, { id: 'chime-peer', name: 'dsh-extras-chime', config: { modules: {} } }] }]);
-  const split: Distribution = { rowId: 'context-target', packageName: 'dsh-extras-compact-context', moduleIds: ['context'] };
-  const first = await inspectMigration(f.host, split); assert.equal(first.peers.context, undefined); assert.deepEqual(first.peers.retry, ['retry-peer']);
+  const split: Distribution = { rowId: 'context-target', packageName: 'dsh-extras-compact-context', moduleIds: ['compact-context'] };
+  const first = await inspectMigration(f.host, split); assert.equal(first.peers['compact-context'], undefined); assert.deepEqual(first.peers.retry, ['retry-peer']);
   await f.patch([{ insert: [{ id: 'context-target', name: 'dsh-extras-compact-context' }, { id: 'duplicate-context', name: 'dsh-extras-compact-context' }] }]);
-  const second = await inspectMigration(f.host, split); assert.deepEqual(second.peers.context, ['duplicate-context']);
+  const second = await inspectMigration(f.host, split); assert.deepEqual(second.peers['compact-context'], ['duplicate-context']);
 });
 
 test('canonical profile identity survives symlinks and absent target is diagnosed', async t => {
@@ -185,7 +185,7 @@ test('canonical profile identity survives symlinks and absent target is diagnose
 test('all four verified packages are found and installation-native version resolution wins', async t => {
   const f = await fixture(t);
   const items = [
-    ['dsh-tool-compact-context', '0.4.7', 'context'], ['dsh-stream-retry', '0.1.9', 'retry'],
+    ['dsh-tool-compact-context', '0.4.7', 'compact-context'], ['dsh-stream-retry', '0.1.9', 'retry'],
     ['dsh-session-chime', '0.6.0', 'chime'], ['dsh-goal-wait-gate', '0.3.0', 'goalWait'],
   ] as const;
   for (const [name, version] of items) await f.pkg(name, version, [{ insert: [{ id: name, name, config: {} }] }], { selected: true });

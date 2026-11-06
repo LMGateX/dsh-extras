@@ -6,6 +6,8 @@ Current profile only. Known predecessors: dsh-tool-compact-context (usual row ds
 
 New Extras split distributions are peers, not legacy sources. Detect selected/active duplicate module owners before activation and settle one owner or keep the new owner inactive with a clear conflict. Distinct split capabilities coexist.
 
+The target capability id is `compact-context` in configuration, status, ownership, CLI selection and new journals. The former development-only `context` id is not an alias and receives no configuration/journal translation. This does not rename the predecessor package or its loader identity.
+
 ## Precedence and state
 
 Explicit target Extras fields > migrated old effective values > known legacy defaults. Preserve enabled/disabled state, false, zero, empty strings/arrays, durations in original units and replacement array semantics. With any legacy migration context, absent capabilities remain off. Never copy transient holds, timers, playback queues, credentials or a live gate's continuation authority. Do not execute dynamic expressions to import them.

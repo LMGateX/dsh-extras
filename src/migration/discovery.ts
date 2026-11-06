@@ -13,17 +13,17 @@ export interface NativeDiscoveryFacade {
 }
 
 const LEGACY: Record<ModuleId, string> = {
-  context: 'dsh-tool-compact-context', retry: 'dsh-stream-retry',
+  'compact-context': 'dsh-tool-compact-context', retry: 'dsh-stream-retry',
   chime: 'dsh-session-chime', goalWait: 'dsh-goal-wait-gate',
 };
-const KNOWN_VERSIONS: Record<ModuleId, string> = { context: '0.4.7', retry: '0.1.9', chime: '0.6.0', goalWait: '0.3.0' };
+const KNOWN_VERSIONS: Record<ModuleId, string> = { 'compact-context': '0.4.7', retry: '0.1.9', chime: '0.6.0', goalWait: '0.3.0' };
 const OLD_ROWS: Record<ModuleId, string[]> = {
-  context: ['dsh-tool-compact-context'], retry: ['stream-retry'],
+  'compact-context': ['dsh-tool-compact-context'], retry: ['stream-retry'],
   chime: ['dsh-session-chime', 'session-chime'], goalWait: ['goal-wait-gate'],
 };
 const DISTRIBUTIONS: Record<string, readonly ModuleId[]> = {
-  'dsh-extras': ['context', 'retry', 'chime', 'goalWait'],
-  'dsh-extras-compact-context': ['context'], 'dsh-extras-retry': ['retry'],
+  'dsh-extras': ['compact-context', 'retry', 'chime', 'goalWait'],
+  'dsh-extras-compact-context': ['compact-context'], 'dsh-extras-retry': ['retry'],
   'dsh-extras-chime': ['chime'], 'dsh-extras-goal-wait': ['goalWait'],
 };
 const record = (value: unknown): value is Values => !!value && typeof value === 'object' && !Array.isArray(value);

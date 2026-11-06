@@ -11,9 +11,9 @@ import { profilePaths } from '../../src/migration/storage.ts';
 import type { Distribution, LoaderEntry, ModuleId, NativeMigrationHost } from '../../src/migration/types.ts';
 
 const anchor = process.env.DSH_TEST_INSTALL_ANCHOR ?? createRequire(import.meta.url).resolve('@deepseek-ai/dsh/package.json');
-const target: Distribution = { rowId: 'dsh-extras', packageName: 'dsh-extras', moduleIds: ['context', 'retry', 'chime', 'goalWait'] };
-const packages = { retry: ['dsh-stream-retry', '0.1.9', 'stream-retry'], context: ['dsh-tool-compact-context', '0.4.7', 'dsh-tool-compact-context'] } as const;
-async function fixture(t: TestContext, modules: ('context' | 'retry')[] = ['retry']) {
+const target: Distribution = { rowId: 'dsh-extras', packageName: 'dsh-extras', moduleIds: ['compact-context', 'retry', 'chime', 'goalWait'] };
+const packages = { retry: ['dsh-stream-retry', '0.1.9', 'stream-retry'], 'compact-context': ['dsh-tool-compact-context', '0.4.7', 'dsh-tool-compact-context'] } as const;
+async function fixture(t: TestContext, modules: ('compact-context' | 'retry')[] = ['retry']) {
   const root = await mkdtemp(join(tmpdir(), 'extras-rollback-ownership-'));
   const home = join(root, 'HOME'), dshHome = join(home, 'DSH_HOME'), dir = join(dshHome, 'profiles', 'rollback-proof');
   await mkdir(dir, { recursive: true });
@@ -44,12 +44,12 @@ async function fixture(t: TestContext, modules: ('context' | 'retry')[] = ['retr
   assert.equal(child.status, 0, child.stderr);
   const operationId = JSON.parse(child.stdout).operationId as string;
   const manifest = async () => JSON.parse(await readFile(join(dir, 'package.json'), 'utf8'));
-  const addPeer = async (id: 'context' | 'retry') => {
+  const addPeer = async (id: 'compact-context' | 'retry') => {
     const name = 'dsh-extras-' + id;
     await pkg(name, '0.1.0', { id: 'peer-' + id, name, config: { modules: {} } });
     const value = await manifest(); value.dependencies[name] = '*'; value.dsh.profile.bundles.push(name); await writeFile(join(dir, 'package.json'), JSON.stringify(value));
   };
-  const assertBlocked = async (id: 'context' | 'retry') => {
+  const assertBlocked = async (id: 'compact-context' | 'retry') => {
     const value = await manifest(); assert.equal(value.dsh.profile.bundles.includes(packages[id][0]), false, 'legacy bundle stays deselected');
     const text = await readFile(host.profileContext.patchPath, 'utf8');
     assert.ok(text.includes('dsh-extras-migration:' + operationId + ':' + id), 'owned legacy disable marker retained');
@@ -75,11 +75,11 @@ test('rollback sees live peer inventory even when its selected profile row disap
 });
 
 test('a conflicting peer blocks only its module while a disjoint requested source restores', async t => {
-  const f = await fixture(t, ['context', 'retry']); await f.addPeer('retry');
-  const report = await rollbackMigration(f.host, target, { operationId: f.operationId, modules: ['retry', 'context'] });
+  const f = await fixture(t, ['compact-context', 'retry']); await f.addPeer('retry');
+  const report = await rollbackMigration(f.host, target, { operationId: f.operationId, modules: ['retry', 'compact-context'] });
   assert.equal(report.modules.retry?.phase, 'conflict'); await f.assertBlocked('retry');
-  assert.equal(report.modules.context?.phase, 'rolled-back');
-  assert.ok((await f.manifest()).dsh.profile.bundles.includes(packages.context[0]));
+  assert.equal(report.modules['compact-context']?.phase, 'rolled-back');
+  assert.ok((await f.manifest()).dsh.profile.bundles.includes(packages['compact-context'][0]));
 });
 
 for (const mutation of ['version', 'bundle config', 'profile config', 'HOME expression', 'launcher override', 'package identity', 'global ambiguity']) test('rollback retains owned disable switches after changed ' + mutation, async t => {
@@ -98,7 +98,7 @@ for (const mutation of ['version', 'bundle config', 'profile config', 'HOME expr
   assert.equal(report.modules.retry?.phase, 'conflict'); assert.ok(report.modules.retry.reason); await f.assertBlocked('retry');
 });
 
-async function interruptedRestore(f: Awaited<ReturnType<typeof fixture>>, modules: ('context' | 'retry')[], patchAlreadyWritten: boolean) {
+async function interruptedRestore(f: Awaited<ReturnType<typeof fixture>>, modules: ('compact-context' | 'retry')[], patchAlreadyWritten: boolean) {
   const paths = await profilePaths(f.host, target.rowId), journal = JSON.parse(await readFile(paths.journal, 'utf8'));
   const patchBefore = await readFile(paths.patch, 'utf8'), manifestBefore = await readFile(paths.manifest, 'utf8');
   const doc = parseDocument(patchBefore), manifest = JSON.parse(manifestBefore);
@@ -114,13 +114,13 @@ async function interruptedRestore(f: Awaited<ReturnType<typeof fixture>>, module
 }
 
 for (const partial of [false, true]) test('interrupted restoration replay revalidates new peers and resumes disjoint modules; patch written=' + partial, async t => {
-  const f = await fixture(t, ['context', 'retry']);
-  await interruptedRestore(f, ['retry', 'context'], partial); await f.addPeer('retry');
-  const report = await rollbackMigration(f.host, target, { operationId: f.operationId, modules: ['retry', 'context'] });
+  const f = await fixture(t, ['compact-context', 'retry']);
+  await interruptedRestore(f, ['retry', 'compact-context'], partial); await f.addPeer('retry');
+  const report = await rollbackMigration(f.host, target, { operationId: f.operationId, modules: ['retry', 'compact-context'] });
   assert.equal(report.modules.retry?.phase, 'conflict'); await f.assertBlocked('retry');
-  assert.equal(report.modules.context?.phase, 'rolled-back');
+  assert.equal(report.modules['compact-context']?.phase, 'rolled-back');
   const names = (await f.manifest()).dsh.profile.bundles;
-  assert.ok(names.includes(packages.context[0])); assert.ok(names.includes('dsh-extras-retry'));
+  assert.ok(names.includes(packages['compact-context'][0])); assert.ok(names.includes('dsh-extras-retry'));
 });
 
 for (const enabled of [true, false]) test('unselected peer journal tracks real host PID, not mere process existence; enabled=' + enabled, { timeout: 15000 }, async t => {

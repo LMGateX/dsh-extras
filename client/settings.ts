@@ -1,7 +1,7 @@
 import { bindSection, createPageFormAdapter } from './forms.ts';
 import type { ConfigForm, ConfigFormSnapshot, ConfigPageForm, PathOperation } from './forms.ts';
 
-export type ModuleId = 'context' | 'retry' | 'chime' | 'goalWait';
+export type ModuleId = 'compact-context' | 'retry' | 'chime' | 'goalWait';
 export interface SettingsDescriptor {
   rowId: string;
   packageName: string;
@@ -148,7 +148,7 @@ export function createFieldEditor(form: ConfigForm, field: TextField) {
 }
 
 const labels: Record<ModuleId, string> = {
-  context: 'Context compaction', retry: 'Stream and empty-response retry',
+  'compact-context': 'Compact-context', retry: 'Stream and empty-response retry',
   chime: 'Session chime', goalWait: 'Goal wait',
 };
 const emptyStatus: SettingsStatusStore = { getSnapshot: () => undefined, subscribe: () => () => {} };
@@ -223,7 +223,7 @@ export function createSettingsView(
     const text = (field: TextField, label: string, hint?: string) => h(TextControl, { key: field, form, field, label, hint });
     const flag = (field: string, label: string, fallback = false) => h(Switch, { key: field, form, field, label, fallback });
     let fields: unknown[];
-    if (id === 'context') fields = [
+    if (id === 'compact-context') fields = [
       flag('compactTool', 'Expose compact_context', true), flag('statusTool', 'Expose context_status (opt-in)'),
       flag('guidance', 'Add context guidance to the system prompt'),
       text('guidanceText', 'Custom guidance text', 'Empty uses built-in guidance; at most 8000 characters.'),

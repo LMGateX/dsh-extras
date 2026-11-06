@@ -5,7 +5,7 @@ Every row is mandatory for 0.1.0 unless explicitly identified as an exceptional 
 | ID | Criterion |
 | --- | --- |
 | DOC-1 | Specification committed before implementation; source provenance and notices recorded. |
-| MOD-1 | Context tools/policy/retention/PTC regression tests preserved; canonical tools unchanged. |
+| MOD-1 | Compact-context tools/policy/retention/PTC regression tests preserved; canonical tools unchanged. |
 | MOD-2 | Stream and empty-response classification preserved, cancellation/unload safe, no extra retry loop. |
 | MOD-3 | Browser chime completion/blocked/question/error, rest/DND, debounce, no child/ordinary fork misclassification and unload/audio cleanup verified. |
 | MOD-4 | Gate jobs/live descendants, owned hold/release, external disarm/goal phase/unload invariants verified. |

@@ -1,7 +1,7 @@
 // @ts-nocheck — regression port from the original JavaScript suite.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { apply, Config, inject, name, resolveConfig } from '../../../src/modules/context/index.ts';
+import { apply, Config, inject, name, resolveConfig } from '../../../src/modules/compact-context/index.ts';
 import { buildConversation } from './helpers.ts';
 
 /** Count full-surface measurements made through one harness. */
@@ -183,7 +183,7 @@ function makeHarness({
 }
 
 test('registers the expected plugin surface', () => {
-  assert.equal(name, 'extras-context');
+  assert.equal(name, 'extras-compact-context');
   const defaults = resolveConfig(Config({}));
   assert.equal(defaults.compactTool, true);
   assert.equal(defaults.statusTool, false);

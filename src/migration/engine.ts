@@ -257,8 +257,8 @@ export async function runMigration(host: NativeMigrationHost, target: Distributi
 }
 
 const PEER_MODULES: Record<string, readonly ModuleId[]> = {
-  'dsh-extras': ['context', 'retry', 'chime', 'goalWait'],
-  'dsh-extras-compact-context': ['context'], 'dsh-extras-retry': ['retry'],
+  'dsh-extras': ['compact-context', 'retry', 'chime', 'goalWait'],
+  'dsh-extras-compact-context': ['compact-context'], 'dsh-extras-retry': ['retry'],
   'dsh-extras-chime': ['chime'], 'dsh-extras-goal-wait': ['goalWait'],
 };
 async function rollbackNative(host: NativeMigrationHost): Promise<NativeDiscoveryFacade> {

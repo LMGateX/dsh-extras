@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as chime from '../../src/modules/chime/index.ts';
-import * as context from '../../src/modules/context/index.ts';
+import * as context from '../../src/modules/compact-context/index.ts';
 import type { Distribution } from '../../src/types.ts';
 import { loaderFixture } from './loader-harness.ts';
 
@@ -29,12 +29,12 @@ test('status route uses actual native owner cookies, Host and Origin admission a
 });
 
 test('a configured peer capability fails closed and is reported as a conflict, not an ordinary disable', { timeout: 10000 }, async t => {
-  const d: Distribution = { name: 'dsh-extras-compact-context', moduleIds: ['context'], modulePlugins: { context } };
-  const f = await loaderFixture(t, d, { modules: { context: { enabled: true } }, migration: { auto: false } }, undefined,
-    [{ id: 'other-owner', name: 'dsh-extras', config: { modules: { context: { enabled: true } } } }]);
+  const d: Distribution = { name: 'dsh-extras-compact-context', moduleIds: ['compact-context'], modulePlugins: { 'compact-context': context } };
+  const f = await loaderFixture(t, d, { modules: { 'compact-context': { enabled: true } }, migration: { auto: false } }, undefined,
+    [{ id: 'other-owner', name: 'dsh-extras', config: { modules: { 'compact-context': { enabled: true } } } }]);
   const state = await f.ready();
-  assert.equal(state.modules.context.ready, false);
-  assert.equal(state.report.modules.context.phase, 'conflict');
-  assert.equal(state.modules.context.phase, 'conflict');
-  assert.match(state.modules.context.reason, /another Extras distribution/);
+  assert.equal(state.modules['compact-context'].ready, false);
+  assert.equal(state.report.modules['compact-context'].phase, 'conflict');
+  assert.equal(state.modules['compact-context'].phase, 'conflict');
+  assert.match(state.modules['compact-context'].reason, /another Extras distribution/);
 });

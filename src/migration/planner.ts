@@ -2,15 +2,15 @@ import type { Decision, Discovery, MigrationPlan, ModuleId, Values } from './typ
 import { validateModuleConfig } from './validation.ts';
 
 export const LEGACY_PACKAGES: Record<ModuleId, string> = {
-  context: 'dsh-tool-compact-context', retry: 'dsh-stream-retry', chime: 'dsh-session-chime', goalWait: 'dsh-goal-wait-gate',
+  'compact-context': 'dsh-tool-compact-context', retry: 'dsh-stream-retry', chime: 'dsh-session-chime', goalWait: 'dsh-goal-wait-gate',
 };
 export const LEGACY_DEFAULTS: Record<ModuleId, Values> = {
-  context: { compactTool: true, statusTool: false, guidance: false, guidanceText: '', pressureContext: false, notifyAtRatio: 0.25, pressureStep: 10, retryAttempts: 2, retryDelayMs: 1000, ptcTimeoutMs: 0, ptcModelTimeouts: {} },
+  'compact-context': { compactTool: true, statusTool: false, guidance: false, guidanceText: '', pressureContext: false, notifyAtRatio: 0.25, pressureStep: 10, retryAttempts: 2, retryDelayMs: 1000, ptcTimeoutMs: 0, ptcModelTimeouts: {} },
   retry: { errorCodes: ['upstream_stream_read_error', 'stream_timeout', 'stream error'], providers: [], retryEmptyResponse: true },
   chime: { enabled: true, soundDone: 'chime-soft', soundBlocked: 'alert-low', soundQuestion: 'bell-bright', soundError: 'alert-sharp', chimeQuestion: true, chimeError: true, volume: 0.8, durationMs: 0, debounceMs: 1500, quietStyle: 'short', quietShortMs: 600, dndStart: '', dndEnd: '', restMode: false, minRingMs: 3000, banner: true, bannerPlacement: 'bottom-center' },
   goalWait: { waitForJobs: true, waitForSubagents: true, maxHoldMs: 0 },
 };
-const VERSIONS: Record<ModuleId, string[]> = { context: ['0.4.7'], retry: ['0.1.9'], chime: ['0.6.0'], goalWait: ['0.3.0'] };
+const VERSIONS: Record<ModuleId, string[]> = { 'compact-context': ['0.4.7'], retry: ['0.1.9'], chime: ['0.6.0'], goalWait: ['0.3.0'] };
 /** Detached deep merge: arrays replace; prototype-bearing keys are never admitted. */
 export function mergeValues(...layers: Values[]): Values {
   const out: Values = {};

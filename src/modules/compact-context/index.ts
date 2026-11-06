@@ -34,7 +34,7 @@ import { buildStatus, renderStatus } from './status.ts';
 import type { ContextStatus, StatusOptions } from './status.ts';
 
 /** Stable Cordis plugin name. */
-export const name = 'extras-context';
+export const name = 'extras-compact-context';
 
 /** Services the tools cannot work without. */
 export const inject = ['tools', 'tokenMeter', 'systemPrompt', 'llm'];

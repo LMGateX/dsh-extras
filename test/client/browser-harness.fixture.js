@@ -17,7 +17,7 @@ window.AudioContext = class extends NativeAudio {
     return source;
   }
 };
-let snapshot = { status: 'ready', writable: true, revision: 1, value: JSON.parse(localStorage.getItem(descriptor.rowId) || 'null') || { modules: Object.fromEntries(descriptor.moduleIds.map(id => [id, { enabled: true, ...(id === 'context' ? { retryAttempts: 2, retryDelayMs: 1000, ptcTimeoutMs: 0, ptcModelTimeouts: {} } : {}), ...(id === 'chime' ? { debounceMs: 0, durationMs: 5000, minRingMs: 3000, banner: true } : {}) }])) } };
+let snapshot = { status: 'ready', writable: true, revision: 1, value: JSON.parse(localStorage.getItem(descriptor.rowId) || 'null') || { modules: Object.fromEntries(descriptor.moduleIds.map(id => [id, { enabled: true, ...(id === 'compact-context' ? { retryAttempts: 2, retryDelayMs: 1000, ptcTimeoutMs: 0, ptcModelTimeouts: {} } : {}), ...(id === 'chime' ? { debounceMs: 0, durationMs: 5000, minRingMs: 3000, banner: true } : {}) }])) } };
 const listeners = new Set();
 const form = {
   getSnapshot: () => snapshot,

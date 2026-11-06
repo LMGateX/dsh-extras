@@ -5,8 +5,8 @@ import { build } from 'esbuild';
 import { Context } from '@deepseek-ai/cordis';
 
 const distributions = [
-  { packageName: 'dsh-extras', rowId: 'dsh-extras', moduleIds: ['context','retry','chime','goalWait'] },
-  ...['context','retry','chime','goalWait'].map(id => ({ packageName: 'dsh-extras-' + (id === 'goalWait' ? 'goal-wait' : id), rowId: 'dsh-extras-' + (id === 'goalWait' ? 'goal-wait' : id), moduleIds: [id] })),
+  { packageName: 'dsh-extras', rowId: 'dsh-extras', moduleIds: ['compact-context','retry','chime','goalWait'] },
+  ...['compact-context','retry','chime','goalWait'].map(id => ({ packageName: 'dsh-extras-' + (id === 'goalWait' ? 'goal-wait' : id), rowId: 'dsh-extras-' + (id === 'goalWait' ? 'goal-wait' : id), moduleIds: [id] })),
 ];
 
 export async function emitted(descriptor: typeof distributions[number]) {

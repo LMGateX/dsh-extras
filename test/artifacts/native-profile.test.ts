@@ -75,12 +75,12 @@ test('native CLI installs packed combined distribution into isolated web profile
   assert.equal(await page.locator('[data-module]').count(),4);
   const moduleStatus=await page.evaluate(async()=>{const response=await fetch('/extras/dsh-extras/status',{credentials:'same-origin',cache:'no-store'});return {code:response.status,body:await response.json()};});
   assert.equal(moduleStatus.code,200);assert.equal(moduleStatus.body.modules.chime.ready,true);
-  assert.equal(moduleStatus.body.modules.context.phase,'active','context adapter activates without a global engine in stock web presets');
-  assert.deepEqual(Object.keys(moduleStatus.body.modules).sort(),['chime','context','goalWait','retry']);
+  assert.equal(moduleStatus.body.modules['compact-context'].phase,'active','context adapter activates without a global engine in stock web presets');
+  assert.deepEqual(Object.keys(moduleStatus.body.modules).sort(),['chime','compact-context','goalWait','retry']);
   console.log('Native module phases:',Object.fromEntries(Object.entries(moduleStatus.body.modules).map(([id,value])=>[id,(value as any).phase])));
-  const delay=page.locator('[data-module="context"] [data-field="retryDelayMs"]');
+  const delay=page.locator('[data-module="compact-context"] [data-field="retryDelayMs"]');
   await delay.locator('input').fill('3.5');await delay.getByRole('button',{name:'Save',exact:true}).click();
-  await page.waitForFunction(()=>!(document.querySelectorAll('[data-module="context"] [data-field="retryDelayMs"] button')[2] as HTMLButtonElement)?.disabled);
+  await page.waitForFunction(()=>!(document.querySelectorAll('[data-module="compact-context"] [data-field="retryDelayMs"] button')[2] as HTMLButtonElement)?.disabled);
   assert.deepEqual(await delay.getByRole('alert').allTextContents(),[]);
   await page.getByRole('checkbox',{name:'Enable Stream and empty-response retry',exact:true}).click();
   await page.waitForFunction(()=>!(document.querySelector('[data-module=retry] input[data-field=enabled]') as HTMLInputElement)?.checked);
@@ -92,7 +92,7 @@ test('native CLI installs packed combined distribution into isolated web profile
   await page.getByRole('button',{name:'View dsh-extras',exact:true}).click();
   await page.getByRole('button',{name:'Configure dsh-extras',exact:true}).click();
   await page.locator('[data-package="dsh-extras"]').waitFor();
-  assert.equal(await page.locator('[data-module="context"] [data-field="retryDelayMs"] input').inputValue(),'3.5');
+  assert.equal(await page.locator('[data-module="compact-context"] [data-field="retryDelayMs"] input').inputValue(),'3.5');
   assert.equal(await page.getByRole('checkbox',{name:'Enable Stream and empty-response retry',exact:true}).isChecked(),false);
   const chimeSection=page.locator('[data-module="chime"]');
   await chimeSection.locator('#dsh-session-chime-enabled').uncheck();
@@ -102,7 +102,7 @@ test('native CLI installs packed combined distribution into isolated web profile
   assert.deepEqual(await chimeSection.getByRole('alert').allTextContents(),[]);
   const persisted=await readFile(join(environment(temp).DSH_HOME!,'profiles',profile,'cordis.patch.yml'),'utf8');
   const accepted=parse(persisted).find((row:any)=>row.id==='dsh-extras').config.modules;
-  assert.equal(accepted.context.retryDelayMs,3500);assert.equal(accepted.retry.enabled,false);assert.equal(accepted.chime.restMode,true);assert.equal(accepted.chime.enabled,false);
+  assert.equal(accepted['compact-context'].retryDelayMs,3500);assert.equal(accepted.retry.enabled,false);assert.equal(accepted.chime.restMode,true);assert.equal(accepted.chime.enabled,false);
   assert.deepEqual(errors,[]);
   console.log('Native startup log:',clean(log).slice(-3000));
 });

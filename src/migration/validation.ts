@@ -3,7 +3,7 @@ import type { ModuleId, Values } from './types.ts';
 /**
  * Config-only migration admission for the audited legacy versions. This deliberately
  * imports no feature entrypoints: split distributions must not bundle other modules.
- * Bounds mirror context validateConfig, retry Config, chime resolveRowConfig, and
+ * Bounds mirror compact-context validateConfig, retry Config, chime resolveRowConfig, and
  * goal-wait resolveConfig. Omitted fields are left for the existing default resolver.
  */
 type Rule = (value: unknown, field: string) => void;
@@ -58,7 +58,7 @@ const sounds = ['chime-soft', 'bell-bright', 'marimba', 'alert-low', 'alert-shar
 const identifier = string(200, 1, /^[^:\s"'\x60\u0000-\u001f\u007f](?:[^:"'\x60\u0000-\u001f\u007f]*[^:\s"'\x60\u0000-\u001f\u007f])?$/u);
 const clock = string(Infinity, 0, /^(?:|(?:[01]\d|2[0-3]):[0-5]\d)$/);
 const rules: Record<ModuleId, Record<string, Rule>> = {
-  context: {
+  'compact-context': {
     enabled: boolean, compactTool: boolean, statusTool: boolean, guidance: boolean,
     guidanceText: string(8000), pressureContext: boolean,
     notifyAtRatio: number(0, 1, false, false, true), pressureStep: number(1, 50, true),

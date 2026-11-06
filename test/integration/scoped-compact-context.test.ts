@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import * as context from '../../src/modules/context/index.ts';
+import * as context from '../../src/modules/compact-context/index.ts';
 import type { Distribution } from '../../src/types.ts';
 import { createRuntime, runTurn, MockAdapter } from '../modules/retry/runtime.ts';
 import { loadHost, loaderFixture, until } from './loader-harness.ts';
@@ -8,9 +8,9 @@ import { loadHost, loaderFixture, until } from './loader-harness.ts';
 test('context capabilities mount without a root engine and report missing engines for the exact agent', { timeout: 10000 }, async t => {
   const runtime = await createRuntime({ product: false, retry: false }); t.after(() => runtime.dispose());
   await runtime.ctx.plugin((await loadHost('dsh-token-meter')).default).await();
-  const d: Distribution = { name: 'dsh-extras-compact-context', moduleIds: ['context'], modulePlugins: { context } };
-  const f = await loaderFixture(t, d, { modules: { context: { enabled: true, statusTool: true } }, migration: { auto: false } }, runtime.ctx);
-  const state = await f.ready(); assert.equal(state.modules.context.phase, 'active');
+  const d: Distribution = { name: 'dsh-extras-compact-context', moduleIds: ['compact-context'], modulePlugins: { 'compact-context': context } };
+  const f = await loaderFixture(t, d, { modules: { 'compact-context': { enabled: true, statusTool: true } }, migration: { auto: false } }, runtime.ctx);
+  const state = await f.ready(); assert.equal(state.modules['compact-context'].phase, 'active');
   const handle = await runtime.createAgent({ sessionId: 'without-scoped-engine' });
   const compact = runtime.ctx.tools.get('compact_context', handle.agent);
   assert.ok(compact);
@@ -23,8 +23,8 @@ test('context capabilities mount without a root engine and report missing engine
 test('canonical context tools route to exact retained native preset engines in nested isolated groups', { timeout: 20000 }, async t => {
   const runtime = await createRuntime({ product: false, retry: false }); t.after(() => runtime.dispose());
   const ctx = runtime.ctx; await ctx.plugin((await loadHost('dsh-token-meter')).default).await();
-  const d: Distribution = { name: 'dsh-extras-compact-context', moduleIds: ['context'], modulePlugins: { context } };
-  const initial = { modules: { context: { enabled: true, statusTool: true, retryAttempts: 0 } }, migration: { auto: false } };
+  const d: Distribution = { name: 'dsh-extras-compact-context', moduleIds: ['compact-context'], modulePlugins: { 'compact-context': context } };
+  const initial = { modules: { 'compact-context': { enabled: true, statusTool: true, retryAttempts: 0 } }, migration: { auto: false } };
   const f = await loaderFixture(t, d, initial, ctx); await f.ready();
   const basic = (await loadHost('dsh-compaction-basic')).default;
   f.importTable.set('@deepseek-ai/dsh-compaction-basic', basic);
@@ -76,7 +76,7 @@ test('canonical context tools route to exact retained native preset engines in n
   assert.equal(compactTwo.ok, true, JSON.stringify(compactTwo)); assert.equal(compactTwo.mode, 'retention');
   assert.deepEqual([...one.agent.session.surface.nodes], beforeOne, 'the second native engine never dispatches to the first session');
   assert.equal(wrongCalls, 0);
-  await f.update({ ...initial, modules: { context: { ...initial.modules.context, statusTool: false } } });
+  await f.update({ ...initial, modules: { 'compact-context': { ...initial.modules['compact-context'], statusTool: false } } });
   await until(() => ctx.tools.get('context_status', one.agent), value => value === undefined, 'scoped optional tool disabled');
   assert.ok(ctx.tools.get('compact_context', two.agent));
   await f.entry.update({ disabled: true }); await f.loader.await();

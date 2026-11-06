@@ -13,7 +13,7 @@ import type { Distribution, LoaderEntry, NativeMigrationHost } from '../../src/m
 
 const require = createRequire(import.meta.url);
 const anchor = process.env.DSH_TEST_INSTALL_ANCHOR ?? require.resolve('@deepseek-ai/dsh/package.json');
-const target: Distribution = { rowId: 'dsh-extras', packageName: 'dsh-extras', moduleIds: ['context','retry','chime','goalWait'] };
+const target: Distribution = { rowId: 'dsh-extras', packageName: 'dsh-extras', moduleIds: ['compact-context','retry','chime','goalWait'] };
 async function fixture(work: (f: {host: NativeMigrationHost; dir:string; root:string; entries:LoaderEntry[]}) => Promise<void>, legacy = true) {
   const root = await mkdtemp(join(tmpdir(), 'extras-migrate-'));
   const dir = join(root, 'profiles', 'test'); const home = join(root, 'home');
@@ -38,7 +38,7 @@ test('pure discovery/dry-run leaves complete profile untouched',async()=>fixture
   const before=await readFile(join(dir,'cordis.patch.yml'),'utf8');
   const plan=await dryRunMigration(host,target);
   assert.equal(plan.decisions.find(d=>d.moduleId==='retry')?.config?.retryEmptyResponse,false);
-  assert.equal(plan.decisions.find(d=>d.moduleId==='context')?.enabled,false);
+  assert.equal(plan.decisions.find(d=>d.moduleId==='compact-context')?.enabled,false);
   assert.equal(await readFile(join(dir,'cordis.patch.yml'),'utf8'),before);
   assert.deepEqual(await readdir(dir),['cordis.patch.yml','node_modules','package.json']);
 }));
@@ -100,8 +100,8 @@ test('bootstrap does not enter inherited HMR context or wait for own Loader',asy
 test('fresh installation opens only supported module gates without profile writes',async()=>fixture(async({host,dir})=>{
   host.moduleConfig=()=>({enabled:true});
   const report=await runMigration(host,target);
-  assert.equal(report.modules.context?.ready,true);
-  assert.equal(report.modules.context?.enabled,true);
+  assert.equal(report.modules['compact-context']?.ready,true);
+  assert.equal(report.modules['compact-context']?.enabled,true);
   assert.equal(await readFile(join(dir,'cordis.patch.yml'),'utf8'),'[]\n'.replace('\\n','\n'));
 },false));
 function childRun(host: NativeMigrationHost, body: string, observed = true): unknown {
@@ -179,12 +179,12 @@ test('each ownership-changing stage revalidates overlay inputs after its checkpo
 test('all persisted absent modules stay gated until the running root adopts their off config',async()=>fixture(async({host,entries})=>{
   host.moduleConfig=()=>({enabled:true});
   const first=await runMigration(host,target);
-  assert.equal(first.modules.context?.ready,false);
+  assert.equal(first.modules['compact-context']?.ready,false);
   assert.equal(first.modules.chime?.ready,false);
   const input=await inspectMigration(host,target);const config=input.rows.find(row=>row.id===target.rowId)!.config as any;
   entries.push({id:'include:dsh-extras',options:{id:'dsh-extras',name:'dsh-extras'},fiber:{state:2,effectiveConfig:config}});
   host.moduleConfig=id=>config.modules[id];
-  assert.equal((await runMigration(host,target)).modules.context?.ready,true);
+  assert.equal((await runMigration(host,target)).modules['compact-context']?.ready,true);
 }));
 test('rollback fences current host B after migration host A exited',async()=>fixture(async({host,dir,entries})=>{
   const first=childRun(host,"const report=await runMigration(host,target);console.log(JSON.stringify(report));") as {operationId:string};
@@ -241,24 +241,24 @@ test('disabled host startup does not manufacture active target ownership',async(
 test('auto=false partial migration keeps unadopted absent defaults gated and refreshes later explicit toggles',async()=>fixture(async({host,dir})=>{
   const before=await readFile(join(dir,'cordis.patch.yml'),'utf8');
   const listeners=new Map<string,()=>void>();host.on=(name,callback)=>{listeners.set(name,callback);return()=>{listeners.delete(name);};};
-  const current:Record<string,any>={context:{enabled:true},retry:{enabled:true},chime:{enabled:true},goalWait:{enabled:true}};
+  const current:Record<string,any>={'compact-context':{enabled:true},retry:{enabled:true},chime:{enabled:true},goalWait:{enabled:true}};
   host.moduleConfig=id=>current[id];
   const controller=startAutomaticMigration(host,{...target,auto:false});
   const keep=setInterval(()=>{},1000);
   try {
     const first=await controller.settled;
-    assert.equal(first.modules.context?.ready,false);
+    assert.equal(first.modules['compact-context']?.ready,false);
     assert.equal(await readFile(join(dir,'cordis.patch.yml'),'utf8'),before);
-    await writeFile(join(dir,'cordis.patch.yml'),JSON.stringify([{id:target.rowId,config:{modules:{context:{enabled:true}}}}]));
-    const updated=new Promise<void>(resolve=>{const off=controller.subscribe(state=>{if(state.modules.context?.ready){off();resolve();}});});
+    await writeFile(join(dir,'cordis.patch.yml'),JSON.stringify([{id:target.rowId,config:{modules:{'compact-context':{enabled:true}}}}]));
+    const updated=new Promise<void>(resolve=>{const off=controller.subscribe(state=>{if(state.modules['compact-context']?.ready){off();resolve();}});});
     listeners.get('loader/volatile-update')!();await updated;
-    assert.equal(controller.state().modules.context?.ready,true);
+    assert.equal(controller.state().modules['compact-context']?.ready,true);
     // Disable and re-enable remain owned by current root config, not historical migration enabled.
-    current.context.enabled=false;await writeFile(join(dir,'cordis.patch.yml'),JSON.stringify([{id:target.rowId,config:{modules:{context:{enabled:false}}}}]));
-    await controller.retry();assert.equal(controller.state().modules.context?.ready,true);
-    current.context.enabled=true;await writeFile(join(dir,'cordis.patch.yml'),JSON.stringify([{id:target.rowId,config:{modules:{context:{enabled:true}}}}]));
+    current['compact-context'].enabled=false;await writeFile(join(dir,'cordis.patch.yml'),JSON.stringify([{id:target.rowId,config:{modules:{'compact-context':{enabled:false}}}}]));
+    await controller.retry();assert.equal(controller.state().modules['compact-context']?.ready,true);
+    current['compact-context'].enabled=true;await writeFile(join(dir,'cordis.patch.yml'),JSON.stringify([{id:target.rowId,config:{modules:{'compact-context':{enabled:true}}}}]));
     listeners.get('loader/volatile-update')!();
-    await controller.retry();assert.equal(controller.state().modules.context?.ready,true);
+    await controller.retry();assert.equal(controller.state().modules['compact-context']?.ready,true);
   } finally {clearInterval(keep);controller.dispose();}
 }));
 for(const executor of ['engine','CLI']) for(const config of [{pressureStep:0},{retryAttempts:6},{guidanceText:'x'.repeat(8001)},{ptcModelTimeouts:{'provider/model':0}}]) {
@@ -267,7 +267,7 @@ for(const executor of ['engine','CLI']) for(const config of [{pressureStep:0},{r
     await writeFile(join(pkg,'package.json'),JSON.stringify({name:'dsh-tool-compact-context',version:'0.4.7',dsh:{bundle:{patch:'./cordis.patch.yml'}}}));
     await writeFile(join(pkg,'cordis.patch.yml'),JSON.stringify([{insert:[{id:'dsh-tool-compact-context',name:'dsh-tool-compact-context'}]}]));
     const path=join(dir,'package.json');const manifest=JSON.parse(await readFile(path,'utf8'));manifest.dependencies['dsh-tool-compact-context']='*';manifest.dsh.profile.bundles.push('dsh-tool-compact-context');await writeFile(path,JSON.stringify(manifest));
-    await writeFile(join(dir,'cordis.patch.yml'),JSON.stringify([{id:target.rowId,config:{modules:{context:config}}}]));
+    await writeFile(join(dir,'cordis.patch.yml'),JSON.stringify([{id:target.rowId,config:{modules:{'compact-context':config}}}]));
     const before=await readFile(path,'utf8');
     let result;
     if(executor==='engine')result=await runMigration(host,target);
@@ -275,7 +275,7 @@ for(const executor of ['engine','CLI']) for(const config of [{pressureStep:0},{r
       const output=spawnSync(process.execPath,[new URL('../../src/migration/cli.ts',import.meta.url).pathname,'apply','--profile-dir',dir,'--dsh-home',host.profileContext.home,'--install-anchor',anchor],{env:{...process.env},encoding:'utf8'});
       assert.equal(output.status,0,output.stderr);result=JSON.parse(output.stdout);
     }
-    assert.equal(result.modules.context?.phase,'conflict');assert.equal(await readFile(path,'utf8'),before);
+    assert.equal(result.modules['compact-context']?.phase,'conflict');assert.equal(await readFile(path,'utf8'),before);
     assert.ok(!(await readFile(join(dir,'cordis.patch.yml'),'utf8')).includes('name: dsh-tool-compact-context'));
   },false));
 }
@@ -383,5 +383,5 @@ test('auto=false preserves peer conflict diagnostics ahead of config adoption me
   await writeFile(join(path,'cordis.patch.yml'),JSON.stringify([{insert:[{id:peer,name:peer}]}]));
   const file=join(dir,'package.json');const manifest=JSON.parse(await readFile(file,'utf8'));manifest.dependencies[peer]='*';manifest.dsh.profile.bundles.push(peer);await writeFile(file,JSON.stringify(manifest));
   const controller=startAutomaticMigration(host,{...target,auto:false});const keep=setInterval(()=>{},1000);
-  try {const report=await controller.settled;assert.equal(report.modules.context?.phase,'conflict');assert.match(report.modules.context?.reason??'',/another Extras distribution/);}finally{controller.dispose();clearInterval(keep);}
+  try {const report=await controller.settled;assert.equal(report.modules['compact-context']?.phase,'conflict');assert.match(report.modules['compact-context']?.reason??'',/another Extras distribution/);}finally{controller.dispose();clearInterval(keep);}
 }));

@@ -1,7 +1,7 @@
 // @ts-nocheck — regression port from the original JavaScript suite.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { selectNativeRetentionRange } from '../../../src/modules/context/manual.ts';
+import { selectNativeRetentionRange } from '../../../src/modules/compact-context/manual.ts';
 import { makeSession } from './helpers.ts';
 
 const text = (role) => ({ message: { role, content: [{ type: 'text', text: role }] } });

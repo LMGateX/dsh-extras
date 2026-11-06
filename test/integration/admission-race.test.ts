@@ -13,7 +13,7 @@ test('root reads fresh admission after awaiting a different module disposer', { 
   const dir = await mkdtemp(resolve('.sandbox-root-admission-'));
   const key = '__extras_admission_' + randomUUID().replaceAll('-', '_');
   const listeners = new Set<() => void>();
-  const observations: any = { modules: { context: { ready: true }, retry: { ready: true } } };
+  const observations: any = { modules: { 'compact-context': { ready: true }, retry: { ready: true } } };
   const controller = { state: () => structuredClone(observations), settled: Promise.resolve({}),
     subscribe(fn: () => void) { listeners.add(fn); return () => listeners.delete(fn); }, dispose() {} };
   (globalThis as any)[key] = controller;
@@ -31,16 +31,16 @@ test('root reads fresh admission after awaiting a different module disposer', { 
   let contextMounts = 0, retryMounts = 0;
   t.after(async () => { release(); await ctx.fiber.dispose(); delete (globalThis as any)[key]; assert.ok(dir.startsWith(resolve('.sandbox-root-admission-'))); await rm(dir, { recursive: true, force: true }); });
   const Config = Schema.object({ enabled: Schema.boolean().default(true) });
-  const distribution = { name: 'dsh-extras', moduleIds: ['context', 'retry'], modulePlugins: {
-    context: { name: 'fixture-context', Config, apply(child: Context) { contextMounts++; child.effect(() => async () => { began(); await held; }); } },
+  const distribution = { name: 'dsh-extras', moduleIds: ['compact-context', 'retry'], modulePlugins: {
+    'compact-context': { name: 'fixture-context', Config, apply(child: Context) { contextMounts++; child.effect(() => async () => { began(); await held; }); } },
     retry: { name: 'fixture-retry', Config, apply() { retryMounts++; } },
   } };
-  const config = { modules: { context: { enabled: true }, retry: { enabled: false } } };
+  const config = { modules: { 'compact-context': { enabled: true }, retry: { enabled: false } } };
   const root = ctx.plugin({ apply(owner: Context) { createExtrasPlugin(distribution).apply(owner, config); } });
   await root.await();
   for (let i = 0; contextMounts !== 1 && i < 100; i++) await new Promise(done => setImmediate(done));
   assert.equal(contextMounts, 1); assert.equal(retryMounts, 0);
-  config.modules.context.enabled = false; for (const fn of listeners) fn(); await disposing;
+  config.modules['compact-context'].enabled = false; for (const fn of listeners) fn(); await disposing;
   // The old reconciliation already cloned ready=true before it blocked in context disposal.
   config.modules.retry.enabled = true; observations.modules.retry = { ready: false, phase: 'pending' };
   for (const fn of listeners) fn(); release();

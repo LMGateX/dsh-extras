@@ -4,7 +4,7 @@ import { planMigration, LEGACY_DEFAULTS, LEGACY_PACKAGES, mergeValues } from '..
 import { MODULE_IDS, type Discovery, type ModuleId } from '../../src/migration/types.ts';
 function snapshot(): Discovery {
   return {profileId:'fixture',profile:{dir:'/disposable/profile',patchPath:'/disposable/profile/cordis.patch.yml',home:'/disposable/home',installAnchor:'/disposable/dsh/package.json'},revision:'one',manifest:{},patchText:'[]',manifestText:'{}',rows:[],target:{rowId:'dsh-extras',moduleIds:MODULE_IDS},explicit:{},peers:{},problems:[],legacyMode:true,
-    sources:MODULE_IDS.map(id=>({moduleId:id,packageName:LEGACY_PACKAGES[id],version:({context:'0.4.7',retry:'0.1.9',chime:'0.6.0',goalWait:'0.3.0'} as Record<ModuleId,string>)[id],rowId:'custom-'+id,raw:{},effective:{},disabled:false,active:false,bundleSelected:true}))};
+    sources:MODULE_IDS.map(id=>({moduleId:id,packageName:LEGACY_PACKAGES[id],version:({'compact-context':'0.4.7',retry:'0.1.9',chime:'0.6.0',goalWait:'0.3.0'} as Record<ModuleId,string>)[id],rowId:'custom-'+id,raw:{},effective:{},disabled:false,active:false,bundleSelected:true}))};
 }
 test('all four current versions import exact known defaults without mutating input',()=>{
   const input=snapshot();const before=structuredClone(input);const plan=planMigration(input);
@@ -16,7 +16,7 @@ test('disabled sources preserve config but never imply activation',()=>{
   assert.ok(planMigration(input).decisions.every(d=>d.config?.enabled===false));
 });
 test('target explicit fields win while false zero and empty arrays survive',()=>{
-  const input=snapshot();input.explicit.context={compactTool:false,retryAttempts:0,ptcModelTimeouts:{}};input.explicit.retry={errorCodes:[],providers:[],retryEmptyResponse:false};input.explicit.chime={enabled:false,volume:0,dndStart:''};input.explicit.goalWait={maxHoldMs:0,waitForSubagents:false};
+  const input=snapshot();input.explicit['compact-context']={compactTool:false,retryAttempts:0,ptcModelTimeouts:{}};input.explicit.retry={errorCodes:[],providers:[],retryEmptyResponse:false};input.explicit.chime={enabled:false,volume:0,dndStart:''};input.explicit.goalWait={maxHoldMs:0,waitForSubagents:false};
   const plan=planMigration(input);
   assert.equal(plan.decisions[0].config?.compactTool,false);assert.equal(plan.decisions[0].config?.retryAttempts,0);
   assert.deepEqual(plan.decisions[1].config?.errorCodes,[]);assert.equal(plan.decisions[1].config?.retryEmptyResponse,false);
@@ -25,7 +25,7 @@ test('target explicit fields win while false zero and empty arrays survive',()=>
 });
 test('partial migration leaves absent capabilities off, fresh install on',()=>{
   const input=snapshot();input.sources=input.sources.filter(s=>s.moduleId==='retry');
-  assert.equal(planMigration(input).decisions.find(d=>d.moduleId==='context')?.enabled,false);
+  assert.equal(planMigration(input).decisions.find(d=>d.moduleId==='compact-context')?.enabled,false);
   input.sources=[];input.legacyMode=false;
   assert.ok(planMigration(input).decisions.every(d=>d.enabled));
 });

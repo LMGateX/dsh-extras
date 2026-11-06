@@ -4,7 +4,7 @@ import { validateModuleConfig } from '../../src/migration/validation.ts';
 
 test('rejects source semantic constraints before migration ownership changes', () => {
   for (const config of [{ pressureStep: 0 }, { retryAttempts: 6 }, { guidanceText: 'x'.repeat(8001) }, { ptcModelTimeouts: { 'provider/model': 0 } }]) {
-    assert.throws(() => validateModuleConfig('context', { enabled: true, ...config }));
+    assert.throws(() => validateModuleConfig('compact-context', { enabled: true, ...config }));
   }
 });
 
@@ -19,13 +19,13 @@ type Cases = { id: ModuleId; field: string; accept: unknown[]; reject: unknown[]
 const invalidScalar = [null, undefined, '0', false, {}, []];
 const invalidNumber = [...invalidScalar, NaN, Infinity, -Infinity];
 const cases: Cases[] = [
-  { id: 'context', field: 'guidanceText', accept: ['', 'a'.repeat(8000), '😀'.repeat(4000)], reject: [null, undefined, false, 1, 'a'.repeat(8001), '😀'.repeat(4001)] },
-  { id: 'context', field: 'notifyAtRatio', accept: [0, -0, Number.MIN_VALUE, 1 - Number.EPSILON], reject: [...invalidNumber, -Number.EPSILON, 1, 2] },
-  { id: 'context', field: 'pressureStep', accept: [1, 10, 50], reject: [...invalidNumber, 0, -1, 51, 1.5] },
-  { id: 'context', field: 'retryAttempts', accept: [0, 2, 5], reject: [...invalidNumber, -1, 6, 0.5] },
-  { id: 'context', field: 'retryDelayMs', accept: [0, 1000, 60000], reject: [...invalidNumber, -1, 60001, 1.5] },
-  { id: 'context', field: 'ptcTimeoutMs', accept: [0, 1, Number.MAX_SAFE_INTEGER, 1e100], reject: [...invalidNumber, -1, 0.5] },
-  { id: 'context', field: 'ptcModelTimeouts', accept: [{}, { 'provider/model': 1 }, { '/': 1, 'provider/': 1e100, '/model': 100 }], reject: [null, undefined, [], 1, { model: 1 }, { 'provider/model': 0 }, { 'provider/model': -1 }, { 'provider/model': 0.5 }, { 'provider/model': NaN }, { 'provider/model': Infinity }, { 'provider/model': '1' }] },
+  { id: 'compact-context', field: 'guidanceText', accept: ['', 'a'.repeat(8000), '😀'.repeat(4000)], reject: [null, undefined, false, 1, 'a'.repeat(8001), '😀'.repeat(4001)] },
+  { id: 'compact-context', field: 'notifyAtRatio', accept: [0, -0, Number.MIN_VALUE, 1 - Number.EPSILON], reject: [...invalidNumber, -Number.EPSILON, 1, 2] },
+  { id: 'compact-context', field: 'pressureStep', accept: [1, 10, 50], reject: [...invalidNumber, 0, -1, 51, 1.5] },
+  { id: 'compact-context', field: 'retryAttempts', accept: [0, 2, 5], reject: [...invalidNumber, -1, 6, 0.5] },
+  { id: 'compact-context', field: 'retryDelayMs', accept: [0, 1000, 60000], reject: [...invalidNumber, -1, 60001, 1.5] },
+  { id: 'compact-context', field: 'ptcTimeoutMs', accept: [0, 1, Number.MAX_SAFE_INTEGER, 1e100], reject: [...invalidNumber, -1, 0.5] },
+  { id: 'compact-context', field: 'ptcModelTimeouts', accept: [{}, { 'provider/model': 1 }, { '/': 1, 'provider/': 1e100, '/model': 100 }], reject: [null, undefined, [], 1, { model: 1 }, { 'provider/model': 0 }, { 'provider/model': -1 }, { 'provider/model': 0.5 }, { 'provider/model': NaN }, { 'provider/model': Infinity }, { 'provider/model': '1' }] },
   { id: 'retry', field: 'errorCodes', accept: [[], ['stream error', 'a', 'a b', '模型异常', 'a'.repeat(200)], Array(100).fill('x')], reject: [null, undefined, 'error', [1], [''], ['a'.repeat(201)], [' x'], ['x '], ['x:y'], ['a"b'], ["a'b"], ['a' + String.fromCharCode(96) + 'b'], ['a\nb'], ['a\tb'], ['a\u007fb'], Array(101).fill('x')] },
   { id: 'retry', field: 'providers', accept: [[], ['provider', 'route/model', 'a:b', 'a"b', '供应商', '\u0000', 'a'.repeat(200)], Array(100).fill('x')], reject: [null, undefined, 'provider', [false], [''], ['a'.repeat(201)], ['a b'], [' a'], ['a '], ['a\nb'], ['a\tb'], Array(101).fill('x')] },
   { id: 'chime', field: 'volume', accept: [0, -0, 0.5, 1], reject: [...invalidNumber, -Number.EPSILON, 1 + Number.EPSILON] },
@@ -33,8 +33,8 @@ const cases: Cases[] = [
   { id: 'chime', field: 'bannerPlacement', accept: ['bottom-center', 'bottom-right', 'bottom-left', 'top-right', 'top-left', 'center', 'modal'], reject: [null, undefined, '', 'top-center', 'bottom', false] },
   { id: 'goalWait', field: 'maxHoldMs', accept: [0, -0, 1, Number.MAX_SAFE_INTEGER], reject: [...invalidNumber, -1, 0.5, Number.MAX_SAFE_INTEGER + 1] },
 ];
-for (const field of ['compactTool', 'statusTool', 'guidance', 'pressureContext']) cases.push({ id: 'context', field, accept: [true, false], reject: [null, undefined, 0, 1, 'true', {}, []] });
-for (const id of ['context', 'retry', 'chime', 'goalWait'] as const) cases.push({ id, field: 'enabled', accept: [true, false], reject: [null, undefined, 0, 1, 'true', {}, []] });
+for (const field of ['compactTool', 'statusTool', 'guidance', 'pressureContext']) cases.push({ id: 'compact-context', field, accept: [true, false], reject: [null, undefined, 0, 1, 'true', {}, []] });
+for (const id of ['compact-context', 'retry', 'chime', 'goalWait'] as const) cases.push({ id, field: 'enabled', accept: [true, false], reject: [null, undefined, 0, 1, 'true', {}, []] });
 cases.push({ id: 'retry', field: 'retryEmptyResponse', accept: [true, false], reject: [null, undefined, 0, 1, 'true', {}, []] });
 for (const field of ['chimeQuestion', 'chimeError', 'restMode', 'banner']) cases.push({ id: 'chime', field, accept: [true, false], reject: [null, undefined, 0, 1, 'true', {}, []] });
 for (const field of ['waitForJobs', 'waitForSubagents']) cases.push({ id: 'goalWait', field, accept: [true, false], reject: [null, undefined, 0, 1, 'true', {}, []] });
@@ -53,7 +53,7 @@ for (const item of cases) test(item.id + '.' + item.field + ' preserves valid va
 });
 
 test('missing fields remain default-resolver-owned and unknown fields are always rejected', () => {
-  for (const id of ['context', 'retry', 'chime', 'goalWait'] as const) {
+  for (const id of ['compact-context', 'retry', 'chime', 'goalWait'] as const) {
     const config = Object.freeze({ enabled: false });
     assert.doesNotThrow(() => validateModuleConfig(id, {}));
     assert.doesNotThrow(() => validateModuleConfig(id, config));
@@ -66,10 +66,10 @@ test('raw object validation never reads accessors or executes volatile wrappers'
   const getter = Object.defineProperty({}, 'enabled', { enumerable: true, get() { called++; throw new Error('must not execute'); } });
   const volatile = { get() { called++; throw new Error('must not execute'); } };
   for (const config of [getter, { enabled: volatile }, Object.create({ enabled: true }), new Date(), null, []]) {
-    assert.throws(() => validateModuleConfig('context', config as Values));
+    assert.throws(() => validateModuleConfig('compact-context', config as Values));
   }
   const map = Object.defineProperty({}, 'provider/model', { enumerable: true, get() { called++; return 1; } });
-  assert.throws(() => validateModuleConfig('context', { ptcModelTimeouts: map }));
+  assert.throws(() => validateModuleConfig('compact-context', { ptcModelTimeouts: map }));
   const list = Object.defineProperty([], '0', { enumerable: true, get() { called++; return 'x'; } });
   assert.throws(() => validateModuleConfig('retry', { errorCodes: list }));
   const customIterator = Object.defineProperty(['x'], Symbol.iterator, { value: function* () { called++; yield 'x'; } });
@@ -80,10 +80,10 @@ test('raw object validation never reads accessors or executes volatile wrappers'
 
 test('prototype-bearing keys, symbols, and non-enumerable fields cannot hide from admission', () => {
   for (const config of [JSON.parse('{"__proto__":{}}'), { constructor: true }, { prototype: true }, { [Symbol('secret')]: true }, Object.defineProperty({}, 'enabled', { value: true })]) {
-    assert.throws(() => validateModuleConfig('context', config));
+    assert.throws(() => validateModuleConfig('compact-context', config));
   }
   assert.throws(() => validateModuleConfig('unknown' as ModuleId, {}));
-  assert.doesNotThrow(() => validateModuleConfig('context', Object.assign(Object.create(null), { enabled: false })));
+  assert.doesNotThrow(() => validateModuleConfig('compact-context', Object.assign(Object.create(null), { enabled: false })));
 });
 
 if (process.env.DSH_TEST_LEGACY_ROOT) test('audited standalone rules match original config-only validators on semantic values', async () => {
@@ -101,7 +101,7 @@ if (process.env.DSH_TEST_LEGACY_ROOT) test('audited standalone rules match origi
   const Schema = (await import(pathToFileURL(schemaPath).href)).default;
   const retrySchema = new Script(declarations + schema.replace('export const Config', 'const Config') + '\nConfig;').runInNewContext({ Schema });
   const oracles: Record<ModuleId, (config: Values) => unknown> = {
-    context: config => context.validateConfig(context.resolveConfig(config)),
+    'compact-context': config => context.validateConfig(context.resolveConfig(config)),
     retry: config => retrySchema(config), chime: config => chime.resolveRowConfig(config), goalWait: config => goal.resolveConfig(config),
   };
   assertOracleParity(oracles);
@@ -127,11 +127,11 @@ function assertOracleParity(oracles: Record<ModuleId, (config: Values) => unknow
 
 test('public migration validation matches all current feature validators without external sources', async () => {
   const [context, retry, chime, goal] = await Promise.all([
-    import('../../src/modules/context/config.ts'), import('../../src/modules/retry/index.ts'),
+    import('../../src/modules/compact-context/config.ts'), import('../../src/modules/retry/index.ts'),
     import('../../src/modules/chime/config.ts'), import('../../src/modules/goal-wait/config.ts'),
   ]);
   assertOracleParity({
-    context: config => context.validateConfig(context.resolveConfig(config)),
+    'compact-context': config => context.validateConfig(context.resolveConfig(config)),
     retry: config => retry.Config(config), chime: config => chime.resolveRowConfig(config),
     goalWait: config => goal.resolveConfig(config),
   });

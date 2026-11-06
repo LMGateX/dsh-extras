@@ -11,8 +11,11 @@ const hostPackages = ['cordis', 'cordis-plugin-loader', 'dsh-agent', 'dsh-app-bo
 for (const { name, modules } of distributions) {
   const out = join(root, 'dist', name);
   await mkdir(join(out, 'lib'), {recursive: true});
-  const imports = modules.map(id => 'import * as ' + id + ' from "./src/modules/' + sourceDirectories[id] + '/index.ts";').join('\n');
-  const server = imports + '\nimport {createExtrasPlugin} from "./src/runtime.ts";\nconst p=createExtrasPlugin({name:' + JSON.stringify(name) + ',moduleIds:' + JSON.stringify(modules) + ',modulePlugins:{' + modules.join(',') + '}});\nexport const name=p.name,inject=p.inject,Config=p.Config,apply=p.apply;';
+  // Canonical ids may contain hyphens; never use them as JavaScript bindings.
+  const aliases = modules.map((_, index) => 'feature' + index);
+  const imports = modules.map((id, index) => 'import * as ' + aliases[index] + ' from "./src/modules/' + sourceDirectories[id] + '/index.ts";').join('\n');
+  const modulePlugins = modules.map((id, index) => JSON.stringify(id) + ':' + aliases[index]).join(',');
+  const server = imports + '\nimport {createExtrasPlugin} from "./src/runtime.ts";\nconst p=createExtrasPlugin({name:' + JSON.stringify(name) + ',moduleIds:' + JSON.stringify(modules) + ',modulePlugins:{' + modulePlugins + '}});\nexport const name=p.name,inject=p.inject,Config=p.Config,apply=p.apply;';
   await build({stdin: {contents: server, resolveDir: root, sourcefile: 'extras-server-entry.ts', loader: 'ts'}, outfile: join(out, 'lib/index.js'), bundle: true, platform: 'node', format: 'esm', target: 'node24', external: ['@deepseek-ai/*', 'yaml'], sourcemap: true, legalComments: 'linked'});
   await build({entryPoints: [join(root, 'src/migration/index.ts')], outfile: join(out, 'lib/migration.js'), bundle: true, platform: 'node', format: 'esm', target: 'node24', external: ['@deepseek-ai/*', 'yaml'], sourcemap: true, legalComments: 'linked'});
   await build({entryPoints: [join(root, 'src/migration/cli.ts')], outfile: join(out, 'lib/migrate.js'), bundle: true, platform: 'node', format: 'esm', target: 'node24', external: ['@deepseek-ai/*', 'yaml'], sourcemap: true, legalComments: 'linked'});

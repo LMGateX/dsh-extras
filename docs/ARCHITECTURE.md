@@ -6,11 +6,11 @@ Feature modules hide implementation behind the existing Cordis plugin interface 
 
 ## Canonical configuration
 
-The root namespace has modules keyed context, retry, chime, goalWait. Each module value is { enabled: boolean, ...originalFeatureFields }; original chime.enabled remains the same flag, not a second nested switch. Defaults come from the feature's Config/resolveConfig. Root orchestration metadata is separate from user feature fields. Existing scalar/array zero, false and empty values must survive mapping. Arrays replace rather than concatenate.
+The root namespace has modules keyed compact-context, retry, chime, goalWait. Each module value is { enabled: boolean, ...originalFeatureFields }; original chime.enabled remains the same flag, not a second nested switch. Defaults come from the feature's Config/resolveConfig. Root orchestration metadata is separate from user feature fields. Existing scalar/array zero, false and empty values must survive mapping. Arrays replace rather than concatenate.
 
 Combined row/package id: dsh-extras. Split row/package ids: dsh-extras-compact-context, dsh-extras-retry, dsh-extras-chime, dsh-extras-goal-wait. Splits may use the same canonical envelope with only their supported module in their schema. The browser selects a distribution by package/row identity and module selection, not by global singleton assumptions.
 
-Feature code location: src/modules/context, src/modules/retry, src/modules/chime, src/modules/goal-wait. Each exposes index.ts. Adapt original feature-only code and focused regression tests here. Feature modules never directly edit profiles or disable other distributions.
+Feature code location: src/modules/compact-context, src/modules/retry, src/modules/chime, src/modules/goal-wait. Each exposes index.ts. Adapt original feature-only code and focused regression tests here. Feature modules never directly edit profiles or disable other distributions.
 
 Host orchestration and configuration: src/index.ts, src/config.ts, src/runtime.ts (integration owner). Migration: src/migration/* (migration lane). Browser code: client/* (client lane). Build/packaging/scripts/CI and public docs (integration owner). Agents may propose contract amendments but must coordinate shared file changes.
 

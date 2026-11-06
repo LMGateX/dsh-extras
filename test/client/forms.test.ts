@@ -38,12 +38,12 @@ function rootForm(value: unknown = { modules: {} }) {
 }
 
 test('section forms cache identity and project accepted, base, and explicit user layers', () => {
-  const root = rootForm({ modules: { context: { enabled: false, guidanceText: '' } }, metadata: { report: 'kept' } });
-  root.update({ base: { modules: { context: { enabled: true } } }, user: { modules: { context: { enabled: false } } } });
-  const path = ['modules', 'context'];
+  const root = rootForm({ modules: { 'compact-context': { enabled: false, guidanceText: '' } }, metadata: { report: 'kept' } });
+  root.update({ base: { modules: { 'compact-context': { enabled: true } } }, user: { modules: { 'compact-context': { enabled: false } } } });
+  const path = ['modules', 'compact-context'];
   const section = bindSection(root.form, path);
   path.push('do-not-mutate-prefix');
-  assert.equal(section, bindSection(root.form, ['modules', 'context']));
+  assert.equal(section, bindSection(root.form, ['modules', 'compact-context']));
   const first = section.getSnapshot();
   assert.equal(first, section.getSnapshot());
   assert.deepEqual(first.value, { enabled: false, guidanceText: '' });
@@ -83,9 +83,9 @@ test('section set/unset paths share the root revision and notifications, preserv
 test('nested binding prefixes once per level, and empty section paths retain root values', async () => {
   const root = rootForm();
   const modules = bindSection(root.form, ['modules']);
-  const context = bindSection(modules, ['context']);
+  const context = bindSection(modules, ['compact-context']);
   await context.mutate([{ op: 'set', path: ['ptcTimeoutMs'], value: 0 }]);
-  assert.deepEqual(root.writes[0].ops, [{ op: 'set', path: ['modules', 'context', 'ptcTimeoutMs'], value: 0 }]);
+  assert.deepEqual(root.writes[0].ops, [{ op: 'set', path: ['modules', 'compact-context', 'ptcTimeoutMs'], value: 0 }]);
   assert.equal(bindSection(root.form, []).getSnapshot().value, root.form.getSnapshot().value);
 });
 
@@ -94,7 +94,7 @@ test('read-only, loading, unavailable and unfenced sections never forward writes
     { writable: false }, { status: 'loading' as const }, { status: 'unavailable' as const }, { revision: undefined },
   ]) {
     const root = rootForm(); root.update(patch);
-    assert.equal(await bindSection(root.form, ['modules', 'context']).mutate([{ op: 'unset', path: ['enabled'] }]), false);
+    assert.equal(await bindSection(root.form, ['modules', 'compact-context']).mutate([{ op: 'unset', path: ['enabled'] }]), false);
     assert.equal(root.writes.length, 0);
   }
 });
@@ -138,8 +138,8 @@ test('blank lists save explicit empty arrays, whereas Reset sends unset', async 
 });
 
 test('a sibling edit invalidates a staged text revision without erasing the draft', async () => {
-  const root = rootForm({ modules: { context: { guidanceText: 'old' }, retry: { enabled: true } } });
-  const editor = createFieldEditor(bindSection(root.form, ['modules', 'context']), 'guidanceText');
+  const root = rootForm({ modules: { 'compact-context': { guidanceText: 'old' }, retry: { enabled: true } } });
+  const editor = createFieldEditor(bindSection(root.form, ['modules', 'compact-context']), 'guidanceText');
   const stop = editor.start();
   editor.edit('my unsaved guidance');
   await bindSection(root.form, ['modules', 'retry']).mutate([{ op: 'set', path: ['enabled'], value: false }], 7);
@@ -187,8 +187,8 @@ test('text editors refuse unavailable/read-only writes and preserve transport-fa
 });
 
 test('context durations render seconds and persist milliseconds, including zero and model overrides', async () => {
-  const root = rootForm({ modules: { context: { retryDelayMs: 1500, ptcTimeoutMs: 0, ptcModelTimeouts: { 'p/m': 2500 } } } });
-  const section = bindSection(root.form, ['modules', 'context']);
+  const root = rootForm({ modules: { 'compact-context': { retryDelayMs: 1500, ptcTimeoutMs: 0, ptcModelTimeouts: { 'p/m': 2500 } } } });
+  const section = bindSection(root.form, ['modules', 'compact-context']);
   const delay = createFieldEditor(section, 'retryDelayMs');
   const timeout = createFieldEditor(section, 'ptcTimeoutMs');
   const models = createFieldEditor(section, 'ptcModelTimeouts');
@@ -214,7 +214,7 @@ test('text validation rejects unsafe durations, attempts and malformed model/lis
   ] as const;
   for (const [field, value] of cases) {
     const root = rootForm();
-    const editor = createFieldEditor(bindSection(root.form, ['modules', 'context']), field);
+    const editor = createFieldEditor(bindSection(root.form, ['modules', 'compact-context']), field);
     editor.edit(value); assert.equal(await editor.save(), false, field + ': ' + value.slice(0, 30));
     assert.equal(root.writes.length, 0); assert.notEqual(editor.getSnapshot().error, '');
   }
@@ -243,7 +243,7 @@ function contents(tree: any): string {
   if (typeof tree !== 'object') return String(tree);
   return (tree.children ?? []).map(contents).join(' ');
 }
-const all: readonly ModuleId[] = ['context', 'retry', 'chime', 'goalWait'];
+const all: readonly ModuleId[] = ['compact-context', 'retry', 'chime', 'goalWait'];
 const descriptor = { rowId: 'dsh-extras', packageName: 'dsh-extras', moduleIds: all };
 
 test('summary is hook-free and does not read either form source', () => {
@@ -253,12 +253,12 @@ test('summary is hook-free and does not read either form source', () => {
   } });
   const view = createSettingsView(React, descriptor);
   const props = { view: 'summary', get form(): never { throw new Error('read native form'); }, get configForm(): never { throw new Error('read shared form'); } };
-  assert.match(view(props) as string, /Context.*retry.*chime.*Goal/i);
+  assert.match(view(props) as string, /Compact-context.*retry.*chime.*Goal/i);
 });
 
 test('combined settings expose all original controls and exactly one custom chime enabled switch', async () => {
-  const root = rootForm({ modules: { context: { enabled: true }, retry: { enabled: false }, chime: { enabled: true }, goalWait: { enabled: true } },
-    metadata: { status: { modules: { context: { phase: 'saved/restart-required', ready: false, enabled: true, reason: 'reload host' } }, report: { migrated: true } } } });
+  const root = rootForm({ modules: { 'compact-context': { enabled: true }, retry: { enabled: false }, chime: { enabled: true }, goalWait: { enabled: true } },
+    metadata: { status: { modules: { 'compact-context': { phase: 'saved/restart-required', ready: false, enabled: true, reason: 'reload host' } }, report: { migrated: true } } } });
   const render = renderer();
   let chimeForm: ConfigForm | undefined;
   function ChimeEditor({ configForm }: { configForm: ConfigForm }) {
@@ -269,6 +269,8 @@ test('combined settings expose all original controls and exactly one custom chim
   const tree = view({ configForm: root.form });
   const sections = nodes(tree).filter(node => node.type === 'section');
   assert.deepEqual(sections.map(node => node.props['data-module']), all);
+  assert.match(contents(sections[0]), /Compact-context/);
+  assert.equal(sections.some(node => node.props['data-module'] === 'context'), false);
   const enabled = nodes(tree).filter(node => node.type === 'input' && node.props['data-field'] === 'enabled');
   assert.equal(enabled.length, 4);
   assert.equal(enabled[1].props.checked, false);
@@ -281,7 +283,7 @@ test('combined settings expose all original controls and exactly one custom chim
   assert.match(contents(tree), /Migration report.*migrated/s);
   await enabled[1].props.onChange({ target: { checked: true } });
   assert.deepEqual(root.writes[0], { revision: 7, ops: [{ op: 'set', path: ['modules', 'retry', 'enabled'], value: true }] });
-  assert.equal((root.form.getSnapshot().value as any).modules.context.enabled, true);
+  assert.equal((root.form.getSnapshot().value as any).modules['compact-context'].enabled, true);
   render.cleanup();
 });
 

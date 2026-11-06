@@ -10,7 +10,7 @@ import {
   createUserMessage,
 } from '@deepseek-ai/dsh-llm';
 import BasicCompactionEngine from '@deepseek-ai/dsh-compaction-basic';
-import { apply, Config } from '../../../src/modules/context/index.ts';
+import { apply, Config } from '../../../src/modules/compact-context/index.ts';
 
 function realSession() {
   const session = Session.create(SessionId('compact-tool-e2e-test'));

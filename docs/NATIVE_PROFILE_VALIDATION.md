@@ -1,5 +1,7 @@
 # Native packed-profile acceptance
 
+Historical evidence: the executions below predate the canonical module rename. Their `context` module/status name is historical (now `compact-context`); recorded commands, counts, checksums and outcomes are not new rename-validation results.
+
 The executable gate is [the native profile test](../test/artifacts/native-profile.test.ts). It uses the public dev dependency `@deepseek-ai/dsh` at 0.2.2-alpha.3, resolves its declared CLI entry, and installs release tarballs through the real `dsh plugin --profile … add` command. It never imports Extras runtime sources or rebuilds a client wrapper.
 
 ## Scope and isolation
@@ -33,4 +35,4 @@ The registry intermittently returned ECONNRESET for dependencies after earlier f
 
 On 2026-11-06, `npm run check && npm run pack && npm run test:artifacts` built all five distributions from the accepted tree and passed strict TypeScript, 387/387 source tests, 7/7 packed tests and the native gates with zero failures or skips. The fresh stock web profile bound isolated loopback port **32839** and reported **context, retry, chime and goalWait all active**; the test explicitly asserts context activation without any global compaction engine. All native edit/full-reload, chime-disposal, installed-client-SHA and zero-console/page-error assertions passed. No seed bypass or synthetic client wrapper was used.
 
-The accepted checksums are recorded in [release validation](VALIDATION.md). Per-agent real native compaction transactions and retained preset revisions are separately verified by [scoped context integration](../test/integration/scoped-context.test.ts). All verification was local; GitHub Actions is prohibited, disabled and absent from the repository.
+The accepted checksums are recorded in [release validation](VALIDATION.md). Per-agent real native compaction transactions and retained preset revisions are separately verified by [scoped context integration](../test/integration/scoped-compact-context.test.ts). All verification was local; GitHub Actions is prohibited, disabled and absent from the repository.

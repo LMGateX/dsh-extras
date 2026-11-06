@@ -2,7 +2,7 @@
 
 One install, independent enhancements. **一体安装，功能独立开关。**
 
-Context compaction, native retry classification, browser session chimes and goal waiting behind one plugin card. Four genuinely independent single-feature packages are built from the same source, not maintained as forks.
+Compact-context, native retry classification, browser session chimes and goal waiting behind one plugin card. Four genuinely independent single-feature packages are built from the same source, not maintained as forks.
 
 **Target:** DSH `0.2.2-alpha.3`, Node `>=24.9.0`. No unverified broad compatibility claim. Not published to npm: install a GitHub Release tarball.
 
@@ -28,9 +28,9 @@ dsh plugin --profile web add https://github.com/LMGateX/dsh-extras/releases/down
 
 For one capability replace the asset name, e.g. `dsh-extras-retry-0.1.0.tgz`. Verify downloads against release SHA256SUMS. The matching DSH runtime must already exist; packages do not install a second host runtime.
 
-Open **Plugins → DSH Extras → Configure**. Combined settings have context, retry, chime and goalWait sections. Each module and every original option is independently editable. Status distinguishes active, disabled, missing dependency, migration-pending, conflict and failed. Enable/disable joins feature disposal before reactivation. Policy-only changes use validated live snapshots without remounting in-flight retry classifiers or releasing goal holds.
+Open **Plugins → DSH Extras → Configure**. Combined settings have compact-context, retry, chime and goalWait sections. Each module and every original option is independently editable. Status distinguishes active, disabled, missing dependency, migration-pending, conflict and failed. Enable/disable joins feature disposal before reactivation. Policy-only changes use validated live snapshots without remounting in-flight retry classifiers or releasing goal holds.
 
-Fresh installs use preserved source defaults. When any legacy plugin is discovered, absent capabilities begin disabled and can be explicitly enabled later. Explicit Extras values win over imports. Missing optional services affect only the corresponding module. In native web presets, context operations follow the selected agent’s isolated native compaction backend and policy; Extras does not enable a second global engine or rewrite presets. A preset without a backend returns an explicit unavailable result for that agent.
+Fresh installs use preserved source defaults. When any legacy plugin is discovered, absent capabilities begin disabled and can be explicitly enabled later. Explicit Extras values win over imports. Missing optional services affect only the corresponding module. In native web presets, compact-context operations follow the selected agent’s isolated native compaction backend and policy; Extras does not enable a second global engine or rewrite presets. A preset without a backend returns an explicit unavailable result for that agent.
 
 ## Automatic legacy migration / 自动迁移
 
@@ -57,9 +57,11 @@ For splits add `--distribution dsh-extras-retry` (or the selected split). Rollba
 
 ## Configuration shape
 
+The canonical module id is `compact-context`. The development-only `context` id is removed without aliases, journal translation or automatic configuration rewrites; use the new key explicitly. Native `compact_context` / `context_status` tools and the predecessor `dsh-tool-compact-context` identity are unchanged.
+
 ```yaml
 modules:
-  context:
+  compact-context:
     enabled: true
     compactTool: true
     statusTool: false
@@ -80,7 +82,7 @@ migration:
   auto: true
 ```
 
-Splits use this same envelope but expose only their module. `maxHoldMs: 0` means no forced expiry. Context status/guidance/pressure extras remain opt-in. Native retention, provider routing and retry budgets stay native. Goal waiting changes process-local activation only, never durable phase.
+Splits use this same envelope but expose only their module. `maxHoldMs: 0` means no forced expiry. Compact-context status/guidance/pressure extras remain opt-in. Native retention, provider routing and retry budgets stay native. Goal waiting changes process-local activation only, never durable phase.
 
 ## Development
 

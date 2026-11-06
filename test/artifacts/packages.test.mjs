@@ -31,13 +31,13 @@ for(const {name,modules} of distributions) test('packed installable distribution
   const server=await readFile(join(packageDir,'lib/index.js'),'utf8');
   const browser=await readFile(join(packageDir,'lib/client.js'),'utf8');
   assert.ok(browser.includes(name));assert.ok(browser.includes('__ModuleLoader__'));
-  for(const id of ['context','retry','chime','goalWait']) {
+  for(const id of ['compact-context','retry','chime','goalWait']) {
     const notice=listing.some(file=>file==='package/notices/'+id+'.txt');
     assert.equal(notice,modules.includes(id),'selected feature notice '+id);
   }
   assert.equal(listing.some(file=>file.endsWith('/chime-soft.wav')),modules.includes('chime'));
   if(!modules.includes('chime')) {assert.ok(!browser.includes('data:audio/wav'));assert.ok(!browser.includes('AudioContext'));}
-  if(!modules.includes('context'))assert.ok(!server.includes('function selectNativeRetentionRange'));
+  if(!modules.includes('compact-context'))assert.ok(!server.includes('function selectNativeRetentionRange'));
   if(!modules.includes('goalWait'))assert.ok(!server.includes('class GoalWaitGate'));
   assert.ok(!listing.some(file=>file.startsWith('package/node_modules/@deepseek-ai/dsh/')));
   // Host imports resolve against one anchored runtime in the isolated consumer, as DSH does.
@@ -51,8 +51,20 @@ for(const {name,modules} of distributions) test('packed installable distribution
   const entry=await import(pathToFileURL(join(packageDir,'lib/index.js')).href);
   assert.equal(entry.name,name);assert.equal(typeof entry.apply,'function');
   assert.deepEqual(Object.keys(entry.Config.dict.modules.dict),modules);
+  assert.equal(Object.hasOwn(entry.Config.dict.modules.dict, 'context'), false, 'no old configuration alias in packed exports');
+  assert.ok(!listing.includes('package/notices/context.txt'), 'no old feature notice alias');
+  assert.ok(!server.includes('extras-context'), 'no old owned plugin identity');
+  if (modules.includes('compact-context')) {
+    assert.ok(server.includes('extras-compact-context'));
+    assert.ok(server.includes('compact_context') && server.includes('context_status'), 'canonical native tool names survive packaging');
+    const resolved = entry.Config({modules: {'compact-context': {enabled: false, retryAttempts: 0}}});
+    assert.equal(resolved.modules['compact-context'].enabled.get(), false);
+    assert.equal(resolved.modules['compact-context'].retryAttempts.get(), 0);
+  }
   const migration=await import(pathToFileURL(join(packageDir,'lib/migration.js')).href);
   assert.equal(typeof migration.startAutomaticMigration,'function');
   const help=execFileSync(process.execPath,[join(packageDir,'lib/migrate.js'),'--help'],{encoding:'utf8',env:{...process.env,HOME:temp,DSH_HOME:join(temp,'dsh-home')}});
   assert.ok(help.includes('profile')&&help.includes('inspect'));
+  assert.ok(help.includes('--modules compact-context,retry,chime,goalWait'));
+  assert.ok(!help.includes('--modules context,'));
 });

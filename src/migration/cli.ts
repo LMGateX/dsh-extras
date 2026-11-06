@@ -6,13 +6,13 @@ import { MODULE_IDS, type Distribution, type ModuleId, type NativeMigrationHost 
 
 /** Explicit locations are mandatory: no ambient-home or live-profile fallback. */
 export async function migrationMain(args = process.argv.slice(2)): Promise<void> {
-  if (args.includes('--help') || args.includes('-h')) { console.log('dsh-extras-migrate <inspect|dry-run|apply|retry|rollback> --profile-dir DIR --dsh-home DIR --install-anchor package.json [--distribution NAME] [--operation ID --modules context,retry,chime,goalWait]'); return; }
+  if (args.includes('--help') || args.includes('-h')) { console.log('dsh-extras-migrate <inspect|dry-run|apply|retry|rollback> --profile-dir DIR --dsh-home DIR --install-anchor package.json [--distribution NAME] [--operation ID --modules compact-context,retry,chime,goalWait]'); return; }
   const command = args.shift() ?? 'inspect';
   const flags: Record<string, string> = {};
   while (args.length) { const key = args.shift()!; const value = args.shift(); if (!key.startsWith('--') || !value) throw new Error('expected --name value'); flags[key.slice(2)] = value; }
   for (const key of ['profile-dir', 'dsh-home', 'install-anchor']) if (!flags[key]) throw new Error('--' + key + ' is required; no ambient profile is selected');
   const rowId = flags['distribution'] ?? 'dsh-extras';
-  const distributions: Record<string, readonly ModuleId[]> = { 'dsh-extras': MODULE_IDS, 'dsh-extras-compact-context': ['context'], 'dsh-extras-retry': ['retry'], 'dsh-extras-chime': ['chime'], 'dsh-extras-goal-wait': ['goalWait'] };
+  const distributions: Record<string, readonly ModuleId[]> = { 'dsh-extras': MODULE_IDS, 'dsh-extras-compact-context': ['compact-context'], 'dsh-extras-retry': ['retry'], 'dsh-extras-chime': ['chime'], 'dsh-extras-goal-wait': ['goalWait'] };
   if (!distributions[rowId]) throw new Error('unknown distribution');
   const dir = resolve(flags['profile-dir']);
   const host: NativeMigrationHost = { profileContext: { dir, patchPath: join(dir, 'cordis.patch.yml'), home: resolve(flags['dsh-home']), installAnchor: resolve(flags['install-anchor']) }, loader: { entries: () => [] } };
@@ -25,7 +25,7 @@ export async function migrationMain(args = process.argv.slice(2)): Promise<void>
         source: d.source ? { packageName: d.source.packageName, version: d.source.version, rowId: d.source.rowId, disabled: d.source.disabled } : undefined })) };
   } else if (command === 'retry' || command === 'apply') output = await runMigration(host, target, { retry: command === 'retry' });
   else if (command === 'rollback') {
-    if (!flags.operation || !flags.modules) throw new Error('rollback requires --operation id --modules context,retry,...');
+    if (!flags.operation || !flags.modules) throw new Error('rollback requires --operation id --modules compact-context,retry,...');
     const modules = flags.modules.split(',');
     if (!modules.every(id => MODULE_IDS.includes(id as ModuleId))) throw new Error('invalid rollback module');
     output = await rollbackMigration(host, target, { operationId: flags.operation, modules: modules as ModuleId[] });

@@ -17,7 +17,7 @@ async function bundle(descriptor: any) {
 }
 
 test('Chromium emitted client: rendered settings, rest persistence, audio, disable, and fresh-page handover', { timeout: 60000 }, async () => {
-  const descriptor = { rowId: 'dsh-extras', packageName: 'dsh-extras', moduleIds: ['context','retry','chime','goalWait'] };
+  const descriptor = { rowId: 'dsh-extras', packageName: 'dsh-extras', moduleIds: ['compact-context','retry','chime','goalWait'] };
   const plugin = await bundle(descriptor);
   const harness = (await build({ entryPoints: [join(root, 'test/client/browser-harness.fixture.js')], bundle: true, write: false, platform: 'browser', format: 'iife', alias: { react: dependency.resolve('react'), 'react-dom/client': dependency.resolve('react-dom/client') } })).outputFiles[0]!.text;
   let reloadAfter: number | undefined;

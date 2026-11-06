@@ -1,5 +1,5 @@
 /** Public migration seam. Native lifecycle is observed, never entered recursively. */
-export const MODULE_IDS = ['context', 'retry', 'chime', 'goalWait'] as const;
+export const MODULE_IDS = ['compact-context', 'retry', 'chime', 'goalWait'] as const;
 export type ModuleId = typeof MODULE_IDS[number];
 export type Values = Record<string, unknown>;
 export interface Distribution { rowId: string; packageName?: string; moduleIds: readonly ModuleId[]; validateModule?: (id: ModuleId, value: Values) => void }
