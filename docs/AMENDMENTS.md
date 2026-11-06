@@ -4,6 +4,10 @@ Changes must cite the observed host/source constraint, explain the trade-off, an
 
 No amendments at the original specification freeze. Later approved amendments follow.
 
+## 2026-11-07 — Approved standalone migration peer-resolution repair (0.3.1)
+
+The user approved the [reproduced missing-Cordis CLI defect and repair plan](RESEARCH_MIGRATE_CLI_2026-11-07.md), with documentation first, isolated subagent development/testing, then push/release and no local production installation. The [fixed patch contract](MIGRATION_CLI_031.md) clarifies independently launched offline entries versus native host peer resolution and adds CLI-1 through CLI-7. This supplements MIG-6/DIST-1/HOST-1; it does not weaken offline Goal ownership refusal, recovery/CAS invariants, mandatory existing gates or the no-second-Cordis rule. All five distributions remain synchronized. GitHub Actions and npm publication remain prohibited.
+
 ## 2026-11-06 — Context backend follows the selected native agent scope
 
 **Evidence.** Executing the packed combined plugin in a disposable, stock DSH 0.2.2-alpha.3 web profile exposed a native composition difference: the web bundle explicitly disables the host-plane compaction backend, and its shipped standard/cordis/PTC presets mount isolated compaction backends within each agent scope. The original standalone context plugin required a root-plane compaction service, so a direct root port remained permanently unavailable in that otherwise supported composition. Native Agent exposes its scoped context publicly; this is not a reason to mount a second engine or rewrite presets.
