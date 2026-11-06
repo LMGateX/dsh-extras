@@ -183,7 +183,8 @@ test('close during native drain skips late mount, and close during owned drain k
 });
 
 test('pending replacement dependency is not reported active, then snapshot follows actual native fiber state', async t => {
-  const f = await fixture(t);
+  const changes: string[] = [];
+  const f = await fixture(t, { onChange: state => changes.push(state.phase) });
   let raw: any;
   const pending = await f.owner.transition({ strategy: 'replacement', mountOwned: async () => {
     raw = f.row.ctx.plugin({ name: 'goal-wait-owned-replacement-driver', inject: ['syntheticLeaseDependency'], apply() {} } as any).ctx.fiber;
@@ -195,6 +196,7 @@ test('pending replacement dependency is not reported active, then snapshot follo
   await new Promise<void>(done => setImmediate(done)); await raw.await();
   assert.equal(f.owner.snapshot().effective, 'replacement');
   assert.equal(f.owner.snapshot().phase, 'active');
+  assert.equal(changes.at(-1), 'active', 'live status projection also observes native dependency activation');
   await raw.dispose();
   assert.notEqual(f.owner.snapshot().phase, 'active');
 });
@@ -311,4 +313,19 @@ test('a factory that mounts then throws cannot leave an unreturned candidate act
   assert.equal(raw.uid, null);
   await f.owner.close();
   assert.equal(f.live().length, 1);
+});
+
+test('native stock intent is revalidated after drain before a replacement factory is admitted', async t => {
+  const f = await fixture(t);
+  const release = Promise.withResolvers<void>();
+  f.entry.fiber!.ctx.effect(() => () => release.promise);
+  let mounted = false;
+  const taking = f.owner.transition({ strategy: 'replacement', mountOwned: async () => { mounted = true; throw new Error('must not mount'); } });
+  await new Promise<void>(done => setImmediate(done));
+  const disabling = f.entry.update({ disabled: true });
+  release.resolve();
+  await disabling; await taking;
+  assert.equal(mounted, false);
+  assert.notEqual(f.owner.snapshot().phase, 'active');
+  await f.owner.close(); assert.equal(f.live().length, 0);
 });

@@ -65,6 +65,7 @@ export function createHostDriverOwner(ctx: Context, options: HostDriverOwnerOpti
   let mountingOwned = false;
   let pendingOwned: Fiber | undefined;
   let offGuard: (() => void) | undefined;
+  let offStatus = () => {};
   const draining = new Set<Fiber>();
   const snapshot = (): DriverOwnerSnapshot => {
     const result = { ...state };
@@ -207,6 +208,8 @@ export function createHostDriverOwner(ctx: Context, options: HostDriverOwnerOpti
       if (request.strategy === 'activation' || request.strategy === 'native') return restore();
       if (stock!.disabled) throw new Error('Unavailable: stock native entry is explicitly disabled');
       await stopOwned();
+      if (closing || epoch !== generation) return snapshot();
+      if (!canRestore()) throw new Error('Unavailable: native Loader intent changed before suppression');
       suppressed = true;
       offGuard ??= ctx.root.on('internal/plugin', fiber => {
         if ((!suppressed && !restoring) || !live(fiber)) return;
@@ -227,6 +230,7 @@ export function createHostDriverOwner(ctx: Context, options: HostDriverOwnerOpti
       suppress();
       await drain();
       if (closing || epoch !== generation) return snapshot();
+      if (!canRestore()) throw new Error('Unavailable: native Loader intent changed during drain');
       if (request.strategy === 'replacement') {
         if (!request.mountOwned) throw new Error('Replacement driver factory is required');
         mountingOwned = true; pendingOwned = undefined;
@@ -255,14 +259,19 @@ export function createHostDriverOwner(ctx: Context, options: HostDriverOwnerOpti
     if (closeTask) return closeTask;
     closing = true; ++generation;
     closeTask = enqueue(async () => {
-      if (!stock || !claimed) { await stopOwned(); offGuard?.(); offGuard = undefined; return snapshot(); }
+      if (!stock || !claimed) { await stopOwned(); offGuard?.(); offGuard = undefined; offStatus(); return snapshot(); }
       const result = await restore();
       if (claims.get(ctx.root) === claimToken) claims.delete(ctx.root);
-      claimed = false;
+      claimed = false; offStatus();
       return result;
     });
     return closeTask;
   };
+  offStatus = ctx.root.on('internal/status', fiber => {
+    if (closing || conflicted || fiber !== owned?.rawFiber || (state.phase !== 'active' && state.phase !== 'missing-dependency')) return;
+    const actual = snapshot();
+    if (actual.phase !== state.phase || actual.effective !== state.effective) publish({ phase: actual.phase, effective: actual.effective });
+  }, { global: true });
   if (options.autoDispose !== false) ctx.effect(() => () => close().then(() => {}));
   return { transition, snapshot, close };
 }
