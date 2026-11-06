@@ -88,6 +88,8 @@ Show separate groups for agent-facing compaction tools and request reasoning pol
 
 Extend target configuration validation, including the detached migration validator. Never add this feature to predecessor historical defaults or infer enablement from old compactTool values. Existing ownership conflict and recoverable legacy handover rules remain in force, using only the new module id. No compatibility owner for the development-only old id is introduced.
 
+Native write admission must reject semantic-invalid policy candidates before persistence or volatile references change, not merely retain the old live wrapper after a successful save. On the audited Cordis/Loader baseline, serializable Schemastery object/union metadata alone does not enforce unknown/inapplicable fields or duplicate targets. The distribution root therefore uses its exact owner fiber's public `internal/config` waterfall to run existing feature semantic validators on the returned candidate before native resolution/commit. This hook returns the candidate unchanged, calls next once, affects no other root/child fiber, and is disposed with the owner. Native Settings/ConfigEditor writes, revision and disk stability are the public test seam; no custom schema callback is hidden in JSON metadata.
+
 ## Agreed test seams and delivery gates
 
 The user approved these public test seams in the fixed plan; no private-method tests are required:

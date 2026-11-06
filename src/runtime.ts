@@ -15,6 +15,15 @@ export function createExtrasPlugin(distribution: Distribution) {
     Config: createConfig(distribution),
     apply(ctx: Context, config: Record<string, any>) {
       const log = ctx.logger(distribution.name);
+      // Native schema metadata cannot express duplicate targets or exact rule fields.
+      // Validate before Loader/ConfigEditor commits volatile refs or profile bytes.
+      ctx.on('internal/config', (fiber, next) => {
+        const candidate = next();
+        if (fiber === ctx.fiber) {
+          for (const id of distribution.moduleIds) validateModule(distribution, id, candidate?.modules?.[id] ?? {});
+        }
+        return candidate;
+      }, { global: true });
       const scopes = new Map<ModuleId, RunningModule>();
       const statuses: Partial<Record<ModuleId, ModuleState>> = {};
       let closed = false;

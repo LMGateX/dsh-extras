@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import * as context from '../../src/modules/compact-context/index.ts';
 import * as retry from '../../src/modules/retry/index.ts';
 import * as chime from '../../src/modules/chime/index.ts';
@@ -41,4 +43,29 @@ test('native SettingsForms exposes and writes every original feature field witho
   assert.equal(f.entry.fiber, owner);
   assert.ok(after.revision > before.revision);
   await assert.rejects(() => settings.update(d.name, { modules: { retry: { errorCodes: ['late'] } } }, before.revision), /revision|conflict|changed/i);
+});
+
+test('native policy writes reject semantic-invalid candidates before disk, revision or volatile commit', async t => {
+  const d: Distribution = { name: 'dsh-extras-compact-context', moduleIds: ['compact-context'], modulePlugins: { 'compact-context': context } };
+  const initial = { modules: { 'compact-context': { enabled: false, compactionReasoning: { enabled: true, rules: [] } } }, migration: { auto: false } };
+  const f = await loaderFixture(t, d, initial); await f.ready();
+  await f.update(initial); // Mount the real native profile writer, not the earlier test's editor adapter.
+  await f.ctx.plugin((await loadHost('dsh-settings')).default).await();
+  const settings = f.ctx.get('settings') as any;
+  const row = () => settings.describe().find((value: any) => value.ns === d.name);
+  const before = row();
+  const disk = await readFile(join(f.profile, 'cordis.patch.yml'), 'utf8');
+  const candidates = [
+    [{ scope: 'all', mode: 'inherit' }, { scope: 'all', mode: 'fixed', effort: 'high' }],
+    [{ scope: 'all', mode: 'inherit', provider: 'inapplicable-route' }],
+  ];
+  for (const rules of candidates) {
+    const bad = { ...initial, modules: { 'compact-context': { enabled: false, compactionReasoning: { enabled: true, rules } } } };
+    await assert.rejects(() => settings.update(d.name, bad, before.revision), /duplicate|inapplicable/);
+    await assert.rejects(() => f.update(bad), /duplicate|inapplicable/);
+    assert.throws(() => f.entry.fiber!.resolveConfig(bad), /duplicate|inapplicable/);
+    assert.equal(await readFile(join(f.profile, 'cordis.patch.yml'), 'utf8'), disk);
+    assert.equal(row().revision, before.revision);
+    assert.deepEqual(row().value, before.value);
+  }
 });
