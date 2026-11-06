@@ -20,7 +20,13 @@ for (const { name, modules } of distributions) {
   await build({entryPoints: [join(root, 'src/migration/index.ts')], outfile: join(out, 'lib/migration.js'), bundle: true, platform: 'node', format: 'esm', target: 'node24', external: ['@deepseek-ai/*', 'yaml'], sourcemap: true, legalComments: 'linked'});
   await build({entryPoints: [join(root, 'src/migration/cli.ts')], outfile: join(out, 'lib/migrate.js'), bundle: true, platform: 'node', format: 'esm', target: 'node24', external: ['@deepseek-ai/*', 'yaml'], sourcemap: true, legalComments: 'linked'});
   const hasChime = modules.includes('chime');
-  const client = 'import {createExtrasClient} from "./client/index.ts";\n' + (hasChime ? 'import {createChimeAdapter} from "./client/chime.ts";\n' : '') + 'window.__ModuleLoader__.load({id:' + JSON.stringify(name) + ',factory(require){return createExtrasClient(' + JSON.stringify({rowId:name,packageName:name,moduleIds:modules}) + ',require("react")' + (hasChime ? ',createChimeAdapter' : '') + ');}});';
+  const hasReasoning = modules.includes('compact-context');
+  const client = 'import {createExtrasClient} from "./client/composition.ts";\n'
+    + (hasChime ? 'import {createChimeAdapter} from "./client/chime.ts";\n' : '')
+    + (hasReasoning ? 'import {createReasoningAdapter} from "./client/reasoning-settings.ts";\n' : '')
+    + 'window.__ModuleLoader__.load({id:' + JSON.stringify(name) + ',factory(require){return createExtrasClient('
+    + JSON.stringify({rowId:name,packageName:name,moduleIds:modules}) + ',require("react"),'
+    + (hasChime ? 'createChimeAdapter' : 'undefined') + ',' + (hasReasoning ? 'createReasoningAdapter' : 'undefined') + ');}});';
   await build({stdin: {contents: client, resolveDir: root, sourcefile: 'extras-client-entry.ts', loader: 'ts'}, outfile: join(out, 'lib/client.js'), bundle: true, platform: 'browser', format: 'iife', target: 'es2022', sourcemap: true, legalComments: 'linked'});
   await writeFile(join(out, 'cordis.patch.yml'), '# Generated from the same feature source as every Extras distribution.\n- insert:\n    - id: ' + name + '\n      name: ' + name + '\n      config: {}\n');
   const peers = Object.fromEntries(await Promise.all(hostPackages.map(async pkg => {
