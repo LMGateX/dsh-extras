@@ -1,8 +1,9 @@
 import { build } from 'esbuild';
-import { mkdir, readFile, writeFile, copyFile, cp } from 'node:fs/promises';
-import { resolve, join } from 'node:path';
+import { mkdir, readFile, writeFile, copyFile, cp, rm, access } from 'node:fs/promises';
+import { resolve, join, dirname } from 'node:path';
 import { createRequire } from 'node:module';
 import { distributions, sourceDirectories, clientDependencies } from './distributions.mjs';
+import { writeDeclarations } from './declarations.mjs';
 const root = resolve(import.meta.dirname, '..');
 const source = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
 const rootRequire = createRequire(join(root, 'package.json'));
@@ -10,6 +11,8 @@ const hostRequire = createRequire(rootRequire.resolve('@deepseek-ai/dsh/package.
 const hostPackages = ['cosmokit', 'cordis', 'cordis-plugin-loader', 'dsh-agent', 'dsh-app-boot', 'dsh-compaction', 'dsh-goal', 'dsh-jobs', 'dsh-llm', 'dsh-system-prompt', 'dsh-token-meter', 'dsh-tools', 'dsh-ptc-runtime', 'dsh-host-webserver', 'dsh-client-connection', 'dsh-hmr', 'schemastery'];
 for (const { name, modules } of distributions) {
   const out = join(root, 'dist', name);
+  if (dirname(out) !== join(root, 'dist')) throw new Error('Unexpected distribution output');
+  await rm(out, {recursive: true, force: true});
   await mkdir(join(out, 'lib'), {recursive: true});
   // Canonical ids may contain hyphens; never use them as JavaScript bindings.
   const aliases = modules.map((_, index) => 'feature' + index);
@@ -29,16 +32,23 @@ for (const { name, modules } of distributions) {
     + (hasChime ? 'createChimeAdapter' : 'undefined') + ',' + (hasReasoning ? 'createReasoningAdapter' : 'undefined') + ');}});';
   await build({stdin: {contents: client, resolveDir: root, sourcefile: 'extras-client-entry.ts', loader: 'ts'}, outfile: join(out, 'lib/client.js'), bundle: true, platform: 'browser', format: 'iife', target: 'es2022', sourcemap: true, legalComments: 'linked'});
   await writeFile(join(out, 'cordis.patch.yml'), '# Generated from the same feature source as every Extras distribution.\n- insert:\n    - id: ' + name + '\n      name: ' + name + '\n      config: {}\n');
-  const peers = Object.fromEntries(await Promise.all(hostPackages.map(async pkg => {
+  // Driver ownership detection resolves these dynamically from the installed DSH anchor.
+  const selectedHostPackages = [...hostPackages, ...(modules.includes('goalWait') ? ['dsh', 'dsh-goal-round-driver'] : [])];
+  const peers = Object.fromEntries(await Promise.all(selectedHostPackages.map(async pkg => {
     const fullName = '@deepseek-ai/' + pkg;
     const manifest = JSON.parse(await readFile(hostRequire.resolve(fullName + '/package.json'), 'utf8'));
     return [fullName, manifest.version];
   })));
   const manifest = {
     name, version: source.version, description: name === 'dsh-extras' ? source.description : 'DSH Extras: ' + modules[0] + ' distribution', type: 'module', license: source.license,
-    main: './lib/index.js', exports: {'.': './lib/index.js', './client': './lib/client.js', './migration': './lib/migration.js', './package.json': './package.json'},
+    main: './lib/index.js', types: './lib/index.d.ts', exports: {
+      '.': {types: './lib/index.d.ts', default: './lib/index.js'},
+      './client': {types: './lib/client.d.ts', default: './lib/client.js'},
+      './migration': {types: './lib/migration.d.ts', default: './lib/migration.js'},
+      './package.json': './package.json',
+    },
     bin: {'dsh-extras-migrate': './lib/migrate.js'}, engines: source.engines, repository: source.repository,
-    files: ['lib/', 'cordis.patch.yml', 'README.md', 'LICENSE', 'notices/', 'assets/', 'THIRD_PARTY_NOTICES.md'],
+    files: ['lib/', 'cordis.patch.yml', 'README.md', 'LICENSE', 'notices/', 'assets/', 'THIRD_PARTY_NOTICES.md', 'PUBLIC_PACKAGE_TYPES.md'],
     peerDependencies: peers, peerDependenciesMeta: Object.fromEntries(Object.keys(peers).map(key => [key,{optional:true}])),
     dependencies: {'@deepseek-ai/schemastery': peers['@deepseek-ai/schemastery'], yaml: source.dependencies.yaml},
     dsh: {bundle: {patch: 'cordis.patch.yml'}, client: {platform:'web', inject: [...new Set(modules.flatMap(id=>clientDependencies[id]))]}},
@@ -46,6 +56,7 @@ for (const { name, modules } of distributions) {
   await writeFile(join(out, 'package.json'), JSON.stringify(manifest, null, 2) + '\n');
   await copyFile(join(root, 'README.md'), join(out, 'README.md'));
   await copyFile(join(root, 'LICENSE'), join(out, 'LICENSE'));
+  await copyFile(join(root, 'docs/PUBLIC_PACKAGE_TYPES.md'), join(out, 'PUBLIC_PACKAGE_TYPES.md'));
   await mkdir(join(out, 'notices'), {recursive: true});
   for (const id of modules) await copyFile(join(root, 'src/modules', sourceDirectories[id], 'NOTICE.txt'), join(out, 'notices', id + '.txt'));
   if (hasChime) {
@@ -53,5 +64,18 @@ for (const { name, modules } of distributions) {
     await cp(join(root, 'assets'), join(out, 'assets'), {recursive: true});
     // Source sound data is compiled into chime payload; source licenses remain downloadable.
   }
+  if (modules.includes('goalWait')) {
+    const driver = join(root, 'src/modules/goal-wait/driver');
+    // The parity port may not exist on an older source baseline. Once present, both
+    // provenance and license are mandatory; never copy host metadata or port assets
+    // into distributions that did not select goalWait.
+    let present = true;
+    try { await access(driver); } catch (error) { if (error.code !== 'ENOENT') throw error; present = false; }
+    if (present) {
+      await mkdir(join(out, 'lib/driver'), {recursive: true});
+      for (const file of ['provenance.json', 'UPSTREAM-LICENSE.txt']) await copyFile(join(driver, file), join(out, 'lib/driver', file));
+    }
+  }
+  await writeDeclarations(root, out, {name, modules});
   console.log('Built ' + name + '@' + source.version + ' [' + modules.join(', ') + ']');
 }

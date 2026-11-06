@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp, rm, readFile, mkdir, readdir, symlink, writeFile} from 'node:fs/promises';
+import {mkdtemp, rm, readFile, mkdir, readdir, symlink, writeFile, realpath} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {verifyPublicTypes} from './public-types-consumer.mjs';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {createRequire} from 'node:module';
@@ -15,8 +17,8 @@ const hostRequire = createRequire(createRequire(join(root,'package.json')).resol
 for(const {name,modules} of distributions) test('packed installable distribution: '+name,{timeout:120000},async t=>{
   const archive=join(artifactDir,name+'-'+version+'.tgz');
   assert.equal(createHash('sha256').update(await readFile(archive)).digest('hex'),checksums.get(name+'-'+version+'.tgz'));
-  const temp=await mkdtemp(join(root,'.sandbox-consumer-'));
-  t.after(async()=>{assert.ok(temp.startsWith(join(root,'.sandbox-consumer-')));await rm(temp,{recursive:true,force:true});});
+  const temp=await mkdtemp(join(tmpdir(),'ex-package-'));
+  t.after(async()=>{assert.ok(temp.startsWith(join(tmpdir(),'ex-package-')));await rm(temp,{recursive:true,force:true});});
   await writeFile(join(temp,'package.json'),JSON.stringify({name:'extras-clean-consumer',private:true,type:'module'}));
   // Use npm itself, not source imports. Optional host peers must not install a second runtime.
   execFileSync('npm',['install','--ignore-scripts','--omit=optional','--no-audit','--no-fund',archive],{cwd:temp,stdio:'pipe',timeout:90000,env:{...process.env,HOME:temp,DSH_HOME:join(temp,'dsh-home'),npm_config_cache:join(temp,'npm-cache')}});
@@ -43,13 +45,35 @@ for(const {name,modules} of distributions) test('packed installable distribution
   // Host imports resolve against one anchored runtime in the isolated consumer, as DSH does.
   const imports=[...server.matchAll(/from ["'](@deepseek-ai\/[^"']+)["']/g)].map(match=>match[1]);
   await mkdir(join(temp,'node_modules','@deepseek-ai'),{recursive:true});
-  for(const spec of new Set(imports)) {
-    if(spec==='@deepseek-ai/schemastery')continue;
+  for(const spec of new Set([...imports, ...Object.keys(pkg.peerDependencies)])) {
     const dir=join(temp,'node_modules',spec);
-    try {await symlink(resolve(hostRequire.resolve(spec+'/package.json'),'..'),dir,'dir');} catch(error) {if(error.code!=='EEXIST')throw error;}
+    assert.ok(dir.startsWith(join(temp,'node_modules','@deepseek-ai') + '/'));
+    await rm(dir,{recursive:true,force:true});
+    const anchor=resolve(hostRequire.resolve(spec+'/package.json'),'..');
+    await symlink(anchor,dir,'dir');
+    assert.equal(await realpath(dir),await realpath(anchor),'one native host runtime for '+spec);
   }
+  await verifyPublicTypes(temp,name,modules);
   const entry=await import(pathToFileURL(join(packageDir,'lib/index.js')).href);
   assert.equal(entry.name,name);assert.equal(typeof entry.apply,'function');
+  assert.deepEqual(Object.keys(entry).sort(),['Config','apply','inject','name']);
+  const consumerRequire=createRequire(join(temp,'package.json'));
+  assert.throws(()=>consumerRequire.resolve(name+'/client-types'),{code:'ERR_PACKAGE_PATH_NOT_EXPORTED'});
+  assert.throws(()=>consumerRequire.resolve(name+'/locale'),{code:'ERR_PACKAGE_PATH_NOT_EXPORTED'});
+  execFileSync(process.execPath,['--input-type=module','-e',`
+    import assert from 'node:assert/strict';
+    const root=await import(${JSON.stringify(name)});
+    assert.deepEqual(Object.keys(root).sort(),['Config','apply','inject','name']);
+    assert.equal(root.name,${JSON.stringify(name)});
+    const migration=await import(${JSON.stringify(name+'/migration')});
+    assert.equal(typeof migration.inspectMigration,'function');
+    let registration;
+    globalThis.window={__ModuleLoader__:{load(value){registration=value;}}};
+    const client=await import(${JSON.stringify(name+'/client')});
+    assert.deepEqual(Object.keys(client),[]);
+    assert.equal(registration.id,root.name);
+    assert.equal(typeof registration.factory,'function');
+  `],{cwd:temp,encoding:'utf8',stdio:'pipe',env:{...process.env,HOME:temp,DSH_HOME:join(temp,'dsh-home')},timeout:30000});
   assert.deepEqual(Object.keys(entry.Config.dict.modules.dict),modules);
   assert.equal(Object.hasOwn(entry.Config.dict.modules.dict, 'context'), false, 'no old configuration alias in packed exports');
   assert.ok(!listing.includes('package/notices/context.txt'), 'no old feature notice alias');
