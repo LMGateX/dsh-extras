@@ -4,6 +4,29 @@ import assert from 'node:assert/strict'
 import { goalWaitGate } from '../../../src/modules/goal-wait/index.ts'
 import { createRuntime, load, runtimeVersion } from '../retry/runtime.ts'
 
+test('a quiet native Job settlement wakes an activation hold without an artificial agent event', { timeout: 10000 }, async () => {
+  const runtime = await createRuntime({ product: false, retry: false })
+  const { ctx } = runtime
+  let detach: (() => void) | undefined
+  try {
+    await ctx.plugin((await load<any>('dsh-goal')).default).await()
+    await ctx.plugin((await load<any>('dsh-jobs-local')).default, {}).await()
+    detach = ctx.jobs.attachController('quiet-job-gate-test')
+    await ctx.plugin(goalWaitGate, {}).await()
+    const handle = await runtime.createAgent({ sessionId: 'quiet-native-job' })
+    let finish!: (value: { status: string }) => void
+    const done = new Promise<{ status: string }>(resolve => { finish = resolve })
+    const id = ctx.jobs.start({ kind: 'workflow', label: 'quiet owned job', owner: handle.agent.session.id, run: () => ({ done, cancel: () => finish({ status: 'killed' }) }) })
+    ctx.goals.create(handle.agent, { objective: 'quiet wake', maxGoalRounds: 1 })
+    assert.equal(ctx.goals.get(handle.agent).activation, 'disarmed')
+    finish({ status: 'completed' })
+    await ctx.jobs.wait(id, 1000, handle.agent.session.id)
+    await new Promise<void>(resolve => setImmediate(resolve))
+    assert.equal(ctx.goals.get(handle.agent).activation, 'armed')
+    assert.equal(ctx.goals.get(handle.agent).phase, 'active')
+  } finally { detach?.(); await runtime.dispose() }
+})
+
 test('conventional gate holds and releases beside the current official goal driver', { timeout: 10000 }, async (t) => {
   const runtime = await createRuntime({ product: false, retry: false })
   const { ctx } = runtime

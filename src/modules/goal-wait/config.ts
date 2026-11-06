@@ -1,10 +1,13 @@
 // Adapted from dsh-goal-wait-gate; original MIT license retained in NOTICE.txt.
 import Schema from '@deepseek-ai/schemastery'
 
+export const strategies = ['activation', 'replacement', 'native', 'off'] as const
+export type Strategy = typeof strategies[number]
 export type Live<T> = T | { get(): T }
 
 /** Native volatile fields; orchestration owns the separate enabled switch. */
 export const Config = Schema.object({
+  strategy: Schema.union(strategies.map(strategy => Schema.const(strategy))).default('activation').description('Goal continuation owner: official driver plus gate (activation), pinned port (replacement), official unchanged (native), or no automatic continuation (off). Activation inherits same-value external-disarm overlap ambiguity; replacement waits without disarming.').volatile(),
   waitForJobs: Schema.boolean().default(true).description('Hold while this session owns running or stopping jobs.').volatile(),
   waitForSubagents: Schema.boolean().default(true).description('Hold while this session owns live subagent descendants.').volatile(),
   maxHoldMs: Schema.natural().default(0).description('Maximum hold in milliseconds; 0 holds indefinitely. Applies to the next hold.').volatile(),
@@ -12,6 +15,7 @@ export const Config = Schema.object({
 
 /** Gate policy. Every field is optional; defaults hold on every available signal. */
 export interface Config {
+  readonly strategy?: Live<Strategy>
   /** Hold continuation while the session owns running or stopping jobs. */
   readonly waitForJobs?: Live<boolean>
   /** Hold continuation while the session owns live subagent descendants. */
@@ -22,6 +26,7 @@ export interface Config {
 
 /** Validated gate policy with every default applied. */
 export interface ResolvedConfig {
+  readonly strategy: Strategy
   readonly waitForJobs: boolean
   readonly waitForSubagents: boolean
   readonly maxHoldMs: number
@@ -35,7 +40,10 @@ export interface ResolvedConfig {
  * @throws Error naming the offending field, so a bad composition fails at load.
  */
 export function resolveConfig(config: Config = {}): ResolvedConfig {
+  const strategy = liveValue(config.strategy) ?? 'activation'
+  if (!(strategies as readonly unknown[]).includes(strategy)) throw new Error(`goal-wait-gate: strategy must be one of ${strategies.join(', ')}`)
   return {
+    strategy,
     waitForJobs: optionalBoolean('waitForJobs', liveValue(config.waitForJobs)) ?? true,
     waitForSubagents: optionalBoolean('waitForSubagents', liveValue(config.waitForSubagents)) ?? true,
     maxHoldMs: optionalDuration('maxHoldMs', liveValue(config.maxHoldMs)) ?? 0,

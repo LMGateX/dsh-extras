@@ -1,4 +1,6 @@
-Adapted from dsh-goal-wait-gate
+Adapted from dsh-goal-wait-gate 0.4.23
+Source: cbd86273660893336afaee31794b5fd76487db78
+Native-derived driver attribution and exact artifact provenance: driver/UPSTREAM-LICENSE.txt and driver/provenance.json
 
 MIT License
 

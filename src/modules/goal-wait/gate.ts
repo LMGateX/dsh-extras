@@ -48,6 +48,9 @@ export class GoalWaitGate {
     }
   }
 
+  /** The exact hold is continuation authority owned by this gate, not durable goal state. */
+  holds(agent: Agent, goalId: string): boolean { return this.#heldGoals.get(agent) === goalId }
+
   /** Drop all bookkeeping for one agent that is no longer live. */
   forget(agent: Agent): void {
     this.#heldGoals.delete(agent)

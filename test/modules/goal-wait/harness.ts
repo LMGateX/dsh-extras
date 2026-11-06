@@ -9,7 +9,7 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { GoalActivationChanged, GoalChanged } from '@deepseek-ai/dsh-goal'
 import type { JobView } from '@deepseek-ai/dsh-jobs'
-import { goalWaitGate, type Config } from '../../../src/modules/goal-wait/index.ts'
+import { goalWaitGate, runtimeStatus, type Config } from '../../../src/modules/goal-wait/index.ts'
 
 export type Activation = 'armed' | 'disarmed'
 export type GoalPhase = 'active' | 'paused' | 'blocked' | 'complete'
@@ -60,6 +60,7 @@ export class FakeAgents extends Service {
 
   add(agent: FakeAgent): FakeAgent {
     this.items.set(agent.id, agent)
+    this.ctx.emit('agent/created', { agent: agent as unknown as Agent, source: 'startup' })
     return agent
   }
 
@@ -71,7 +72,7 @@ export class FakeAgents extends Service {
   }
 
   get(id: string): FakeAgent | undefined {
-    return this.items.get(id)
+    return this.items.get(id) ?? [...this.items.values()].find(agent => agent.session.id === id)
   }
 
   list(): FakeAgent[] {
@@ -201,6 +202,7 @@ export class FakeJobs extends Service {
 
 export interface Harness {
   ctx: Context
+  status(): ReturnType<typeof runtimeStatus>
   agents: FakeAgents
   goals: FakeGoals
   jobs: FakeJobs | undefined
@@ -219,7 +221,7 @@ export interface Harness {
 }
 
 export async function createHarness(
-  options: { config?: Config; rawConfig?: Config; driver?: boolean; mountJobs?: boolean } = {},
+  options: { config?: Config; rawConfig?: Config; driver?: boolean; mountJobs?: boolean; beforeMount?: (services: { agents: FakeAgents; goals: FakeGoals; jobs?: FakeJobs }) => void } = {},
 ): Promise<Harness> {
   const ctx = new Context()
   await ctx.plugin(FakeAgents)
@@ -265,6 +267,8 @@ export async function createHarness(
     })
   }
 
+  options.beforeMount?.({ agents, goals, jobs })
+
   // rawConfig models a loader-resolved config; do not run its accessors through the schema twice.
   const module = options.rawConfig === undefined ? goalWaitGate : {
     name: goalWaitGate.name, inject: goalWaitGate.inject,
@@ -276,6 +280,7 @@ export async function createHarness(
   let n = 0
   return {
     ctx,
+    status: () => runtimeStatus(fiber.ctx),
     agents,
     goals,
     jobs,
