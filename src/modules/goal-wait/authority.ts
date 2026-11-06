@@ -17,6 +17,7 @@ export function observeTransitionAuthority(ctx: Context, host: HostProfile, hold
   let marked: Agent | undefined
   let unknown = false
   let closed = false
+  let finishing = false
   const artifact = pathToFileURL(host.artifactPath).href
   const nativeLifecycle = (stack: string): boolean => {
     if (process.sourceMapsEnabled) return false
@@ -27,6 +28,7 @@ export function observeTransitionAuthority(ctx: Context, host: HostProfile, hold
       && (frames[4]?.includes(artifact + ':357:') === true || frames[4]?.includes(artifact + ':363:') === true)
   }
   function wrapped(this: unknown, ...args: Parameters<typeof original>): ReturnType<typeof original> {
+    if (closed) return Reflect.apply(original, this, args)
     const stack = new Error().stack ?? ''
     const ownedCall = marked === args[0] || nativeLifecycle(stack)
     marked = undefined // Consume before the native call can synchronously emit external callbacks.
@@ -51,27 +53,46 @@ export function observeTransitionAuthority(ctx: Context, host: HostProfile, hold
     }
     return Reflect.apply(original, this, args)
   }
-  Object.defineProperty(goals, 'disarm', { configurable: true, enumerable: originalDescriptor?.enumerable ?? false, writable: true, value: wrapped })
-  const intact = () => Object.getOwnPropertyDescriptor(goals, 'disarm')?.value === wrapped
+  const installedDescriptor: PropertyDescriptor = { configurable: true, enumerable: originalDescriptor?.enumerable ?? false, writable: true, value: wrapped }
+  Object.defineProperty(goals, 'disarm', installedDescriptor)
+  const intact = () => {
+    const current = Object.getOwnPropertyDescriptor(goals, 'disarm')
+    return current !== undefined && (['value', 'get', 'set', 'configurable', 'enumerable', 'writable'] as const)
+      .every(key => Object.is(current[key], installedDescriptor[key]))
+  }
+  const changed = 'goal disarm descriptor changed during continuation handover; authority not restored'
   return {
-    owned(agent: Agent, action: () => void) { marked = agent; try { action() } finally { marked = undefined } },
+    owned(agent: Agent, action: () => void) {
+      if (closed) return action()
+      marked = agent; try { action() } finally { marked = undefined }
+    },
     finish(restore: boolean): string | undefined {
-      if (closed) return undefined
-      closed = true
-      const retained = intact()
-      if (retained) {
-        if (originalDescriptor) Object.defineProperty(goals, 'disarm', originalDescriptor)
-        else Reflect.deleteProperty(goals, 'disarm')
+      if (closed || finishing) return undefined
+      finishing = true
+      let reason: string | undefined
+      try {
+        if (!intact()) reason = changed
+        else if (restore) for (const [agent, capture] of captures) {
+          // A prior resume can synchronously run external listeners. Keep the
+          // observer alive and recheck descriptor ownership for every next goal.
+          if (!intact()) { reason = changed; break }
+          if (!capture.owned || capture.revoked || ctx.agents.get(agent.id) !== agent) continue
+          const goal = goals.get(agent)
+          if (goal?.id !== capture.id || goal.revision !== capture.revision || goal.phase !== 'active' || goal.activation !== 'disarmed') continue
+          goals.resume(agent, { id: goal.id, revision: goal.revision })
+        }
+        if (restore && unknown) reason ??= 'unrecognized native disarm frame; continuation authority was not restored'
+      } finally {
+        try {
+          if (intact()) {
+            if (originalDescriptor) Object.defineProperty(goals, 'disarm', originalDescriptor)
+            else Reflect.deleteProperty(goals, 'disarm')
+          } else reason = changed
+        } finally {
+          closed = true; finishing = false; marked = undefined; captures.clear()
+        }
       }
-      if (!retained) return 'goal disarm descriptor changed during continuation handover; authority not restored'
-      if (!restore) return undefined
-      for (const [agent, capture] of captures) {
-        if (!capture.owned || capture.revoked || ctx.agents.get(agent.id) !== agent) continue
-        const goal = goals.get(agent)
-        if (goal?.id !== capture.id || goal.revision !== capture.revision || goal.phase !== 'active' || goal.activation !== 'disarmed') continue
-        goals.resume(agent, { id: goal.id, revision: goal.revision })
-      }
-      return unknown ? 'unrecognized native disarm frame; continuation authority was not restored' : undefined
+      return reason
     },
   }
 }

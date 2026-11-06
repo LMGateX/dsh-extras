@@ -41,3 +41,24 @@ git diff --check
 Result at that checkpoint: 60 passed / 0 failed / 0 skipped / 0 cancelled. Final rerun after diagnostic/overlap/quiet-descendant additions: 63 passed / 0 failed / 0 skipped / 0 cancelled; the following typecheck initially caught an unannotated ancestor array, corrected to its native Agent type, then typecheck + whitespace checks both exit 0; typecheck and whitespace check exit 0. Packed-native/browser/clean-consumer evidence belongs to the integration lane and is not claimed from these source imports. No install, push, release, live GUI or real HOME/profile mutation performed by this lane.
 
 15. Full Config/apply/runtimeStatus dependency-pending port slice: initially reports actual pending/unavailable/none; after a legitimate goal was created during pending, late native Jobs mounting exposed red 0 dispatch forever (the port mount sweep disarmed the new goal). Green keeps the transition observer until the actual native fiber activates, captures only the exact directly observed owned lifecycle mutation, restores with public exact-ref resume, and cleans the observer. A pending replacement can also switch back to stock and continue that goal without waiting for the absent dependency. Native owner stale pending reason after activation was reported to its owner for authoritative cleanup.
+
+## Fresh review authority repair (2026-11-06, after 09ad5bd)
+
+Scope: authority.ts, mode.ts, actual public-native strategy tests, and this evidence only; host-owner.ts is unchanged. Parent reported fresh Standards/Spec P1 reproductions.
+
+- **Descriptor ownership red → green:** real stock teardown activation event changed only the installed disarm descriptor's enumerable flag while retaining the exact same wrapper. Red resumed the goal (armed, revision advance) and overwrote foreign flags. Green compares value/get/set/configurable/enumerable/writable, preserves the foreign descriptor, rejects restoration and reports unavailable/descriptor reason. A real jobs-absent pending port + late native Jobs mount confirms the same fence. Additional actual-native cases cover enumerable/configurable/writable changes while an activation gate owns a hold.
+- **Retained wrapper cleanup:** closed wrappers immediately delegate without observing; every finish path clears capture references and consumed lifecycle marks. The observer remains installed while restoring a finite set of goals, so a synchronous public resume callback can revoke another goal before its turn. Actual-native multi-goal regression passes without granting a second resume.
+- **Legacy gate bypass red → green:** an actual stock cleanup finalizer disarmed an already-held goal while the transition observer was active. Red activation→off still became armed via the later legacy gate.dispose path. Green uses closeWithoutRearm when switching out of activation; the observer is the sole restoration authority. Native public resume callback revocation, ordinary authorized switches, exact one-revision advance, descriptor failures and explicit stock-disable/failed-switch paths all remain covered. This is observable withdrawal, not the inherited unobservable activation overlap limitation.
+- **Observer-install failure red → green:** a foreign nonconfigurable disarm descriptor made dispose fail before owner.close; actual native stock stayed stopped (fiber state 4). Green degrades to a no-authority observation handle, reports unavailable diagnostics during an affected live switch, and still drains/restores the original native owner on unload. With a callable nonconfigurable/writable:true descriptor the goal stays disarmed at the same revision, with zero provider dispatch and no descriptor overwrite. An additional fully frozen function (nonconfigurable plus writable:false) also breaks Cordis's own function-proxy get invariant: native disarm itself then cannot be called. We do not claim to repair that externally broken host or forcibly rewrite its descriptor; the cleanup fix is independent of observation and never invents resume authority.
+
+Final exact command:
+
+~~~sh
+HOME="$PWD/.sandbox-lane-goal/home" DSH_HOME="$PWD/.sandbox-lane-goal/dsh" TMPDIR="$PWD/.sandbox-lane-goal/tmp" \
+  node --test --test-concurrency=1 test/modules/goal-wait/*.test.ts \
+  test/integration/goal-strategies.test.ts test/integration/native-driver-lease.test.ts
+npm run typecheck
+git diff --check
+~~~
+
+**76 passed / 0 failed / 0 skipped / 0 cancelled**, about 4.6s; typecheck and whitespace checks exit 0. This lane still uses its previously integrated formal native-owner dependency; parent must rerun this scoped repair with the latest independently revised owner/getter and packed artifacts before release. No private production methods, host patch, real install, live GUI, push or publication were used.

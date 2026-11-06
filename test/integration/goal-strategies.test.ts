@@ -307,6 +307,220 @@ test('a dependency-pending replacement can switch back to stock without strandin
   assert.equal(f.ctx.goals.get(handle.agent).roundsStarted, 1)
 })
 
+test('native teardown treats same-wrapper descriptor flag replacement as external revocation and preserves it', { timeout: 15000 }, async t => {
+  const f = await createGoalRuntime(t, { config: { strategy: 'native' } })
+  await until(f.status, state => state.capabilities.continuation.phase === 'active', 'stock before descriptor revocation')
+  const handle = await f.createAgent({ sessionId: 'stock-descriptor-revocation' })
+  const entered = Promise.withResolvers<void>(), release = Promise.withResolvers<void>()
+  const offStep = f.ctx.on('agent/pre-step', async ({ agent }: any, next: () => Promise<any>) => {
+    if (agent === handle.agent) { entered.resolve(); await release.promise }
+    return next()
+  })
+  let foreign: PropertyDescriptor | undefined
+  let offActivation: (() => void) | undefined
+  try {
+    handle.agent.followup(llm.createUserMessage({ content: [{ type: 'text', text: 'synthetic human turn' }], source: { kind: 'user' } }))
+    await entered.promise
+    const before = f.ctx.goals.create(handle.agent, { objective: 'respect descriptor owner', maxGoalRounds: 1 })
+    offActivation = f.ctx.on('goal/activation-changed', ({ sessionId }: any) => {
+      if (sessionId !== handle.agent.session.id || foreign) return
+      const installed = Object.getOwnPropertyDescriptor(f.ctx.goals, 'disarm')!
+      foreign = { ...installed, enumerable: !installed.enumerable }
+      Object.defineProperty(f.ctx.goals, 'disarm', foreign)
+    })
+    await f.update({ strategy: 'off' })
+    await until(f.status, state => state.details.goalWait.requested === 'off' && (state.capabilities.continuation.phase === 'active' || !!state.details.goalWait.fallback), 'descriptor handover settled')
+    const after = f.ctx.goals.get(handle.agent)
+    assert.equal(after.activation, 'disarmed', 'descriptor replacement cannot manufacture resume authority')
+    assert.equal(after.revision, before.revision)
+    assert.equal(after.phase, 'active')
+    assert.ok(foreign)
+    assert.deepEqual(Object.getOwnPropertyDescriptor(f.ctx.goals, 'disarm'), foreign, 'foreign flags are never overwritten')
+    assert.equal(f.status().capabilities.continuation.phase, 'unavailable')
+    assert.match(f.status().details.goalWait.fallback!, /descriptor/)
+    offActivation?.(); offActivation = undefined
+    const resumed = f.ctx.goals.resume(handle.agent, after)
+    const delegated = f.ctx.goals.disarm(handle.agent)
+    assert.equal(delegated.revision, resumed.revision, 'an externally retained closed wrapper delegates the native method')
+    assert.equal(delegated.activation, 'disarmed')
+    assert.deepEqual(Object.getOwnPropertyDescriptor(f.ctx.goals, 'disarm'), foreign)
+  } finally { offActivation?.(); release.resolve(); offStep(); await handle.agent.whenIdle() }
+})
+
+test('pending replacement preserves a foreign same-wrapper descriptor and never resumes after late Jobs mount', { timeout: 15000 }, async t => {
+  const f = await createGoalRuntime(t, { jobs: false, config: { strategy: 'replacement' } })
+  await until(f.status, state => !!state.details.goalWait.fallback, 'pending port before descriptor revocation')
+  const installed = Object.getOwnPropertyDescriptor(f.ctx.goals, 'disarm')!
+  const foreign = { ...installed, enumerable: !installed.enumerable }
+  Object.defineProperty(f.ctx.goals, 'disarm', foreign)
+  const handle = await f.createAgent({ sessionId: 'pending-descriptor-revocation' })
+  const before = f.ctx.goals.create(handle.agent, { objective: 'pending descriptor owner', maxGoalRounds: 1 })
+  await f.ctx.plugin((await load<any>('dsh-jobs-local')).default, {}).await()
+  const detach = f.ctx.jobs.attachController('pending-descriptor-test'); t.after(detach)
+  await until(f.status, state => !!state.details.goalWait.fallback?.includes('descriptor'), 'pending descriptor revocation diagnostic')
+  const after = f.ctx.goals.get(handle.agent)
+  assert.equal(after.id, before.id); assert.equal(after.revision, before.revision)
+  assert.equal(after.activation, 'disarmed'); assert.equal(after.phase, 'active')
+  assert.equal(handle.state.requests.length, 0)
+  assert.equal(f.status().capabilities.continuation.phase, 'unavailable')
+  assert.deepEqual(Object.getOwnPropertyDescriptor(f.ctx.goals, 'disarm'), foreign)
+  assert.equal(f.ctx.goals.disarm(handle.agent).revision, before.revision, 'retained closed wrapper delegates without changing authority')
+})
+
+for (const strategy of ['off', 'native'] as const) test('activation to ' + strategy + ' never bypasses observed same-value disarm through legacy gate disposal', { timeout: 15000 }, async t => {
+  const f = await createGoalRuntime(t)
+  await until(f.status, state => state.capabilities.continuation.phase === 'active', 'activation before observed revocation')
+  const handle = await f.createAgent({ sessionId: 'gate-dispose-revocation-' + strategy })
+  let finish!: (value: { status: string }) => void
+  const done = new Promise<{ status: string }>(resolve => { finish = resolve })
+  f.ctx.jobs.start({ kind: 'workflow', label: 'gate-owned wait', owner: handle.agent.session.id,
+    run: () => ({ done, cancel: () => finish({ status: 'killed' }) }) })
+  const before = f.ctx.goals.create(handle.agent, { objective: 'no second resume authority', maxGoalRounds: 1 })
+  assert.equal(f.ctx.goals.get(handle.agent).activation, 'disarmed')
+  let revoked = false
+  if (strategy === 'off') f.stockEntry().fiber!.ctx.effect(() => () => { revoked = true; f.ctx.goals.disarm(handle.agent) })
+  else {
+    const stop = f.ctx.on('goal/changed', ({ agent, change }: any) => {
+      if (agent !== handle.agent || revoked || change.operation !== 'resume') return
+      revoked = true; f.ctx.goals.disarm(handle.agent)
+    }, { prepend: true })
+    t.after(stop)
+  }
+  await f.update({ strategy })
+  await until(f.status, state => state.details.goalWait.requested === strategy && (state.capabilities.continuation.phase === 'active' || !!state.details.goalWait.fallback), 'observed revocation switch settled')
+  assert.equal(revoked, true, 'actual native lifecycle emitted an observable external disarm')
+  const after = f.ctx.goals.get(handle.agent)
+  assert.equal(after.activation, 'disarmed')
+  assert.equal(after.revision, before.revision + (strategy === 'native' ? 1 : 0), 'no legacy gate.dispose resume after observable revocation')
+  assert.equal(after.phase, 'active')
+  assert.equal(handle.state.requests.length, 0)
+})
+
+test('a nonconfigurable foreign disarm descriptor cannot prevent replacement unload from draining and restoring stock', { timeout: 15000 }, async t => {
+  const f = await createGoalRuntime(t, { config: { strategy: 'replacement' } })
+  await until(f.status, state => state.capabilities.continuation.phase === 'active', 'port before nonconfigurable observer')
+  const handle = await f.createAgent({ sessionId: 'nonconfigurable-unload' })
+  let finish!: (value: { status: string }) => void
+  const done = new Promise<{ status: string }>(resolve => { finish = resolve })
+  f.ctx.jobs.start({ kind: 'workflow', label: 'pending through foreign descriptor', owner: handle.agent.session.id,
+    run: () => ({ done, cancel: () => finish({ status: 'killed' }) }) })
+  const before = f.ctx.goals.create(handle.agent, { objective: 'cleanup must not depend on observation', maxGoalRounds: 1 })
+  await new Promise<void>(resolve => setImmediate(resolve))
+  const foreign = { configurable: false, enumerable: true, writable: true, value: f.ctx.goals.disarm }
+  Object.defineProperty(f.ctx.goals, 'disarm', foreign)
+  await f.fiber.dispose()
+  assert.equal(f.stockEntry().fiber?.state, 2, 'stock restoration runs even when a temporary observer cannot be installed')
+  assert.notEqual(f.stockEntry().fiber?.uid, null)
+  const after = f.ctx.goals.get(handle.agent)
+  assert.equal(after.id, before.id); assert.equal(after.revision, before.revision)
+  assert.equal(after.activation, 'disarmed'); assert.equal(after.phase, 'active')
+  assert.equal(handle.state.requests.length, 0, 'unobserved cleanup never guesses resume authority')
+  assert.deepEqual(Object.getOwnPropertyDescriptor(f.ctx.goals, 'disarm'), foreign)
+})
+
+for (const field of ['enumerable', 'configurable', 'writable'] as const) test('activation gate cannot resume after foreign descriptor ' + field + ' replacement', { timeout: 15000 }, async t => {
+  const f = await createGoalRuntime(t)
+  await until(f.status, state => state.capabilities.continuation.phase === 'active', 'gate before descriptor flag change')
+  const handle = await f.createAgent({ sessionId: 'gate-descriptor-' + field })
+  let finish!: (value: { status: string }) => void
+  const done = new Promise<{ status: string }>(resolve => { finish = resolve })
+  f.ctx.jobs.start({ kind: 'workflow', label: 'held descriptor goal', owner: handle.agent.session.id,
+    run: () => ({ done, cancel: () => finish({ status: 'killed' }) }) })
+  const before = f.ctx.goals.create(handle.agent, { objective: 'preserve foreign ' + field, maxGoalRounds: 1 })
+  assert.equal(f.ctx.goals.get(handle.agent).activation, 'disarmed')
+  let foreign: PropertyDescriptor | undefined
+  f.stockEntry().fiber!.ctx.effect(() => () => {
+    const installed = Object.getOwnPropertyDescriptor(f.ctx.goals, 'disarm')!
+    foreign = { ...installed, [field]: !installed[field] }
+    Object.defineProperty(f.ctx.goals, 'disarm', foreign)
+  })
+  await f.update({ strategy: 'off' })
+  await until(f.status, state => !!state.details.goalWait.fallback?.includes('descriptor'), 'descriptor flag revocation settled')
+  assert.equal(f.status().capabilities.continuation.phase, 'unavailable')
+  const after = f.ctx.goals.get(handle.agent)
+  assert.equal(after.activation, 'disarmed'); assert.equal(after.revision, before.revision)
+  assert.equal(after.phase, 'active'); assert.equal(handle.state.requests.length, 0)
+  assert.deepEqual(Object.getOwnPropertyDescriptor(f.ctx.goals, 'disarm'), foreign)
+})
+
+test('observer installation failure reports unavailable during a native switch without preventing stock restoration', { timeout: 15000 }, async t => {
+  const f = await createGoalRuntime(t, { config: { strategy: 'replacement' } })
+  await until(f.status, state => state.capabilities.continuation.phase === 'active', 'port before nonconfigurable native switch')
+  const handle = await f.createAgent({ sessionId: 'nonconfigurable-native-switch' })
+  let finish!: (value: { status: string }) => void
+  const done = new Promise<{ status: string }>(resolve => { finish = resolve })
+  f.ctx.jobs.start({ kind: 'workflow', label: 'unobserved switch wait', owner: handle.agent.session.id,
+    run: () => ({ done, cancel: () => finish({ status: 'killed' }) }) })
+  const before = f.ctx.goals.create(handle.agent, { objective: 'no authority without an observer', maxGoalRounds: 1 })
+  await new Promise<void>(resolve => setImmediate(resolve))
+  const foreign = { configurable: false, enumerable: true, writable: true, value: f.ctx.goals.disarm }
+  Object.defineProperty(f.ctx.goals, 'disarm', foreign)
+  await f.update({ strategy: 'native' })
+  await until(f.status, state => !!state.details.goalWait.fallback?.includes('observer unavailable'), 'observer installation diagnostic')
+  await until(() => f.stockEntry().fiber?.state, state => state === 2, 'unobserved native switch restored stock')
+  assert.equal(f.status().capabilities.continuation.phase, 'unavailable')
+  const after = f.ctx.goals.get(handle.agent)
+  assert.equal(after.activation, 'disarmed'); assert.equal(after.revision, before.revision)
+  assert.equal(handle.state.requests.length, 0)
+  assert.deepEqual(Object.getOwnPropertyDescriptor(f.ctx.goals, 'disarm'), foreign)
+})
+
+test('authority observation remains effective for other goals during synchronous public resume callbacks', { timeout: 15000 }, async t => {
+  const f = await createGoalRuntime(t, { config: { strategy: 'replacement' } })
+  await until(f.status, state => state.capabilities.continuation.phase === 'active', 'port before multi-goal restore')
+  const handles: any[] = [], goals: any[] = []
+  for (const name of ['first', 'second']) {
+    const handle = await f.createAgent({ sessionId: 'multi-restore-' + name, route: 'multi-restore-route-' + name })
+    let finish!: (value: { status: string }) => void
+    const done = new Promise<{ status: string }>(resolve => { finish = resolve })
+    f.ctx.jobs.start({ kind: 'workflow', label: 'multi-goal native wait', owner: handle.agent.session.id,
+      run: () => ({ done, cancel: () => finish({ status: 'killed' }) }) })
+    handles.push(handle); goals.push(f.ctx.goals.create(handle.agent, { objective: 'multi-goal ' + name, maxGoalRounds: 1 }))
+  }
+  await new Promise<void>(resolve => setImmediate(resolve))
+  let revoked = false
+  const stop = f.ctx.on('goal/changed', ({ agent, change }: any) => {
+    if (agent !== handles[0].agent || change.operation !== 'resume' || revoked) return
+    revoked = true; f.ctx.goals.disarm(handles[1].agent)
+  }, { prepend: true })
+  t.after(stop)
+  await f.update({ strategy: 'off' })
+  await until(f.status, state => state.details.goalWait.requested === 'off' && state.capabilities.continuation.phase === 'active', 'multi-goal restoration settled')
+  assert.equal(revoked, true)
+  assert.equal(f.ctx.goals.get(handles[0].agent).revision, goals[0].revision + 1)
+  assert.equal(f.ctx.goals.get(handles[1].agent).revision, goals[1].revision)
+  assert.equal(f.ctx.goals.get(handles[1].agent).activation, 'disarmed')
+  assert.equal(handles[0].state.requests.length + handles[1].state.requests.length, 0)
+})
+
+test('a failed owned switch cannot recover gate authority after an observed disarm and explicit stock disable', { timeout: 15000 }, async t => {
+  const f = await createGoalRuntime(t)
+  await until(f.status, state => state.capabilities.continuation.phase === 'active', 'activation before failed switch')
+  const handle = await f.createAgent({ sessionId: 'failed-restore-revocation' })
+  let finish!: (value: { status: string }) => void
+  const done = new Promise<{ status: string }>(resolve => { finish = resolve })
+  f.ctx.jobs.start({ kind: 'workflow', label: 'failed switch hold', owner: handle.agent.session.id,
+    run: () => ({ done, cancel: () => finish({ status: 'killed' }) }) })
+  const before = f.ctx.goals.create(handle.agent, { objective: 'failed switch has no fallback authority', maxGoalRounds: 1 })
+  const stock = f.stockEntry()
+  let revoked = false
+  stock.fiber!.ctx.effect(() => async () => {
+    revoked = true; f.ctx.goals.disarm(handle.agent)
+    await stock.update({ disabled: true })
+  })
+  await f.update({ strategy: 'replacement' })
+  await until(f.status, state => !!state.details.goalWait.fallback, 'stock-disabled switch diagnostic')
+  assert.equal(revoked, true)
+  assert.equal(f.status().capabilities.continuation.phase, 'unavailable')
+  assert.equal(stock.disabled, true)
+  const after = f.ctx.goals.get(handle.agent)
+  assert.equal(after.activation, 'disarmed'); assert.equal(after.revision, before.revision)
+  assert.equal(after.phase, 'active'); assert.equal(handle.state.requests.length, 0)
+  await f.fiber.dispose()
+  assert.equal(f.ctx.goals.get(handle.agent).activation, 'disarmed')
+  assert.equal(stock.disabled, true, 'cleanup does not undo the external native disable')
+})
+
 test('ordinary module replacement uses the pinned port, retains armed authority while Jobs wait, and wakes quietly', { timeout: 15000 }, async t => {
   const f = await createGoalRuntime(t, { config: { strategy: 'replacement' } })
   const { ctx, runtime } = f

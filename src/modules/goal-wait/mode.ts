@@ -41,6 +41,17 @@ export function createGoalMode(ctx: Context, policy: () => ResolvedConfig) {
     onConflict(reason) { fault = reason; gate?.closeWithoutRearm(); gate = undefined },
   })
   const evaluate = (agent: Agent) => { if (!closed) { observed.add(agent); gate?.evaluate(agent) } }
+  const startObservation = (): ReturnType<typeof observeTransitionAuthority> => {
+    try { return observeTransitionAuthority(ctx, host!, (agent, id) => gate?.holds(agent, id) ?? false) }
+    catch (error) {
+      // Observation is optional authority, never a prerequisite for revoking and
+      // draining an owner. An unavailable observer grants no restoration rights.
+      const reason = `goal disarm authority observer unavailable: ${error instanceof Error ? error.message : String(error)}`
+      fault = reason
+      try { ctx.logger.warn(reason) } catch { /* Diagnostics cannot block owner cleanup. */ }
+      return { owned(_agent, action) { action() }, finish() { return reason } }
+    }
+  }
   const sweep = () => { for (const agent of ctx.agents.list()) evaluate(agent) }
   const mountGate = () => { if (!gate) gate = new GoalWaitGate(ctx, policy); sweep() }
   if (requested === 'activation' && ctx.get('loader') === undefined) mountGate()
@@ -73,12 +84,15 @@ export function createGoalMode(ctx: Context, policy: () => ResolvedConfig) {
       fault = undefined
       waitingMount = false
       host ??= await assertHostVersion(ctx)
-      authority ??= observeTransitionAuthority(ctx, host, (agent, id) => gate?.holds(agent, id) ?? false)
+      authority ??= startObservation()
       let state
       try {
         state = await owner.transition({ strategy: target,
           ...(target === 'replacement' ? { mountOwned: mountReplacement } : {}) })
       } finally {
+        // The transition observer is the sole re-arm authority. Legacy gate
+        // disposal must never provide a second resume after observed revocation.
+        if (target !== 'activation') { gate?.closeWithoutRearm(); gate = undefined }
         if (!closed) {
           const current = owner.snapshot()
           waitingMount = target === 'replacement' && current.phase === 'missing-dependency'
@@ -90,11 +104,10 @@ export function createGoalMode(ctx: Context, policy: () => ResolvedConfig) {
         }
       }
       if (closed) return
-      if (state.phase === 'active') {
+      if (state.phase === 'active' && !fault) {
         if (target === 'activation') mountGate()
-        if (target !== 'activation') { gate?.dispose(); gate = undefined }
         mountedStrategy = target
-      }
+      } else if (fault) { gate?.closeWithoutRearm(); gate = undefined }
       switching = waitingMount
     }).catch(error => { fault = error instanceof Error ? error.message : String(error); switching = false })
     return queue
@@ -122,7 +135,7 @@ export function createGoalMode(ctx: Context, policy: () => ResolvedConfig) {
       closed = true
       // Install synchronously, before Cordis can concurrently unwind the direct
       // driver child. The owner has no competing auto-disposer.
-      if (!authority && host) authority = observeTransitionAuthority(ctx, host, (agent, id) => gate?.holds(agent, id) ?? false)
+      if (!authority && host) authority = startObservation()
       if (authority) gate?.closeWithoutRearm(); else gate?.dispose()
       gate = undefined
       try {
