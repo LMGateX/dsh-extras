@@ -1,5 +1,7 @@
 // Adapted from dsh-tool-compact-context; original MIT license retained in NOTICE.txt.
 import z from '@deepseek-ai/schemastery';
+import { isVolatile } from '@deepseek-ai/cosmokit';
+import { resolveCompactionReasoning, validateCompactionReasoning, MAX_REASONING_RULES, MAX_REASONING_ID_LENGTH, type CompactionReasoningPolicy } from './reasoning-policy.ts';
 
 /** Fields the loader may hand over as volatile accessors. */
 const CONFIG_KEYS = [
@@ -14,6 +16,7 @@ const CONFIG_KEYS = [
   'retryDelayMs',
   'ptcTimeoutMs',
   'ptcModelTimeouts',
+  'compactionReasoning',
 ] as const;
 
 /** Read one field, unwrapping the volatile accessor when the loader provided one. */
@@ -47,7 +50,18 @@ function plainValue(value: unknown): unknown {
  * write is accepted only beneath a volatile node. The numeric watermark fields
  * (notifyAtRatio, pressureStep) stay in YAML and are deliberately not volatile.
  */
+const reasoningId = () => z.string().min(1).max(MAX_REASONING_ID_LENGTH).pattern(/^[^\u0000-\u001f\u007f-\u009f]+$/u).required();
+const reasoningRule = z.union(['all', 'provider', 'provider-model'].flatMap(scope => ['inherit', 'fixed'].map(mode => z.object({
+  scope: z.const(scope).required(), mode: z.const(mode).required(),
+  ...(scope === 'all' ? {} : { provider: reasoningId() }),
+  ...(scope === 'provider-model' ? { model: reasoningId() } : {}),
+  ...(mode === 'fixed' ? { effort: reasoningId() } : {}),
+}))));
 export const Config: Schemastery<any, any, any> = z.object({
+  compactionReasoning: z.object({
+    enabled: z.boolean().default(false),
+    rules: z.array(reasoningRule).max(MAX_REASONING_RULES).default([{ scope: 'all', mode: 'inherit' }]),
+  }).default({}).description('Independent reasoning policy for native compaction requests.').volatile(),
   compactTool: z.boolean().default(true)
     .description('Expose the model-facing compact_context tool.')
     .volatile(),
@@ -83,6 +97,7 @@ export const Config: Schemastery<any, any, any> = z.object({
 
 /** Resolved row config passed to apply(). */
 export interface ResolvedConfig {
+  compactionReasoning: CompactionReasoningPolicy;
   compactTool: boolean;
   statusTool: boolean;
   guidance: boolean;
@@ -111,11 +126,13 @@ export function resolveConfig(raw: unknown = {}): ResolvedConfig {
     : {};
   const plain: Record<string, unknown> = {};
   for (const key of CONFIG_KEYS) {
-    if (input[key] !== undefined) plain[key] = plainValue(input[key]);
+    if (input[key] !== undefined) plain[key] = key === 'compactionReasoning'
+      ? resolveCompactionReasoning(isVolatile(input[key]) ? input[key].get() : input[key]) : plainValue(input[key]);
   }
   const resolved = Config(plain) as unknown as Record<string, unknown>;
   const output: Record<string, unknown> = {};
   for (const key of CONFIG_KEYS) output[key] = liveValue(resolved[key]);
+  output.compactionReasoning = resolveCompactionReasoning(output.compactionReasoning);
   return output as unknown as ResolvedConfig;
 }
 
@@ -124,6 +141,7 @@ export function resolveConfig(raw: unknown = {}): ResolvedConfig {
  * @param config resolved row config
  */
 export function validateConfig(config: ResolvedConfig): void {
+  validateCompactionReasoning(config.compactionReasoning);
   const integer = (key: 'pressureStep' | 'retryAttempts' | 'retryDelayMs' | 'ptcTimeoutMs', min: number): void => {
     const value = config[key];
     if (!Number.isInteger(value) || value < min) {

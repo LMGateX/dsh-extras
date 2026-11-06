@@ -1,4 +1,5 @@
 import type { ModuleId, Values } from './types.ts';
+import { resolveCompactionReasoning } from '../modules/compact-context/reasoning-policy.ts';
 
 /**
  * Config-only migration admission for the audited legacy versions. This deliberately
@@ -60,6 +61,7 @@ const clock = string(Infinity, 0, /^(?:|(?:[01]\d|2[0-3]):[0-5]\d)$/);
 const rules: Record<ModuleId, Record<string, Rule>> = {
   'compact-context': {
     enabled: boolean, compactTool: boolean, statusTool: boolean, guidance: boolean,
+    compactionReasoning: value => { resolveCompactionReasoning(value); },
     guidanceText: string(8000), pressureContext: boolean,
     notifyAtRatio: number(0, 1, false, false, true), pressureStep: number(1, 50, true),
     retryAttempts: number(0, 5, true), retryDelayMs: number(0, 60_000, true),
