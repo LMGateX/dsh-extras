@@ -1,6 +1,6 @@
 # DSH Extras 0.3.1 — standalone migration CLI repair
 
-Draft engineering notes; final acceptance and publication verification must be recorded before release.
+Engineering acceptance passed: **570/570 source tests and 43/43 packed tests**, zero failures/skips. Full native/Chromium and independent Standards/Spec rechecks passed. Exact tested archive bytes and scope are recorded in the [validation report](https://github.com/LMGateX/dsh-extras/blob/v0.3.1/docs/VALIDATION_031.md). Physical publication verification is a separate receipt appended after upload and anonymous download checks.
 
 ## 修复 / Fixes
 
@@ -17,6 +17,6 @@ No feature policy, four-strategy default, configuration shape, public tool ident
 
 ## Installation and verification
 
-Five synchronized 0.3.1 tarballs and SHA256SUMS are intended for the new Release; never overwrite 0.3.0 assets. See [installation instructions](https://github.com/LMGateX/dsh-extras/blob/v0.3.1/README.md#install) and the [validation record](https://github.com/LMGateX/dsh-extras/blob/v0.3.1/docs/VALIDATION_031.md).
+Five synchronized 0.3.1 tarballs and SHA256SUMS accompany this new Release; no 0.3.0 assets are overwritten. Combined archive SHA256: `9ee4573d247a30599ee4bd06dbc4eb6222fd74998855a6451e499ca7a3f60d4e`. Compare the downloaded archive with the published SHA256SUMS before installation. See [installation instructions](https://github.com/LMGateX/dsh-extras/blob/v0.3.1/README.md#install) and the [validation record](https://github.com/LMGateX/dsh-extras/blob/v0.3.1/docs/VALIDATION_031.md).
 
 Direct GitHub publication only: no GitHub Actions or npm publication. **本次开发和发版不为作者本机实际 DSH/profile 安装、升级或重启。** All acceptance installs and native/browser processes use explicit disposable environments.
