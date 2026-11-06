@@ -35,6 +35,7 @@ export function createExtrasPlugin(distribution: Distribution) {
       const get = (name: string) => ctx.get(name);
       const migrationHost = {
         profileContext: root.profileContext,
+        continuationContext: ctx,
         loader: root.loader,
         appReady: get('appReady'),
         get,
