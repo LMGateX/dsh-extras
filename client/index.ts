@@ -1,5 +1,5 @@
 import { bindSection, type ConfigForm } from './forms.ts';
-import { createSettingsView, type SettingsDescriptor } from './settings.ts';
+import { createSettingsView, type SettingsDescriptor, type ReasoningCatalogSource } from './settings.ts';
 import { capturePageProof, createStatusStore, legacyChimeAtBoot, type StatusStore } from './status.ts';
 import { ownScope } from './scope.ts';
 
@@ -22,7 +22,14 @@ export function createExtrasClient(descriptor: ExtrasClientDescriptor, React: an
     const status = createStatusStore(descriptor.rowId, { pageServedAt, legacyAtBoot });
     owned.ctx.effect(() => status.start(), 'extras: host status');
     const chime = descriptor.moduleIds.includes('chime') ? makeChime?.(React) : undefined;
-    const View = createSettingsView(React, descriptor, chime?.createView(owned.ctx), status);
+    // Remote is optional and local to the reasoning editor, never a package requirement.
+    let catalogRemote: any;
+    if (descriptor.moduleIds.includes('compact-context')) owned.ctx.inject(['remote'], (scope: any) => {
+      catalogRemote = scope.get('remote');
+      return () => { catalogRemote = undefined; };
+    });
+    const catalog: ReasoningCatalogSource = { load: () => catalogRemote?.session?.modelCatalog() };
+    const View = createSettingsView(React, descriptor, chime?.createView(owned.ctx), status, catalog);
     owned.ctx.effect(() => ctx.configForms.whileServed([descriptor.rowId], () => {
       const offRow = ctx.slots.inject('plugins.row.config', () => ctx.slots.register({
         name: 'plugins.row.config', key: descriptor.packageName + '#' + descriptor.rowId,

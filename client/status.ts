@@ -1,5 +1,6 @@
 /** Read-only host status. Failure closes browser capability, never settings access. */
-export interface ModuleStatus { phase: string; ready: boolean; enabled: boolean; reason?: string; }
+export interface CapabilityStatus { phase: 'disabled' | 'active' | 'unavailable'; reason?: string; }
+export interface ModuleStatus { phase: string; ready: boolean; enabled: boolean; reason?: string; capabilities?: { compactionReasoning?: CapabilityStatus; tools?: CapabilityStatus }; }
 export interface ExtrasStatus {
   modules: Record<string, ModuleStatus>;
   report?: unknown;
