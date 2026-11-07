@@ -1,5 +1,7 @@
 # Release acceptance matrix
 
+For 0.4.0 additionally execute RC-1 through RC-6 from the [exact rc.1 compatibility contract](DSH_RC1_040.md), retaining every earlier baseline/REASON/PAR/CLI gate.
+
 For 0.3.1 additionally execute CLI-1 through CLI-7 from the [standalone migration entry contract](MIGRATION_CLI_031.md). Test the packed absent-peer/plain-Node seam before provisioning host links, and retain all existing gates.
 
 For 0.3.0 additionally execute PAR-G1/G2, PAR-M1, PAR-U1, PAR-P1 and PAR-R1 from the [fixed legacy parity contract](LEGACY_PARITY_030.md). Evidence must distinguish inherited activation-overlap limitations from replacement/owner safety failures; the latter block publication.
