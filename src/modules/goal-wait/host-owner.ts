@@ -117,7 +117,7 @@ export function createHostDriverOwner(ctx: Context, options: HostDriverOwnerOpti
   };
   const nativeDisabled = () => !stock || !!nativeDisabledDescriptor!.get!.call(stock);
   // Loader Entry.disabled is effective runtime state (entry.ts:75-84); app-boot
-  // inactiveEntries (0.2.2-alpha.3 lib/index.js:5085-5110) consumes it before
+  // inactiveEntries (0.2.2-rc.1 lib/index.js:5085-5110) consumes it before
   // classifying a disposed fiber as failure. Entry.options alone remains serialized.
   const installDisabledView = () => {
     const issue = disabledDescriptorIssue();
@@ -195,13 +195,13 @@ export function createHostDriverOwner(ctx: Context, options: HostDriverOwnerOpti
       && !(fiber.entry === stock && fiber.parent.fiber.entry !== stock && fiber.runtime?.callback === callback));
   const cancelRestoreCandidate = (fiber: Fiber) => {
     // This is only our exact speculative Loader root fiber. Fiber.entry is the
-    // public mutable Loader/HMR association: @deepseek-ai/dsh-hmr@0.2.2-alpha.3
+    // public mutable Loader/HMR association: @deepseek-ai/dsh-hmr@0.2.2-rc.1
     // lib/index.js:1098-1104 rebinds fiber.entry and entry.fiber on reload. Only
     // cancel while PENDING (state 0), before native apply; never detach an active
     // stock/foreign fiber. Detach before dispose to avoid Loader's self-disable
     // commit. Never registry.delete(callback): foreign fibers may share it.
     if (!restoreTicket || fiber !== restoreTicket.candidate || !live(fiber) || fiber.state !== 0) return;
-    // Loader src/index.ts:128-134 otherwise reattaches entry during dispose.
+    // Loader 1.1.0 lib/index.js:765-781 otherwise reattaches entry during dispose.
     // Isolate only this candidate's public parent metadata; the original context
     // and every active/foreign fiber remain untouched.
     fiber.parent = fiber.parent.extend({ [Entry.key]: undefined });
@@ -224,9 +224,9 @@ export function createHostDriverOwner(ctx: Context, options: HostDriverOwnerOpti
     // Prefer the native profile's installation anchor, not a possibly shadowed peer tree.
     const profile = ctx.get('profileContext') as { installAnchor?: string } | undefined;
     const requireHost = createRequire(profile?.installAnchor ?? requireExtras.resolve('@deepseek-ai/dsh/package.json'));
-    if (requireHost(nativeName + '/package.json').version !== '0.2.2-alpha.3'
-      || requireHost('@deepseek-ai/cordis/package.json').version !== '4.0.6-alpha.2'
-      || requireHost('@deepseek-ai/cordis-plugin-loader/package.json').version !== '1.0.7-alpha.2'
+    if (requireHost(nativeName + '/package.json').version !== '0.2.2-rc.1'
+      || requireHost('@deepseek-ai/cordis/package.json').version !== '4.1.0'
+      || requireHost('@deepseek-ai/cordis-plugin-loader/package.json').version !== '1.1.0'
       || createHash('sha256').update(readFileSync(requireHost.resolve(nativeName))).digest('hex') !== driverDigest) {
       throw new Error('Unavailable: unverified native driver/Cordis artifact');
     }

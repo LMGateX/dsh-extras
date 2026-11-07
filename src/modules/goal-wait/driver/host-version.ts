@@ -1,4 +1,4 @@
-/** Audited 0.2.2-alpha.3 artifacts only; port provenance is shipped beside this module. */
+/** Audited 0.2.2-rc.1 artifacts only; port provenance is shipped beside this module. */
 import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
@@ -13,8 +13,8 @@ export interface HostProfile {
   /** Exact runtime artifact; used only by the temporary lifecycle authority observer. */
   artifactPath: string
 }
-const version = '0.2.2-alpha.3'
-const cordis = '4.0.6-alpha.2'
+const version = '0.2.2-rc.1'
+const cordis = '4.1.0'
 const digest = '1a1cb44cd44363965aca4a288c052df50e6adff0ffdafd0a81fed97b4a7589de'
 const packages = ['dsh', 'dsh-agent', 'dsh-agent-loop', 'dsh-goal', 'dsh-goal-round-driver', 'dsh-session', 'dsh-session-projection', 'dsh-llm', 'dsh-system-prompt', 'dsh-tools', 'dsh-tool-goal', 'dsh-jobs', 'dsh-jobs-local', 'dsh-tool-jobs', 'dsh-scope']
 

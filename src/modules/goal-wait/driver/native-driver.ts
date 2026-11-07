@@ -1,5 +1,5 @@
 // Derived from the published @deepseek-ai/dsh-goal-round-driver bundles
-// 0.2.0-rc.2, 0.2.1-alpha.1, 0.2.1-alpha.3 and 0.2.2-alpha.3. Copyright (c) 2026 DeepSeek. MIT; see
+// 0.2.0-rc.2, 0.2.1-alpha.1, 0.2.1-alpha.3, 0.2.2-alpha.3 and 0.2.2-rc.1. Copyright (c) 2026 DeepSeek. MIT; see
 // UPSTREAM-LICENSE.txt and provenance.json.
 import { isDeepStrictEqual } from 'node:util';
 import type { Context } from '@deepseek-ai/cordis';

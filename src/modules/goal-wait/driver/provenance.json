@@ -52,6 +52,19 @@
       "companion": null,
       "behavior": "Additionally treats an abort caused by Agent disposal (a graceful process shutdown or a reload of the plugin that owns the Agent) as unload: continuation is disarmed and the durable goal stays active, while user, parent and hook cancellations still pause it. The descendant join and queued-round settlement of earlier pins are unchanged.",
       "sourceBasis": "Exact published package bundle; no upstream revision inferred from master."
+    },
+    {
+      "package": "@deepseek-ai/dsh-goal-round-driver",
+      "version": "0.2.2-rc.1",
+      "license": "MIT",
+      "copyright": "Copyright (c) 2026 DeepSeek",
+      "repository": "https://github.com/deepseek-ai/deepseek-harness",
+      "repositoryDirectory": "packages/goal/goal-round-driver",
+      "artifact": "lib/index.js",
+      "sha256": "1a1cb44cd44363965aca4a288c052df50e6adff0ffdafd0a81fed97b4a7589de",
+      "companion": null,
+      "behavior": "Published JavaScript is byte-identical to the audited 0.2.2-alpha.3 driver: queued settlement, progressing-descendant join, disposal-abort disarm and prompt bytes are unchanged. Only rc.1 with Cordis 4.1.0 and Loader 1.1.0 is admitted by this Extras release.",
+      "sourceBasis": "Exact rc.1 package artifact compared by SHA-256 with the prior audited artifact; no behavior inferred from a version string."
     }
   ],
   "selection": "The host profile is matched from the resolved bundle version and SHA-256 together; the same port reproduces the pinned behavior of exactly one published artifact, and an unpinned distribution is refused before any driver is mounted.",
@@ -76,7 +89,7 @@
     "sourcePackage": "dsh-goal-wait-gate",
     "sourceVersion": "0.4.23",
     "sourceCommit": "cbd86273660893336afaee31794b5fd76487db78",
-    "supportedHost": "0.2.2-alpha.3",
+    "supportedHost": "0.2.2-rc.1",
     "adaptations": [
       "Ordinary Config/apply/runtimeStatus interface; stock ownership is managed separately without unconditional bundle suppression.",
       "Only mount/teardown disarm calls carry a consumed-once lifecycle mark for the temporary exact-ref transition authority observer.",

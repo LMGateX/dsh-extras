@@ -27,7 +27,7 @@ export async function inspectNativeGoalOwner(host: NativeMigrationHost, target: 
   try {
     const anchored = createRequire(host.profileContext.installAnchor);
     const manifest = JSON.parse(await readFile(anchored.resolve('@deepseek-ai/cordis/package.json'), 'utf8')) as {name?: unknown; version?: unknown};
-    if (manifest.name !== '@deepseek-ai/cordis' || manifest.version !== '4.0.6-alpha.2') return {verified:false,stockActive:false,reason:'unsupported anchored Cordis version; supported native runtime verification required'};
+    if (manifest.name !== '@deepseek-ai/cordis' || manifest.version !== '4.1.0') return {verified:false,stockActive:false,reason:'unsupported anchored Cordis version; supported native runtime verification required'};
     const { Context } = await import(pathToFileURL(anchored.resolve('@deepseek-ai/cordis')).href) as typeof import('@deepseek-ai/cordis');
     const root = ctx.root;
     if (typeof Context !== 'function' || typeof Context.isolate !== 'symbol' || !(ctx instanceof Context) || !(root instanceof Context) ||

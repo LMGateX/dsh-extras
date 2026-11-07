@@ -526,7 +526,7 @@ test('ordinary module replacement uses the pinned port, retains armed authority 
   const { ctx, runtime } = f
   const state = await until(() => goalWait.runtimeStatus(f.fiber.ctx), value => value.capabilities.continuation.phase !== 'unavailable' || !!value.details.goalWait.fallback, 'replacement mount')
   assert.equal(state.details.goalWait.mounted, 'replacement-port', JSON.stringify(state))
-  assert.equal(state.details.goalWait.host?.distribution, '0.2.2-alpha.3')
+  assert.equal(state.details.goalWait.host?.distribution, '0.2.2-rc.1')
   const handle = await runtime.createAgent({ sessionId: 'parity-goal-port' })
   let finish!: (value: { status: string }) => void
   const done = new Promise<{ status: string }>(resolve => { finish = resolve })

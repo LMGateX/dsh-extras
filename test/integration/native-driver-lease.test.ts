@@ -7,8 +7,9 @@ import { spawnSync } from 'node:child_process';
 import { createRuntime } from '../modules/retry/runtime.ts';
 import { loadHost, requireHost, loaderFixture } from './loader-harness.ts';
 import Schema from '@deepseek-ai/schemastery';
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { readFile, mkdtemp, mkdir, writeFile, rm, symlink } from 'node:fs/promises';
+import { join, dirname } from 'node:path';
+import { tmpdir } from 'node:os';
 import type { Distribution, FeaturePlugin } from '../../src/types.ts';
 import { parse as parseYaml } from 'yaml';
 import { createHostDriverOwner, type HostDriverOwnerOptions } from '../../src/modules/goal-wait/host-owner.ts';
@@ -53,6 +54,33 @@ async function fixture(t: TestContext, options: HostDriverOwnerOptions = {}, bef
   };
   return { runtime, ctx, loader, entry, commits, owner: owner!, row, live, native, blockImport };
 }
+
+test('unverified native version or changed rc driver bytes never acquire the stock slot', async t => {
+  for (const kind of ['unknown-version', 'changed-artifact']) await t.test(kind, async t => {
+    const root = await mkdtemp(join(tmpdir(), 'ex-owner-refusal-'));
+    t.after(async () => { assert.ok(root.startsWith(join(tmpdir(), 'ex-owner-refusal-'))); await rm(root, {recursive:true,force:true}); });
+    const anchor = join(root, 'package.json');
+    const scope = join(root, 'node_modules', '@deepseek-ai');
+    await mkdir(scope, {recursive:true});
+    await writeFile(anchor, JSON.stringify({name:'unverified-native-host',type:'module'}));
+    for (const name of ['cordis', 'cordis-plugin-loader']) await symlink(dirname(requireHost.resolve('@deepseek-ai/' + name + '/package.json')), join(scope, name), 'dir');
+    const driver = join(scope, 'dsh-goal-round-driver');
+    await mkdir(driver);
+    await writeFile(join(driver, 'package.json'), JSON.stringify({name:'@deepseek-ai/dsh-goal-round-driver',version:kind === 'unknown-version' ? '99.0.0' : '0.2.2-rc.1',type:'module',exports:{'.':'./index.js','./package.json':'./package.json'}}));
+    await writeFile(join(driver, 'index.js'), 'export function apply() {}\n');
+    const f = await fixture(t, {}, ctx => { ctx.reflect.provide('profileContext', {installAnchor:anchor}); return () => {}; });
+    const original = f.entry.fiber!.ctx.fiber;
+    const options = structuredClone(f.entry.options);
+    const denied = await f.owner.transition({strategy:'off'});
+    assert.equal(denied.phase, 'failed');
+    assert.match(denied.reason ?? '', /unverified native driver\/Cordis artifact/);
+    assert.equal(original.uid === null, false, 'stock authority was not revoked');
+    assert.deepEqual(f.live(), [original]);
+    assert.deepEqual(f.entry.options, options);
+    assert.equal(Object.hasOwn(f.entry, 'disabled'), false);
+    assert.deepEqual(f.commits, []);
+  });
+});
 
 test('off suppresses only runtime, then close restores the original enabled Loader entry', async t => {
   const f = await fixture(t);
