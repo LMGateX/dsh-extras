@@ -72,7 +72,7 @@ async function consumer() {
     // A consumer-visible package must never replace the explicit host's Cordis.
     const shadow=join(process.cwd(),'node_modules','@deepseek-ai','cordis');
     await mkdir(shadow,{recursive:true});
-    await writeFile(join(shadow,'package.json'),JSON.stringify({name:'@deepseek-ai/cordis',version:'4.0.6-alpha.2',type:'module',exports:'./index.js'}));
+    await writeFile(join(shadow,'package.json'),JSON.stringify({name:'@deepseek-ai/cordis',version:'4.1.0',type:'module',exports:'./index.js'}));
     await writeFile(join(shadow,'index.js'),"throw new Error('consumer shadow Cordis must not execute');");
     assert.equal(local.resolve('@deepseek-ai/cordis'),join(shadow,'index.js'));
     assert.deepEqual((await inspect()).goalOwner,{verified:true,stockActive:true});
@@ -94,7 +94,7 @@ async function consumer() {
       await symlink(dirname(hostRequire.resolve('@deepseek-ai/dsh-goal-round-driver/package.json')),join(scope,'dsh-goal-round-driver'),'dir');
       if(kind!=='missing') {
         const cordis=join(scope,'cordis');await mkdir(cordis,{recursive:true});
-        await writeFile(join(cordis,'package.json'),JSON.stringify({name:'@deepseek-ai/cordis',version:kind==='unsupported-version'?'99.0.0':'4.0.6-alpha.2',type:'module',exports:{'.':'./index.js','./package.json':'./package.json'}}));
+        await writeFile(join(cordis,'package.json'),JSON.stringify({name:'@deepseek-ai/cordis',version:kind==='unsupported-version'?'99.0.0':'4.1.0',type:'module',exports:{'.':'./index.js','./package.json':'./package.json'}}));
         await writeFile(join(cordis,'index.js'),kind==='unsupported-isolate'?'export class Context {static isolate="unsupported"}':"export class Context {static isolate=Symbol.for('cordis.isolate')}");
       }
       host.profileContext.installAnchor=fakeAnchor;
