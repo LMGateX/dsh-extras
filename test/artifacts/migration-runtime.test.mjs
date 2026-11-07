@@ -104,6 +104,34 @@ async function consumer() {
     assert.deepEqual((await inspect()).goalOwner,{verified:true,stockActive:true});
     console.log('PASS missing, unsupported version/isolate, and foreign anchored Context refused');
 
+    host.nativeMigration=native;
+    for(const kind of ['driver-version','driver-bytes','loader-version','loader-missing','loader-foreign']) {
+      const out=join(process.cwd(),'anchors',kind), scope=join(out,'node_modules','@deepseek-ai');
+      await mkdir(scope,{recursive:true});
+      const fakeAnchor=join(out,'package.json');await writeFile(fakeAnchor,JSON.stringify({name:'unverified-artifact-host',type:'module'}));
+      await symlink(dirname(hostRequire.resolve('@deepseek-ai/cordis/package.json')),join(scope,'cordis'),'dir');
+      if(kind.startsWith('driver-')) {
+        await symlink(dirname(hostRequire.resolve('@deepseek-ai/cordis-plugin-loader/package.json')),join(scope,'cordis-plugin-loader'),'dir');
+        const dir=join(scope,'dsh-goal-round-driver');await mkdir(dir);
+        await writeFile(join(dir,'package.json'),JSON.stringify({name:'@deepseek-ai/dsh-goal-round-driver',version:kind==='driver-version'?'99.0.0':'0.2.2-rc.1',type:'module',exports:{'.':'./index.js','./package.json':'./package.json'}}));
+        await writeFile(join(dir,'index.js'),'globalThis[Symbol.for("unverified-packed-driver-evaluated")]=true;export * from '+JSON.stringify(pathToFileURL(hostRequire.resolve('@deepseek-ai/dsh-goal-round-driver')).href)+';');
+      } else {
+        await symlink(dirname(hostRequire.resolve('@deepseek-ai/dsh-goal-round-driver/package.json')),join(scope,'dsh-goal-round-driver'),'dir');
+        if(kind!=='loader-missing') {
+          const dir=join(scope,'cordis-plugin-loader');await mkdir(dir);
+          await writeFile(join(dir,'package.json'),JSON.stringify({name:'@deepseek-ai/cordis-plugin-loader',version:kind==='loader-version'?'99.0.0':'1.1.0',type:'module',exports:{'.':'./index.js','./package.json':'./package.json'}}));
+          await writeFile(join(dir,'index.js'),kind==='loader-foreign'?'export default class Loader {}':'export {default} from '+JSON.stringify(pathToFileURL(hostRequire.resolve('@deepseek-ai/cordis-plugin-loader')).href)+';');
+        }
+      }
+      host.profileContext.installAnchor=fakeAnchor;
+      await refusal(kind==='driver-version'?/unsupported anchored native driver version/:kind==='driver-bytes'?/anchored native driver.*fingerprint/:/anchored.*Loader/);
+      assert.equal(globalThis[Symbol.for('unverified-packed-driver-evaluated')],undefined,'unverified driver is rejected before evaluation');
+      assert.equal(stock.fiber.state,2);assert.equal(stock.options.disabled,undefined);
+    }
+    host.profileContext.installAnchor=savedAnchor;delete host.nativeMigration;
+    assert.deepEqual((await inspect()).goalOwner,{verified:true,stockActive:true});
+    console.log('PASS unknown/changed driver and missing/version/foreign Loader proof refused before unverified driver import');
+
     const other=new Context(); host.continuationContext=other;
     try {await refusal(/native.*Loader|ownership/);} finally {host.continuationContext=ctx;await other.fiber.dispose();}
     const extra=ctx.plugin(driver);await extra.await();

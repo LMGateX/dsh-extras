@@ -1,6 +1,7 @@
 import type { Fiber } from '@deepseek-ai/cordis';
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
+import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import type { Distribution, LoaderEntry, NativeMigrationHost, Source, Values } from './types.ts';
 
@@ -35,13 +36,26 @@ export async function inspectNativeGoalOwner(host: NativeMigrationHost, target: 
       !root[Context.isolate] || typeof root[Context.isolate] !== 'object') return {verified:false,stockActive:false,reason:'anchored Cordis Context/root shape cannot be verified; supported native runtime verification required'};
     rootLifetime = root[Context.isolate];
   } catch { return {verified:false,stockActive:false,reason:'anchored Cordis runtime unavailable; verify the explicit host installation and restart with native runtime verification'}; }
+  let nativeLoader: {entries(): Iterable<unknown>} | undefined;
+  try {
+    const anchored = createRequire(host.profileContext.installAnchor);
+    const manifest = JSON.parse(await readFile(anchored.resolve('@deepseek-ai/cordis-plugin-loader/package.json'), 'utf8')) as {name?: unknown; version?: unknown};
+    if (manifest.name !== '@deepseek-ai/cordis-plugin-loader' || manifest.version !== '1.1.0') return {verified:false,stockActive:false,reason:'unsupported anchored Loader version; supported native runtime verification required'};
+    const {default: Loader} = await import(pathToFileURL(anchored.resolve('@deepseek-ai/cordis-plugin-loader')).href) as typeof import('@deepseek-ai/cordis-plugin-loader');
+    nativeLoader = ctx.get('loader');
+    if (typeof Loader !== 'function' || nativeLoader !== undefined && (!(nativeLoader instanceof Loader) || typeof nativeLoader.entries !== 'function')) return {verified:false,stockActive:false,reason:'anchored Loader runtime identity cannot be verified'};
+  } catch { return {verified:false,stockActive:false,reason:'anchored Loader runtime unavailable; supported native runtime verification required'}; }
   const key = Symbol.for('goal-wait-startup.root-lifetime.v1');
   const descriptor = Object.getOwnPropertyDescriptor(globalThis, key);
   const leases = descriptor?.value;
   if (leases instanceof WeakMap && leases.has(rootLifetime)) return {verified:false,stockActive:false,reason:'unsupported startup root lifetime owner; restart without the experimental startup owner'};
   let originalNative: unknown;
   try {
-    const path = createRequire(host.profileContext.installAnchor).resolve('@deepseek-ai/dsh-goal-round-driver');
+    const anchored = createRequire(host.profileContext.installAnchor);
+    const manifest = JSON.parse(await readFile(anchored.resolve('@deepseek-ai/dsh-goal-round-driver/package.json'), 'utf8')) as {name?: unknown; version?: unknown};
+    if (manifest.name !== '@deepseek-ai/dsh-goal-round-driver' || manifest.version !== '0.2.2-rc.1') return {verified:false,stockActive:false,reason:'unsupported anchored native driver version; supported native runtime verification required'};
+    const path = anchored.resolve('@deepseek-ai/dsh-goal-round-driver');
+    if (createHash('sha256').update(await readFile(path)).digest('hex') !== '1a1cb44cd44363965aca4a288c052df50e6adff0ffdafd0a81fed97b4a7589de') return {verified:false,stockActive:false,reason:'anchored native driver source fingerprint mismatch; supported native runtime verification required'};
     originalNative = (await import(pathToFileURL(path).href)).apply;
     if (typeof originalNative !== 'function') throw new Error('native callback unavailable');
   } catch { return {verified:false,stockActive:false,reason:'native continuation callback identity cannot be verified'}; }
@@ -51,8 +65,7 @@ export async function inspectNativeGoalOwner(host: NativeMigrationHost, target: 
   const entries = [...host.loader.entries()];
   // Context service access can return distinct scoped proxies. Correlate actual
   // entry objects, not service-proxy identity, against the native service inventory.
-  const nativeLoader = ctx.get('loader') as {entries?(): Iterable<LoaderEntry>} | undefined;
-  const nativeInventory = new Set(nativeLoader?.entries?.() ?? []);
+  const nativeInventory = new Set<unknown>(nativeLoader?.entries() ?? []);
   const nativeEntries = entries.filter(entry => entry.options.id === 'goal-round-driver' && entry.options.name === '@deepseek-ai/dsh-goal-round-driver');
   const stockEntry = nativeEntries.length === 1 ? nativeEntries[0] : undefined;
   const stockRow = nativeRows.length === 1 ? nativeRows[0] : undefined;
