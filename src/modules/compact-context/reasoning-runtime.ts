@@ -11,8 +11,8 @@ class CompatibilityError extends Error {}
 function unsupported(reason: string): never { throw new CompatibilityError(reason); }
 
 function baseline(ctx: Context): void {
-  if (requireHost('@deepseek-ai/dsh-llm/package.json').version !== '0.2.2-alpha.3'
-    || requireHost('@deepseek-ai/cordis/package.json').version !== '4.0.6-alpha.2') unsupported('unverified host version');
+  if (requireHost('@deepseek-ai/dsh-llm/package.json').version !== '0.2.2-rc.1'
+    || requireHost('@deepseek-ai/cordis/package.json').version !== '4.1.0') unsupported('unverified host version');
   if (!(ctx instanceof Context) || !ctx.root?.reflect?.store || typeof ctx.on !== 'function') unsupported('unverified Cordis reflection shape');
 }
 

@@ -65,7 +65,7 @@ function makeHarness({
           if (tools.get(definition.name) === definition) tools.delete(definition.name);
         };
       },
-      get(toolName) {
+      executable(toolName) {
         return hidden ? undefined : tools.get(toolName);
       },
       hide() {
@@ -751,22 +751,14 @@ test('hides its prompt contributions when the tool is restricted away', () => {
   assert.equal(harness.contexts[0].text({ agent: { session: harness.session } }), '');
 });
 
-test('caches compact_context visibility until the tool registry changes', () => {
+test('checks executable visibility on every assembly and fails closed on lookup errors', () => {
   const harness = makeHarness();
-  let reads = 0;
-  const originalGet = harness.ctx.tools.get;
-  harness.ctx.tools.get = (toolName) => {
-    reads += 1;
-    return originalGet.call(harness.ctx.tools, toolName);
-  };
   const agent = {};
   assert.match(harness.sections[0].text({ agent }), /Context management/);
-  assert.equal(reads, 1);
-  assert.match(harness.sections[0].text({ agent }), /Context management/);
-  assert.equal(reads, 1, 'a second assembly reuses the cached visibility');
-  harness.ctx.tools.hide();
+  harness.ctx.tools.executable = () => undefined;
   assert.equal(harness.sections[0].text({ agent }), '');
-  assert.equal(reads, 2, 'tools/change invalidates the cache');
+  harness.ctx.tools.executable = () => { throw new Error('unknown admission'); };
+  assert.equal(harness.sections[0].text({ agent }), '');
 });
 
 test('the status tool reads occupancy and the backend policy', async () => {

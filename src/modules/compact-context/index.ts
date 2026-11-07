@@ -22,6 +22,7 @@ import type { Context } from '@deepseek-ai/cordis';
 import type { Session } from '@deepseek-ai/dsh-session';
 import type {} from '@deepseek-ai/dsh-token-meter';
 import type { ToolDefinition, ToolRunContext } from '@deepseek-ai/dsh-tools';
+import type { AssembleContext } from '@deepseek-ai/dsh-system-prompt';
 import { Config, resolveConfig, validateConfig } from './config.ts';
 import type { ResolvedConfig } from './config.ts';
 import { COMPACT_TOOL, GUIDANCE, STATUS_TOOL, compactDescription, statusDescription } from './guidance.ts';
@@ -493,28 +494,14 @@ function statusTool(ctx: Context): ToolDefinition {
 function applyTools(ctx: Context, rawConfig: Record<string, unknown> = {}, observeVolatile = true): (next: ResolvedConfig) => void {
   const config = resolveConfig(rawConfig);
   validateConfig(config);
-
-  // `tools.get()` rebuilds the whole per-scope view (layers, restrictions,
-  // inherited maps). Prompt callbacks run every model step, so cache the one
-  // name they ask about and drop the cache whenever the registry changes.
-  let compactVisibility = new WeakMap<Agent, boolean>();
-  const resetVisibility = (): void => {
-    compactVisibility = new WeakMap();
-  };
-
-  /** Whether this agent can actually see compact_context. */
-  const compactVisible = (agent: Agent | undefined): boolean => {
-    if (agent === undefined || agent === null) return true;
-    const cached = compactVisibility.get(agent);
-    if (cached !== undefined) return cached;
-    let result: boolean;
+  /** Admission belongs to this assembly's scope and step, never just the agent. */
+  const compactVisible = (context: AssembleContext): boolean => {
     try {
-      result = ctx.tools.get(COMPACT_TOOL, agent) !== undefined;
+      return ctx.tools.executable(COMPACT_TOOL, context.scope ?? context.agent, context.toolSet) !== undefined;
     } catch {
-      result = true;
+      // Unknown visibility must not advertise an executable capability.
+      return false;
     }
-    compactVisibility.set(agent, result);
-    return result;
   };
 
   let layout: Array<() => void> = [];
@@ -524,7 +511,6 @@ function applyTools(ctx: Context, rawConfig: Record<string, unknown> = {}, obser
     for (const dispose of layout.splice(0).reverse()) dispose();
     restorePtc?.();
     restorePtc = undefined;
-    resetVisibility();
   };
 
   const register = (disposer: unknown): void => {
@@ -540,7 +526,7 @@ function applyTools(ctx: Context, rawConfig: Record<string, unknown> = {}, obser
         name: 'tool-compact-context:guidance',
         order: SECTION_ORDER,
         interpolate: false,
-        text: (context) => (compactVisible(context.agent) ? policyText : ''),
+        text: (context) => (compactVisible(context) ? policyText : ''),
       }));
     }
     if (next.pressureContext && next.compactTool) {
@@ -551,7 +537,7 @@ function applyTools(ctx: Context, rawConfig: Record<string, unknown> = {}, obser
         text: (context) => {
           const agent = context.agent;
           if (agent === undefined || agent === null) return '';
-          if (next.compactTool && !compactVisible(agent)) return '';
+          if (next.compactTool && !compactVisible(context)) return '';
           return pressureText(readPressure(contextForAgent(ctx, agent), agent.session, { measure: false, cached: true }), {
             notifyAtRatio: next.notifyAtRatio,
             pressureStep: next.pressureStep,
@@ -568,7 +554,6 @@ function applyTools(ctx: Context, rawConfig: Record<string, unknown> = {}, obser
     // `loader/volatile-update` is a loader event, not part of this package's
     // typed event surface.
     const on = ctx.on as unknown as (event: string, listener: () => void) => void;
-    on('tools/change', resetVisibility);
     if (observeVolatile) on('loader/volatile-update', () => {
       let next: ResolvedConfig;
       try {

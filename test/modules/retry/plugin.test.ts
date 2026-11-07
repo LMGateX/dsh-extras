@@ -60,6 +60,13 @@ test('a preset code recovers independently of its descriptive message', async ()
   assert.equal(input.reason.failure.code, 'PI_AI_ERROR');
 });
 
+test('unsupported reasoning effort stays deterministic even when explicitly configured as retryable', async () => {
+  const code = 'UNSUPPORTED_REASONING_EFFORT';
+  for (const input of [failure(code, 'stream_timeout: invalid effort'), failure('PI_AI_ERROR', code), failure('UNKNOWN', 'Error Code ' + code + ': invalid effort')]) {
+    assert.equal((await runStream([input], { errorCodes: [code] })).output[0], input);
+  }
+});
+
 test('protected permanent failures cannot be opted into retry', async () => {
   for (const code of ['AUTH', 'QUOTA', 'ACCOUNT_QUOTA', 'ABORTED', 'INVALID_CONFIG', 'INVALID_REQUEST', 'CONTEXT_WINDOW_EXCEEDED', 'INVALID_CREDENTIAL', 'invalid_api_key']) {
     const input = failure(code, 'Error Code upstream_stream_read_error: anything');

@@ -143,6 +143,12 @@ for (const fixture of [
     });
 }
 
+test('native retry cannot opt deterministic unsupported reasoning effort into transient retries', async () => {
+  await faultCase({ code: 'UNSUPPORTED_REASONING_EFFORT', message: 'stream_timeout: unsupported effort' }, {
+    config: { errorCodes: ['UNSUPPORTED_REASONING_EFFORT'] }, expectRetry: false, expectedCode: 'UNSUPPORTED_REASONING_EFFORT',
+  });
+});
+
 test('plain thrown ordinary Error remains UNKNOWN without retry', { timeout: 10000 }, async () => {
   await faultCase(new Error('This merely mentions stream_timeout in documentation'), {
     expectRetry: false, expectedCode: 'UNKNOWN',

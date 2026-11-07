@@ -24,7 +24,7 @@ after(async () => {
 });
 
 async function fixture(t: TestContext, config: Record<string, unknown> = {}, loader = false) {
-  assert.equal(runtimeVersion, '0.2.2-alpha.3');
+  assert.equal(runtimeVersion, '0.2.2-rc.1');
   const runtime = await createRuntime({ product: false, retry: false });
   t.after(() => runtime.dispose());
   const ctx = runtime.ctx;
