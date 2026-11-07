@@ -54,7 +54,7 @@ node --expose-internals --test --test-concurrency=1 test/artifacts/*.test.*
 git diff --check
 ```
 
-The [convenience runner](<../scripts/test.mjs#L4-L12>) only passes `--test`, without exposed internals or serialization, so `npm run check`/`test:artifacts` alone are not this complete native gate. [Pack](<../scripts/pack.mjs>) packs existing build outputs; it does not replace build. The native-profile/build/package tests resolve local dev dependencies directly; DSH_RUNTIME_ROOT alone cannot retarget all acceptance to rc.1.
+At the inspected 0.3.1 baseline, the [convenience runner](<../scripts/test.mjs>) only passed `--test`, without exposed internals or serialization. The 0.4.0 integration now adds both native flags to that runner; complete original-source claims still require the three explicit legacy/current environment selections below. [Pack](<../scripts/pack.mjs>) packs existing build outputs; it does not replace build. The native-profile/build/package tests resolve local dev dependencies directly; DSH_RUNTIME_ROOT alone cannot retarget all acceptance to rc.1.
 
 Three legacy/current source environment selections must be explicit for corresponding claims:
 
