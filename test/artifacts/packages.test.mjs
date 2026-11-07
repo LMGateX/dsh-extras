@@ -25,7 +25,7 @@ for(const {name,modules} of distributions) test('packed installable distribution
   const packageDir=join(temp,'node_modules',name);
   const pkg=JSON.parse(await readFile(join(packageDir,'package.json'),'utf8'));
   assert.equal(pkg.version,version);assert.equal(pkg.name,name);assert.equal(pkg.private,undefined);
-  assert.equal(pkg.engines.dsh,'0.2.2-alpha.3');assert.equal(pkg.dsh.client.platform,'web');
+  assert.equal(pkg.engines.dsh,'0.2.2-rc.1');assert.equal(pkg.dsh.client.platform,'web');
   assert.equal(pkg.dsh.client.platforms,undefined);assert.equal(pkg.dsh.bundle.patch,'cordis.patch.yml');
   const patch=await readFile(join(packageDir,'cordis.patch.yml'),'utf8');assert.ok(patch.includes('id: '+name));
   const listing=execFileSync('tar',['-tzf',archive],{encoding:'utf8'}).split('\n');
