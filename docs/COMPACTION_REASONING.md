@@ -1,6 +1,6 @@
 # Compaction request reasoning policy — fixed implementation contract
 
-Status: approved before implementation. Target release: 0.2.0. Audited host: DSH 0.2.2-alpha.3; Node >=24.9.0.
+Status: approved before implementation. Original target release: 0.2.0, audited on DSH 0.2.2-alpha.3; Node >=24.9.0. The [0.4.0 rc.1 compatibility contract](DSH_RC1_040.md) supersedes only the exact supported runtime baseline for Extras 0.4.0: DSH LLM 0.2.2-rc.1 / Cordis 4.1.0. The original source references below remain historical evidence; required behavior and every reasoning entry-path gate remain unchanged.
 
 ## Scope and terminology
 
