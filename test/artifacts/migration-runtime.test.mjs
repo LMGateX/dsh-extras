@@ -141,8 +141,8 @@ async function consumer() {
 for(const {name} of distributions) test('packed public anchored runtime ownership: '+name,{timeout:120000},async t=>{
   const temp=await mkdtemp(join(tmpdir(),'ex-migration-runtime-'));
   t.after(async()=>{assert.ok(temp.startsWith(join(tmpdir(),'ex-migration-runtime-')));await rm(temp,{recursive:true,force:true});});
-  for(const part of ['home','dsh','profile','cache','tmp'])await mkdir(join(temp,part),{recursive:true});
-  const env={PATH:process.env.PATH,HOME:join(temp,'home'),DSH_HOME:join(temp,'dsh'),DSH_PROFILE_DIR:join(temp,'profile'),XDG_CACHE_HOME:join(temp,'cache'),npm_config_cache:join(temp,'cache','npm'),TMPDIR:join(temp,'tmp')};
+  for(const part of ['home','dsh','profile','cache','config','data','tmp'])await mkdir(join(temp,part),{recursive:true});
+  const env={PATH:process.env.PATH,HOME:join(temp,'home'),DSH_HOME:join(temp,'dsh'),DSH_PROFILE_DIR:join(temp,'profile'),XDG_CONFIG_HOME:join(temp,'config'),XDG_DATA_HOME:join(temp,'data'),XDG_CACHE_HOME:join(temp,'cache'),npm_config_cache:join(temp,'cache','npm'),TMPDIR:join(temp,'tmp')};
   await writeFile(join(temp,'package.json'),JSON.stringify({name:'runtime-consumer',private:true,type:'module'}));
   const archive=join(artifacts,name+'-'+version+'.tgz');
   execFileSync('npm',['install','--ignore-scripts','--omit=optional','--legacy-peer-deps','--no-audit','--no-fund',archive],{cwd:temp,env,stdio:'pipe',timeout:90000});
