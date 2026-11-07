@@ -4,6 +4,10 @@ Changes must cite the observed host/source constraint, explain the trade-off, an
 
 No amendments at the original specification freeze. Later approved amendments follow.
 
+## 2026-11-07 — Requested exact DSH rc.1 compatibility baseline (0.4.0)
+
+The direct user request authorizes isolated/subagent adaptation to DSH 0.2.2-rc.1, push and release without production installation. Official release notes identify breaking Cordis/Fiber, tool/prompt, request-model and projection contracts; the registry publishes an exact synchronized rc.1 package set. The [fixed compatibility contract](DSH_RC1_040.md) sets a new exact audited baseline rather than widening alpha.3 guards without evidence, and adds RC-1 through RC-6 while retaining all previous safety and acceptance gates. Alpha.3 remains served by 0.3.1. GitHub Actions and npm publication remain prohibited.
+
 ## 2026-11-07 — Approved standalone migration peer-resolution repair (0.3.1)
 
 The user approved the [reproduced missing-Cordis CLI defect and repair plan](RESEARCH_MIGRATE_CLI_2026-11-07.md), with documentation first, isolated subagent development/testing, then push/release and no local production installation. The [fixed patch contract](MIGRATION_CLI_031.md) clarifies independently launched offline entries versus native host peer resolution and adds CLI-1 through CLI-7. This supplements MIG-6/DIST-1/HOST-1; it does not weaken offline Goal ownership refusal, recovery/CAS invariants, mandatory existing gates or the no-second-Cordis rule. All five distributions remain synchronized. GitHub Actions and npm publication remain prohibited.
