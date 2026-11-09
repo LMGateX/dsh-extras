@@ -21,6 +21,9 @@ test('emitted retry editor saves fixed/always native provider settings without a
   const oversized=await page.request.put(base+'/extras/dsh-extras-retry/retry-policy',{headers:{'Content-Type':'application/json'},data:'x'.repeat(8193)});assert.equal(oversized.status(),413);
   const card=page.getByRole('group',{name:'Provider deepseek-official (custom-deepseek)',exact:true});
   await card.getByLabel('Additional retries').waitFor();assert.equal(await card.getByLabel('Additional retries').inputValue(),'5');
+  assert.equal(await card.getAttribute('data-extras-dirty'),'false');
+  await card.getByLabel('Additional retries').fill('4');assert.equal(await card.getAttribute('data-extras-dirty'),'true');
+  await card.getByRole('button',{name:'Discard native draft',exact:true}).click();assert.equal(await card.getAttribute('data-extras-dirty'),'false');
   await card.getByLabel('Delay mode').selectOption('fixed');await card.getByLabel('Initial delay (ms)').fill('25');
   await card.getByRole('button',{name:'Save native policy',exact:true}).click();
   await card.getByText('Saved; future native requests use this policy.',{exact:true}).waitFor();

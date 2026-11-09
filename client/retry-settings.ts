@@ -52,7 +52,7 @@ export function createRetrySettingsView(React:any, supplied?:RetrySettingsSource
     }
     const disabled=!writable||busy;
     const number=(key:'maxRetries'|'initialDelayMs'|'maxDelayMs'|'jitterRatio',en:string,zh:string)=>h('label',{key},t(en,zh),h('input',{type:'number','aria-label':t(en,zh),value:Number.isNaN(value[key])?'':value[key]??'',disabled,min:key==='jitterRatio'||key==='maxRetries'?0:1,max:key==='jitterRatio'?1:key==='maxRetries'?Number.MAX_SAFE_INTEGER:2147483647,step:key==='jitterRatio'?0.01:1,onChange:(event:any)=>{const n=event.target.value===''?NaN:Number(event.target.value);update(delay==='fixed'&&key==='initialDelayMs'?{initialDelayMs:n,maxDelayMs:n,jitterRatio:0}:{[key]:n});}}));
-    return h('fieldset',{'aria-label':t('Provider '+target.provider+' ('+target.namespace+')','提供方 '+target.provider+' ('+target.namespace+')'),className:'extras-group'},
+    return h('fieldset',{'data-extras-dirty':dirty,'aria-label':t('Provider '+target.provider+' ('+target.namespace+')','提供方 '+target.provider+' ('+target.namespace+')'),className:'extras-group'},
       h('legend',null,t('Provider ','提供方 ')+target.provider+' ('+target.namespace+')'),
       h('p',{role:'status'},t('Scope: this provider route in this profile, not this workspace. Disabling the Extras classifier does not disable native retries.','范围：当前配置档中的此提供方路由，并非当前工作区。关闭 Extras 分类器不会关闭原生重试。')),
       h('label',null,t('Retry mode','重试模式'),h('select',{'aria-label':t('Retry mode','重试模式'),value:value.mode,disabled,onChange:(e:any)=>{setAck(false);setValue((v:RetryPolicyDraft)=>e.target.value==='always'?{mode:'always',initialDelayMs:v.initialDelayMs,maxDelayMs:v.maxDelayMs,jitterRatio:v.jitterRatio}:{...v,mode:'normal',maxRetries:5});setNotice('');}},
