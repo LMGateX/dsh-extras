@@ -16,6 +16,15 @@ const session = { projections: {faceOf: () => ({getSnapshot: () => outline, subs
   sessionListeners.add(fn);
   return () => sessionListeners.delete(fn);
 } };
+// Public event window with a settled failing model attempt, not just an error turn.
+const entries = [1,2].flatMap(turn => {const start=turn===2?6:1;return [
+ {type:"turn/start",seq:start,data:{turn}},
+ {type:"assistant/attempt",seq:start+2,data:{turn,step:1,stream:[{type:"chunk",time:1000,chunk:{type:"finish",reason:{kind:"error",failure:{code:"SERVER",message:"offline"}}}}]}},
+ {type:"step/end",seq:start+3,data:{turn,step:1}},
+ {type:"turn/end",seq:start+4,data:{turn,reason:{kind:"error",error:{code:"SERVER",message:"offline"}}}}
+].map(event=>({type:"event",event}));});
+const eventWindow={entries,revision:1,hasMore:false,change:{kind:"replace",entries}};
+const eventSource={getSnapshot:()=>eventWindow,subscribe:()=>()=>{}};
 const effect = (fn) => fn();
 const ctx = {
   effect,
@@ -31,7 +40,7 @@ const ctx = {
     }, resolveText: (text) => text[locale] } : void 0;
   },
   sessions: { binding(id) {
-    return { sessionId: id, session };
+    return { sessionId: id, session, eventSource };
   } },
   slots: { inject(name, fn) {
     if (name !== "conversation.chat.turnTail") throw Error("wrong native slot");

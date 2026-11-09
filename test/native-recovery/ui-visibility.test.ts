@@ -10,12 +10,14 @@ import {join} from 'node:path';
 import {build} from 'esbuild';
 import {chromium,expect} from '@playwright/test';
 import {nativeBrowserBundle} from './browser-bundle.fixture.ts';
+import {createAssistantMessage} from '@deepseek-ai/dsh-llm';
 
 const root=new URL('../../',import.meta.url).pathname;
 const event=(type:string,seq:number,data:any)=>({type,seq,time:seq*1000,data});
 const turn=(n:number,seq:number,kind='completed')=>[
- event('turn/start',seq,{turn:n}),
- event('turn/end',seq+1,{turn:n,reason:kind==='error'?{kind,error:{code:'SERVER',message:'offline terminal failure'}}:kind==='aborted'?{kind,reason:{kind:'user'}}:{kind}}),
+ event('turn/start',seq*10,{turn:n}),
+ ...(kind==='error'?[event('step/start',seq*10+1,{turn:n,step:1}),event('assistant/attempt',seq*10+2,{turn:n,step:1,stream:[{type:'chunk',time:1000,chunk:{type:'finish',reason:{kind:'error',failure:{code:'SERVER',message:'offline terminal failure'}}}}]}),event('step/end',seq*10+3,{turn:n,step:1})]:[]),
+ event('turn/end',seq*10+4,{turn:n,reason:kind==='error'?{kind,error:{code:'SERVER',message:'offline terminal failure'}}:kind==='aborted'?{kind,reason:{kind:'user'}}:{kind}}),
 ];
 const unavailable={protocol:'dsh.request-recovery.v1',lifetime:'process-local',status:'unavailable',reason:'native-recovery-unavailable'};
 
@@ -65,10 +67,25 @@ for(const distribution of ['dsh-extras-retry','dsh-extras'])test('real native Tu
  await expect(page.locator('[data-request-recovery]')).toHaveCount(0);
  assert.equal(reads,0,'a historical failure cannot query a later successful session');
  const refresh=async()=>{await page.evaluate(()=>(window as any).__nativeAcceptance.refresh());await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));};
+ // Native Agent also serializes tool activation and generic preparation/hook
+ // failures as turn/end error. That envelope alone is NOT a model failure.
+ for(const code of ['TOOL_ACTIVATION_FAILED','UNKNOWN']){state={...state,events:[event('turn/start',3,{turn:2}),event('turn/end',4,{turn:2,reason:{kind:'error',error:{code,message:'not a model request failure'}}})]};await refresh();await expect(page.locator('[data-request-recovery]'),'non-model terminal error '+code).toHaveCount(0);assert.equal(reads,0,'non-model error must not query native recovery');}
+ const failed=turn(2,3,'error');
+ const suffixCases=[
+  failed.filter(e=>e.type!=='assistant/attempt'),
+  failed.map(e=>e.type==='step/end'?{...e,data:{turn:2,step:2}}:e),
+  failed.map(e=>e.type==='step/end'?{...e,seq:34}:e.type==='turn/end'?{...e,seq:35}:e),
+  [...failed.slice(0,3),event('fixture/unknown',33,{turn:2}),event('step/end',34,{turn:2,step:1}),event('turn/end',35,failed.at(-1)!.data)],
+  [...failed.slice(0,3),event('llm/retry',33,{turn:2,step:1,code:'SERVER',attempt:1,delayMs:1}),event('step/end',34,{turn:2,step:1}),event('turn/end',35,{turn:2,reason:{kind:'error',error:{code:'UNKNOWN',message:'later preparation failure'}}})],
+  // A prior failed attempt followed by a successful response cannot bless a
+  // subsequent tool activation/preparation failure as a failed model request.
+  [...failed.slice(0,3),event('assistant/message',33,{turn:2,step:1,message:createAssistantMessage({source:{provider:'offline',model:'offline-model'},content:[{type:'text',text:'model succeeded'}]}),stream:[{type:'chunk',time:1000,chunk:{type:'finish',reason:{kind:'stop'}}}]}),event('step/end',34,{turn:2,step:1}),event('turn/end',35,{turn:2,reason:{kind:'error',error:{code:'TOOL_ACTIVATION_FAILED',message:'later tool activation'}}})],
+ ];
+ for(const events of suffixCases){state={...state,events};await refresh();await expect(page.locator('[data-request-recovery]'),'missing/stale/intervening model proof').toHaveCount(0);assert.equal(reads,0);}
  for(const kind of ['aborted','interrupted','max-tokens']){state={...state,events:turn(2,3,kind)};await refresh();await expect(page.locator('[data-request-recovery]')).toHaveCount(0);}
  // Paged history deliberately contains only an old error; authoritative outline
  // still says turn 3 exists. Newest loaded error is NOT the current request.
- state={...state,events:turn(1,1,'error'),turnOutline:[{turn:1,seq:1,prompt:'',response:''},{turn:3,seq:7,prompt:'',response:''}]};
+ state={...state,events:turn(1,1,'error'),turnOutline:[{turn:1,seq:10,prompt:'',response:''},{turn:3,seq:70,prompt:'',response:''}]};
  await refresh();await expect(page.locator('[data-turn-tail]')).toHaveCount(1);await expect(page.locator('[data-request-recovery]')).toHaveCount(0);
  state={...state,turnOutline:[]};await refresh();await expect(page.locator('[data-request-recovery]')).toHaveCount(0);
  assert.equal(reads,0,'unknown head and cancelled/historical turns stay silent');
@@ -82,7 +99,7 @@ for(const distribution of ['dsh-extras-retry','dsh-extras'])test('real native Tu
  const presentation=await page.locator('[data-request-recovery]').evaluate(node=>{const s=getComputedStyle(node);return{padding:parseFloat(s.paddingTop),border:s.borderTopStyle,background:s.backgroundColor};});
  assert.ok(presentation.padding>=12,'the recovery card has independent spacing');
  assert.equal(presentation.border,'solid');assert.notEqual(presentation.background,'rgba(0, 0, 0, 0)');
- const checkpoint=(n:number,seq:number,id:string)=>({protocol:'dsh.request-recovery.v1',lifetime:'process-local',status:'available',checkpoint:{sessionId:state.sessionId,checkpointId:id,revision:n,attemptId:'native-attempt-'+n,attemptSeq:seq-1,terminalSeq:seq,turn:n,step:1,selection:{provider:'offline',model:'offline-model'},disposition:'budget-exhausted'}});
+ const checkpoint=(n:number,seq:number,id:string)=>({protocol:'dsh.request-recovery.v1',lifetime:'process-local',status:'available',checkpoint:{sessionId:state.sessionId,checkpointId:id,revision:n,attemptId:'native-attempt-'+n,attemptSeq:(seq-1)*10+2,terminalSeq:(seq-1)*10+4,turn:n,step:1,selection:{provider:'offline',model:'offline-model'},disposition:'budget-exhausted'}});
  recovery=checkpoint(2,4,'checkpoint-two');
  await page.getByRole('button',{name:'Refresh recovery state',exact:true}).click();
  const retry=page.getByRole('button',{name:'Retry failed request',exact:true});await expect(retry).toBeVisible();
@@ -113,9 +130,12 @@ for(const distribution of ['dsh-extras-retry','dsh-extras'])test('real native Tu
  assert.deepEqual(Object.keys(commands[0]).sort(),['checkpointId','expectedRevision','operationId','sessionId'],'no prompt or synthetic message payload');
  await expect(retry).toHaveCount(0);
  const readsBeforeIneligible=reads;
- for(const patch of [{running:true},{running:false,openState:'loading'},{openState:'open',removed:true},{removed:false,events:[...state.events,event('turn/start',5,{turn:3})]}]){state={...state,...patch};await refresh();await expect(page.locator('[data-request-recovery]')).toHaveCount(0);}
+ for(const patch of [{running:true},{running:false,openState:'loading'},{openState:'open',removed:true},{removed:false,events:[...state.events,event('turn/start',50,{turn:3})]}]){state={...state,...patch};await refresh();await expect(page.locator('[data-request-recovery]')).toHaveCount(0);}
  assert.equal(reads,readsBeforeIneligible,'running/unopened/removed/new-turn states cannot read recovery');
- state={...state,events:turn(3,5,'error')};await refresh();
+ const exhausted=[...failed.slice(0,3),event('request/failure',33,{turn:2,step:1,attemptSeq:32,attemptId:'native-attempt',checkpointId:'native-checkpoint',disposition:'budget-exhausted',retries:5,maxRetries:5}),event('step/end',34,{turn:2,step:1}),event('turn/end',35,failed.at(-1)!.data)];
+ recovery=unavailable;state={...state,events:exhausted};await refresh();await expect(page.locator('[data-request-recovery]')).toHaveCount(1);await expect(retry,'native failure metadata cannot grant a retry action').toHaveCount(0);
+ const readsBeforeBadMetadata=reads;state={...state,events:exhausted.map(e=>e.type==='request/failure'?{...e,data:{...e.data,attemptSeq:31}}:e)};await refresh();await expect(page.locator('[data-request-recovery]')).toHaveCount(0);assert.equal(reads,readsBeforeBadMetadata,'failure metadata must bind the exact attempt');
+ recovery=checkpoint(2,4,'checkpoint-two');state={...state,events:turn(3,5,'error')};await refresh();
  await expect(page.locator('[data-request-recovery]'),'a checkpoint for another terminal seq cannot be offered').toHaveCount(0);
  recovery=checkpoint(3,6,'checkpoint-three');await refresh();await expect(retry).toBeVisible();
  disposition='rejected';await retry.click();await expect(page.getByRole('alert')).toContainText('checkpoint-stale');await expect(retry).toHaveCount(0);

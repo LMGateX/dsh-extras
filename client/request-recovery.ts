@@ -22,6 +22,27 @@ export function createRequestRecoverySource(rowId:string,fetcher:typeof fetch=fe
  };
 }
 interface Attempt {key:string;operationId:string;pending?:Promise<RecoveryReceipt>;receipt?:RecoveryReceipt;}
+/** A turn error also represents preparation/tool/hook failures. Only a durable
+ * model finish(error) immediately closed by this exact terminal step proves origin.
+ * Outline remains the head proof; this contiguous public window proves origin only. */
+function terminalModelFailure(window:any,turn:any):boolean {
+ const entries=window?.entries;if(!Array.isArray(entries))return false;
+ const terminalSeq=turn?.end?.seq;
+ const index=entries.findLastIndex((entry:any)=>entry.type==='event'&&entry.event?.type==='turn/end'&&entry.event.seq===terminalSeq&&entry.event.data?.turn===turn?.turn);
+ if(index<0)return false;
+ let seq=terminalSeq-1;let step:number|undefined;let failure:any;
+ for(let i=index-1;i>=0;i--){
+  const entry=entries[i];const event=entry?.event;
+  if(entry?.type!=='event'||event?.seq!==seq--||event.data?.turn!==turn?.turn)return false;
+  if(event.type==='step/end'&&step===undefined&&Number.isSafeInteger(event.data.step)){step=event.data.step;continue;}
+  if(event.type==='request/failure'&&step!==undefined&&failure===undefined&&event.data.step===step&&event.data.disposition==='budget-exhausted'&&Number.isSafeInteger(event.data.attemptSeq)){failure=event.data;continue;}
+  if(event.type!=='assistant/attempt'||step===undefined||event.data.step!==step||(failure&&failure.attemptSeq!==event.seq))return false;
+  const stream=event.data.stream;if(!Array.isArray(stream))return false;
+  const finish=stream.findLast((record:any)=>record.type==='chunk'&&record.chunk?.type==='finish')?.chunk;
+  return finish?.reason?.kind==='error'&&typeof finish.reason.failure?.code==='string'&&typeof finish.reason.failure?.message==='string';
+ }
+ return false;
+}
 // Scoped to this optional tail; no conversation or host styles are overwritten.
 const RECOVERY_CSS=`
 [data-request-recovery] { --recovery-bg:#f7f8fa; --recovery-text:#20242b; --recovery-muted:#535c6b; --recovery-border:#d6dce5; box-sizing:border-box; display:grid; gap:12px; width:100%; min-width:0; margin:12px 0; padding:16px; border:1px solid var(--dsw-alias-border-l1,var(--recovery-border)); border-radius:12px; background:var(--dsw-alias-bg-layer-2,var(--recovery-bg)); color:var(--dsw-alias-label-primary,var(--recovery-text)); font-size:13px; line-height:1.6; overflow-wrap:anywhere; }
@@ -48,10 +69,12 @@ export function createRequestRecoveryAdapter(React:any,environment?:{fetch?:type
   const source=createRequestRecoverySource(options.rowId,environment?.fetch);
   owned.ctx.inject(['slots','sessions'],(scope:any)=>{
    const locale=scope.get('locale');
-   function View({sessionId,session,turn}:{sessionId:string;session:any;turn:any}) {
+   function View({sessionId,session,eventSource,turn}:{sessionId:string;session:any;eventSource:any;turn:any}) {
     const t=useSettingsText(React,locale);
     const callbacks=React.useMemo(()=>({subscribe:(fn:()=>void)=>session?.subscribe(fn)??(()=>{}),read:()=>session?.getSnapshot()}),[session]);
     const sessionState=React.useSyncExternalStore(callbacks.subscribe,callbacks.read,callbacks.read);
+    const eventCallbacks=React.useMemo(()=>({subscribe:(fn:()=>void)=>eventSource?.subscribe(fn)??(()=>{}),read:()=>eventSource?.getSnapshot()}),[eventSource]);
+    const eventWindow=React.useSyncExternalStore(eventCallbacks.subscribe,eventCallbacks.read,eventCallbacks.read);
     // The host projection covers every started turn, including those outside the
     // paged event window. Missing head proof is not a current failed request.
     const outlineSource=React.useMemo(()=>session?.projections?.faceOf('turnOutline'),[session]);
@@ -61,7 +84,7 @@ export function createRequestRecoveryAdapter(React:any,environment?:{fetch?:type
     const live=React.useRef(false);const pending=React.useRef(false);const generation=React.useRef(0);
     const terminalSeq=turn?.end?.seq;
     const ownsLatestError=(head:any)=>Array.isArray(head)&&head.length>0&&head.at(-1)?.turn===turn?.turn&&head.at(-1)?.seq===turn?.start?.seq&&turn?.status==='closed'&&turn?.end?.type==='turn/end'&&turn?.end?.data?.turn===turn?.turn&&turn?.end?.data?.reason?.kind==='error'&&Number.isSafeInteger(terminalSeq);
-    const closed=ownsLatestError(outline)&&sessionState?.running===false&&sessionState?.openState==='open'&&!sessionState?.removed;
+    const closed=ownsLatestError(outline)&&terminalModelFailure(eventWindow,turn)&&sessionState?.running===false&&sessionState?.openState==='open'&&!sessionState?.removed;
     React.useEffect(()=>{live.current=true;return()=>{live.current=false;generation.current++;};},[]);
     React.useEffect(()=>{
      const token=++generation.current;setView(undefined);
@@ -69,14 +92,14 @@ export function createRequestRecoveryAdapter(React:any,environment?:{fetch?:type
      const abort=new AbortController();
      source.read(sessionId,abort.signal).then(v=>{if(live.current&&token===generation.current&&!disposed&&options.enabled())setView(v);},()=>{if(live.current&&token===generation.current&&!abort.signal.aborted)setNotice('recovery-transport-unavailable');});
      return()=>abort.abort();
-    },[sessionId,session,sessionState,turn?.turn,terminalSeq,closed,refresh]);
+    },[sessionId,session,sessionState,eventWindow,turn?.turn,terminalSeq,closed,refresh]);
     const cp=view?.status==='available'?view.checkpoint:undefined;
     const matches=!!cp&&cp.sessionId===sessionId&&cp.turn===turn?.turn&&cp.terminalSeq===terminalSeq;
     const key=cp?cp.checkpointId+':'+cp.revision:'';
     const previous=attempts.get(sessionId);const accepted=previous?.key===key&&previous.receipt?.status==='accepted';
     const denied=previous?.key===key&&previous.receipt?.status==='rejected';
     async function retry(){
-     if(pending.current||!matches||!cp||accepted||denied||disposed||!options.enabled()||!ownsLatestError(outlineSource?.getSnapshot())||session?.getSnapshot()?.running!==false||session?.getSnapshot()?.openState!=='open'||session?.getSnapshot()?.removed)return;
+     if(pending.current||!matches||!cp||accepted||denied||disposed||!options.enabled()||!ownsLatestError(outlineSource?.getSnapshot())||!terminalModelFailure(eventSource?.getSnapshot(),turn)||session?.getSnapshot()?.running!==false||session?.getSnapshot()?.openState!=='open'||session?.getSnapshot()?.removed)return;
      const token=generation.current;pending.current=true;setBusy(true);setNotice('');
      let attempt=attempts.get(sessionId);
      if(attempt?.key!==key){attempt={key,operationId:environment?.operationId?.()??globalThis.crypto.randomUUID()};attempts.set(sessionId,attempt);}
@@ -105,7 +128,7 @@ export function createRequestRecoveryAdapter(React:any,environment?:{fetch?:type
    }
    let remove:(()=>void)|undefined;
    const sync=()=>{
-    if(!disposed&&options.enabled()&&!remove)remove=scope.slots.inject('conversation.chat.turnTail',()=>scope.slots.register({name:'conversation.chat.turnTail',id:options.rowId+'#request-recovery',inject:(sessionId:string)=>({sessionId,session:scope.sessions.binding(sessionId)?.session})},View));
+    if(!disposed&&options.enabled()&&!remove)remove=scope.slots.inject('conversation.chat.turnTail',()=>scope.slots.register({name:'conversation.chat.turnTail',id:options.rowId+'#request-recovery',inject:(sessionId:string)=>{const binding=scope.sessions.binding(sessionId);return{sessionId,session:binding?.session,eventSource:binding?.eventSource};}},View));
     else if((disposed||!options.enabled())&&remove){const off=remove;remove=undefined;off();}
    };
    scope.effect(()=>{const off=options.subscribe(sync);sync();return()=>{off();remove?.();remove=undefined;};});
