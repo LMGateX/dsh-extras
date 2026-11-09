@@ -155,6 +155,8 @@ export function createReasoningSettingsView(React: any, catalog?: ReasoningCatal
       }}),t(' Provide compaction reasoning from this module',' 由本模块提供压缩推理能力')),
       h('p',null,t('Both modules edit one policy. Closing this participant does not close the other module.','两个模块编辑同一份策略；关闭本模块参与，不会关闭另一模块。')),
       h('p',{role:'status'},t('Actual executor: ','实际执行者：')+(executor??t('not reported','尚未报告'))),
+      shared!.legacyImport()?.phase==='conflict'&&h('p',{role:'alert'},t('Legacy policies disagree. Originals are backed up; no winner was guessed. Review and save the shared policy explicitly.','旧策略存在冲突。原值已备份，系统未猜测采用哪一份；请核对并明确保存共享策略。')),
+      shared!.legacyImport()?.phase==='unavailable'&&h('p',{role:'alert'},t('Legacy policy import is unavailable. Existing canonical policy is unchanged; inspect the protected backup and native status before editing.','旧策略导入不可用。现有共享策略未改变；编辑前请检查受保护的备份和原生状态。')),
       h('div',{className:'extras-actions'},h('button',{type:'button',onClick:()=>{void shared!.refresh(rowId);}},t('Refresh shared policy','刷新共享策略'))),
       h('label',null,t('Workspace ID (blank: profile defaults)','工作区 ID（留空：全局默认）'),h('input',{type:'text',value:workspaceDraft,maxLength:200,onChange:(event:any)=>setWorkspaceDraft(event.target.value),'aria-label':t('Compaction workspace ID','压缩策略工作区 ID')})),
       h('button',{type:'button',disabled:dirty||saving||policy.writable===false&&policy.status==='ready',onClick:()=>{try{shared!.form(workspaceDraft||undefined);setWorkspace(workspaceDraft);setError('');}catch{setError(t('Invalid workspace identity.','工作区标识无效。'));}}},t('Select policy scope','选择策略范围')),

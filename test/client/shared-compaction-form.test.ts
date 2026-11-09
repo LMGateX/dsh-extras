@@ -2,6 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createSharedCompactionSource} from '../../client/shared-compaction.ts';
 
+test('shared legacy import diagnostics are bounded and never enter policy writes',async()=>{
+ let sent:any;const source=createSharedCompactionSource((async(_url,init:any={})=>{if(init.method==='PUT')sent=JSON.parse(init.body);return new Response(JSON.stringify({revision:sent?1:0,defaults:sent?sent.defaults:{enabled:false,rules:[]},workspaceOverrides:{},legacyImport:{phase:sent?'preserved':'conflict',sources:[{raw:'must not reach client diagnostic'}],reason:'raw text must not be shown'}}));}) as typeof fetch);
+ await source.refresh('dsh-extras');assert.deepEqual((source as any).legacyImport(),{phase:'conflict'});
+ assert.equal(await source.form().mutate([{op:'set',path:[],value:{enabled:true,rules:[]}}],0),true);assert.deepEqual(Object.keys(sent).sort(),['defaults','expectedRevision','workspaceOverrides']);
+});
+
 test('two policy forms observe the same accepted revision and stale writes do not overwrite',async()=>{
  let document={revision:4,defaults:{enabled:true,rules:[{scope:'all',mode:'inherit'}]},workspaceOverrides:{}};
  const requests:{method:string;body?:any}[]=[];

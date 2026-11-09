@@ -2,7 +2,8 @@
 import type {ConfigForm,ConfigFormSnapshot,PathOperation} from './forms.ts';
 import {resolveCompactionReasoning,validateCompactionReasoning,type CompactionReasoningPolicy} from '../src/modules/compact-context/reasoning-policy.ts';
 
-interface Document {revision:number;defaults:CompactionReasoningPolicy;workspaceOverrides:Record<string,CompactionReasoningPolicy>}
+type ImportPhase='none'|'pending'|'imported'|'preserved'|'conflict'|'unavailable';
+interface Document {revision:number;defaults:CompactionReasoningPolicy;workspaceOverrides:Record<string,CompactionReasoningPolicy>;legacyImport?:{phase:ImportPhase}}
 function acceptDocument(raw:unknown):Document {
  if(!raw||typeof raw!=='object'||Array.isArray(raw))throw new Error('Invalid shared policy response');
  const value=raw as Document;
@@ -10,7 +11,8 @@ function acceptDocument(raw:unknown):Document {
  validateCompactionReasoning(value.defaults);
  if(!value.workspaceOverrides||typeof value.workspaceOverrides!=='object'||Array.isArray(value.workspaceOverrides)||Object.keys(value.workspaceOverrides).length>1000)throw new Error('Invalid workspace policies');
  for(const [id,policy]of Object.entries(value.workspaceOverrides)){if(!id||id.length>200||/[\u0000-\u001f\u007f-\u009f]/u.test(id)||['__proto__','prototype','constructor'].includes(id))throw new Error('Invalid workspace identity');validateCompactionReasoning(policy);}
- return structuredClone({revision:value.revision,defaults:value.defaults,workspaceOverrides:value.workspaceOverrides});
+ const phase=value.legacyImport?.phase;
+ return structuredClone({revision:value.revision,defaults:value.defaults,workspaceOverrides:value.workspaceOverrides,...phase&&['none','pending','imported','preserved','conflict','unavailable'].includes(phase)?{legacyImport:{phase}}:{}});
 }
 export function createSharedCompactionSource(fetcher:typeof fetch=(...args)=>globalThis.fetch(...args)){
  let document:Document|undefined;
@@ -66,7 +68,7 @@ export function createSharedCompactionSource(fetcher:typeof fetch=(...args)=>glo
    },
   };forms.set(key,result);return result;
  }
- return {refresh,form,start};
+ return {refresh,form,start,legacyImport:()=>document?.legacyImport&&structuredClone(document.legacyImport)};
 }
 export type SharedCompactionSource=ReturnType<typeof createSharedCompactionSource>;
 const BROWSER_AUTHORITY=Symbol.for('dsh-extras.shared-compaction.browser.v1');
