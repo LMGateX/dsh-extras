@@ -34,7 +34,7 @@ import { selectNativeRetentionRange } from './manual.ts';
 import { buildStatus, renderStatus } from './status.ts';
 import { participateCompaction, mountSharedCompactionRoutes, type SharedCompactionStatus } from '../../shared-compaction/index.ts';
 import type { ReasoningCapability } from './reasoning-runtime.ts';
-import { mountLegacyCompactionSeed } from '../../shared-compaction/legacy-seed.ts';
+import { mountLegacyCompactionSeed, adoptLegacyCompactionSeed, type LegacyCompactionAdoptionReceipt } from '../../shared-compaction/legacy-seed.ts';
 import type { ContextStatus, StatusOptions } from './status.ts';
 
 /** Stable Cordis plugin name. */
@@ -58,6 +58,11 @@ export { Config, resolveConfig, validateConfig };
 export function mountSettings(ctx: Context, distribution: string, _isActive?: () => boolean, getConfig?: () => Record<string, unknown>): void {
   mountLegacyCompactionSeed(ctx, 'compact-context', distribution, getConfig);
   mountSharedCompactionRoutes(ctx, '/extras/' + encodeURIComponent(distribution) + '/shared-compaction');
+}
+
+/** Only the root's proven native migration adoption can supply this receipt. */
+export function onLegacyAdopted(ctx: Context, config: Record<string, unknown>, receipt: LegacyCompactionAdoptionReceipt): Promise<void> {
+  return adoptLegacyCompactionSeed(ctx, 'compact-context', config, receipt);
 }
 
 /** Prompt placement: after the PTC-only instruction (800), before tool guidance (900). */

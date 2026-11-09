@@ -59,13 +59,38 @@ const legacySchema = z.custom((value: unknown) => { try {
 catch {
     return false;
 } });
-const spec = defineDomain({ name: 'dsh_extras_compaction', version: 1, global: { schema, initial }, tables: { legacy: { valueSchema: legacySchema } } });
+export interface LegacyBootstrapSnapshot {
+    policy: CompactionReasoningPolicy;
+    moduleEnabled: boolean;
+    consumed: boolean;
+}
+interface LegacyAdoptionSnapshot { policy: CompactionReasoningPolicy; consumed: boolean }
+function validateSeed(value: unknown, bootstrap: boolean): void {
+    const record = data(value, bootstrap ? ['policy', 'moduleEnabled', 'consumed'] : ['policy', 'consumed']);
+    if (Object.keys(record).length !== (bootstrap ? 3 : 2) || typeof record.consumed !== 'boolean'
+        || (bootstrap && typeof record.moduleEnabled !== 'boolean')) throw new TypeError('invalid legacy seed record');
+    validateCompactionReasoning(record.policy);
+}
+const seedSchema = (bootstrap: boolean) => z.custom((value: unknown) => { try { validateSeed(value, bootstrap); return true; } catch { return false; } });
+function seedKey(source: string): void {
+    if (!source || source.length > 2000 || /[\u0000-\u001f\u007f-\u009f]/u.test(source)) throw new TypeError('invalid legacy source');
+}
+const spec = defineDomain({ name: 'dsh_extras_compaction', version: 1, global: { schema, initial }, tables: {
+    legacy: { valueSchema: legacySchema },
+    bootstrap: { valueSchema: seedSchema(true) },
+    adoptions: { valueSchema: seedSchema(false) },
+} });
 export interface SharedCompactionStore {
     read(): SharedCompactionSnapshot;
     write(candidate: SharedCompactionWrite): Promise<SharedCompactionSnapshot>;
     subscribe(listener: () => void): () => void;
     importLegacy(source: 'compact-context' | 'model-policy', policy: CompactionReasoningPolicy, apply?: boolean): Promise<'imported' | 'preserved' | 'conflict'>;
     recoverLegacy(source: 'compact-context' | 'model-policy', expectedRevision: number): Promise<SharedCompactionSnapshot>;
+    captureLegacyBootstrap(source: string, candidate: Omit<LegacyBootstrapSnapshot, 'consumed'>, admitted: () => boolean): Promise<LegacyBootstrapSnapshot>;
+    completeLegacyBootstrap(source: string, admitted: () => boolean): Promise<void>;
+    seedLegacyBootstrap(policy: CompactionReasoningPolicy, admitted: () => boolean): Promise<'imported' | 'preserved' | 'cancelled'>;
+    adoptLegacyReceipt(source: string, module: 'compact-context' | 'model-policy', policy: CompactionReasoningPolicy, admitted: () => boolean, apply?: boolean): Promise<'imported' | 'preserved' | 'conflict' | 'cancelled'>;
+    recoverLegacyAdoption(source: string, expectedRevision: number): Promise<SharedCompactionSnapshot>;
 }
 const KEY = Symbol.for('dsh-extras.shared-compaction.store.v1');
 interface StoreSlot {
@@ -104,7 +129,81 @@ export function openSharedCompactionStore(ctx: Context): Promise<SharedCompactio
         const enqueue = <T>(work: () => Promise<T>): Promise<T> => { const result = queue.then(() => { if (closed)
             throw new Error('profile authority closed'); return work(); }); queue = result.catch(() => { }); return result; };
         const legacy = domain.table('legacy');
-        return { async importLegacy(source, policy, apply = true) {
+        const bootstrap = domain.table('bootstrap');
+        const adoptions = domain.table('adoptions');
+        return {
+            captureLegacyBootstrap(source, candidate, admitted) {
+                seedKey(source);
+                const snapshot: LegacyBootstrapSnapshot = { policy: resolveCompactionReasoning(candidate.policy), moduleEnabled: candidate.moduleEnabled, consumed: false };
+                validateSeed(snapshot, true);
+                return enqueue(async () => {
+                    const previous = bootstrap.get(source) as LegacyBootstrapSnapshot | undefined;
+                    if (previous) { validateSeed(previous, true); return structuredClone(previous); }
+                    if (!admitted()) throw new Error('legacy bootstrap owner disposed');
+                    await bootstrap.put(source, snapshot);
+                    return structuredClone(snapshot);
+                });
+            },
+            completeLegacyBootstrap(source, admitted) {
+                seedKey(source);
+                return enqueue(async () => {
+                    if (!admitted()) return;
+                    const previous = bootstrap.get(source) as LegacyBootstrapSnapshot | undefined;
+                    if (!previous) throw new Error('legacy bootstrap snapshot unavailable');
+                    validateSeed(previous, true);
+                    if (!previous.consumed) await bootstrap.put(source, { ...previous, consumed: true });
+                });
+            },
+            seedLegacyBootstrap(policy, admitted) {
+                const backup = resolveCompactionReasoning(policy);
+                return enqueue(async () => {
+                    if (!admitted()) return 'cancelled';
+                    const current = domain.global.get(); validate(current);
+                    if (current.revision !== 0) return 'preserved';
+                    const next = { ...current, revision: 1, defaults: backup };
+                    validate(next); await domain.global.set(next); notify(); return 'imported';
+                });
+            },
+            adoptLegacyReceipt(source, module, policy, admitted, apply = true) {
+                seedKey(source);
+                const backup = resolveCompactionReasoning(policy);
+                return enqueue(async () => {
+                    if (!admitted()) return 'cancelled';
+                    const previous = adoptions.get(source) as LegacyAdoptionSnapshot | undefined;
+                    if (previous) {
+                        validateSeed(previous, false);
+                        if (JSON.stringify(previous.policy) !== JSON.stringify(backup)) throw new TypeError('legacy adoption receipt reused with different policy');
+                        if (previous.consumed) return domain.global.get().revision === 0 ? 'conflict' : 'preserved';
+                    } else await adoptions.put(source, { policy: backup, consumed: false });
+                    if (!admitted()) return 'cancelled';
+                    if (!legacy.get(module)) await legacy.put(module, backup);
+                    if (!admitted()) return 'cancelled';
+                    const current = domain.global.get(); validate(current);
+                    const result = current.revision !== 0 ? 'preserved' : apply ? 'imported' : 'conflict';
+                    if (result === 'imported') {
+                        await domain.global.set({ ...current, revision: 1, defaults: backup });
+                        notify();
+                    }
+                    // A pending backup is not a consumed receipt. A remounted root can
+                    // retry the same immutable input after disposal or durable failure.
+                    if (!admitted()) return 'cancelled';
+                    await adoptions.put(source, { policy: backup, consumed: true });
+                    return result;
+                });
+            },
+            recoverLegacyAdoption(source, expectedRevision) {
+                seedKey(source);
+                return enqueue(async () => {
+                    const current = domain.global.get(); validate(current);
+                    if (current.revision !== expectedRevision) throw new CompactionConflictError();
+                    const previous = adoptions.get(source) as LegacyAdoptionSnapshot | undefined;
+                    if (!previous) throw new TypeError('legacy adoption backup unavailable');
+                    validateSeed(previous, false);
+                    const next = { ...current, revision: current.revision + 1, defaults: previous.policy };
+                    validate(next); await domain.global.set(next); notify(); return structuredClone(next);
+                });
+            },
+            async importLegacy(source, policy, apply = true) {
                 const backup = resolveCompactionReasoning(policy);
                 return enqueue(async () => {
                     const previous = legacy.get(source);

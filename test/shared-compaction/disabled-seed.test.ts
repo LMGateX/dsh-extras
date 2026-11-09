@@ -16,6 +16,67 @@ import { openSharedCompactionStore } from '../../src/shared-compaction/store.ts'
 const policy = (effort: string) => ({ enabled: true, rules: [{ scope: 'all' as const, mode: 'fixed' as const, effort }] });
 async function context() { const ctx = new Context(); await ctx.plugin(LlmRuntime).await(); await ctx.plugin(Storage).await(); await ctx.plugin(Json, { root: await mkdtemp(join(tmpdir(), 'disabled-compaction-seed-')) }).await(); await ctx.plugin(Domain, { backend: 'json' }).await(); return ctx; }
 async function request(f: any, method = 'GET', body?: unknown) { const req = Readable.from(body === undefined ? [] : [JSON.stringify(body)]) as any; req.method = method; req.headers = { host: f.host, cookie: f.ownerCookie }; const res = response(); await f.routes.get('/extras/' + f.entry.options.id + '/shared-compaction').handler(req, res); return { code: res.code, body: JSON.parse(res.body) }; }
+test('native participation-only edits and root reload cannot reseed canonical default-only bootstrap', async t => {
+    const ctx = await context(); t.after(() => ctx.fiber.dispose());
+    const initial = { migration: { auto: false }, modules: {
+        'compact-context': { enabled: true, compactTool: false, compactionReasoning: { enabled: false, rules: [{ scope: 'all', mode: 'inherit' }] } },
+        'model-policy': { enabled: false, compactionReasoning: { enabled: false, rules: [{ scope: 'all', mode: 'inherit' }] } },
+    } };
+    const f = await loaderFixture(t, { name: 'bootstrap-participation', moduleIds: ['compact-context', 'model-policy'], modulePlugins: { 'compact-context': compact, 'model-policy': model } }, initial, ctx);
+    await f.ready(); const before = await request(f);
+    const snapshot = (value: any) => ({ revision: value.revision, defaults: value.defaults, workspaceOverrides: value.workspaceOverrides });
+    assert.equal(before.code, 200); assert.equal(before.body.revision, 0); assert.equal(before.body.defaults.enabled, false);
+    assert.equal(before.body.legacyImport.phase, 'none');
+    await f.update({ ...initial, modules: { ...initial.modules, 'compact-context': {
+        ...initial.modules['compact-context'], compactionReasoning: { ...initial.modules['compact-context'].compactionReasoning, enabled: true },
+    } } });
+    const after = await request(f); assert.equal(after.code, 200);
+    assert.deepEqual(snapshot(after.body), snapshot(before.body), 'local participation is not a canonical master edit');
+    await f.entry.update({ disabled: true }); await f.loader.await();
+    await f.entry.update({ disabled: false }); await f.loader.await(); await f.ready();
+    const reloaded = await request(f); assert.equal(reloaded.code, 200);
+    assert.deepEqual(snapshot(reloaded.body), snapshot(before.body), 'bootstrap source remains consumed after native root reload');
+});
+test('public feature adoption hook admits a delayed true-inherit legacy policy exactly once for its native settings owner', async t => {
+    const ctx = await context(); t.after(() => ctx.fiber.dispose());
+    const f = await loaderFixture(t, { name: 'delayed-seed', moduleIds: ['compact-context'], modulePlugins: { 'compact-context': compact } }, {
+        migration: { auto: false }, modules: { 'compact-context': { enabled: false, compactTool: false } },
+    }, ctx);
+    await f.ready(); assert.equal((await request(f)).body.revision, 0);
+    const original = { enabled: true, rules: [{ scope: 'all' as const, mode: 'inherit' as const }] };
+    const adopted = { enabled: false, compactionReasoning: original };
+    const receipt = { operationId: 'native-operation-delayed', sourceModuleId: 'compact-context' };
+    await assert.rejects(compact.onLegacyAdopted(ctx, adopted, receipt), /owner/);
+    await assert.rejects(compact.onLegacyAdopted(f.entry.fiber!.ctx, adopted, { ...receipt, sourceModuleId: 'retry' }), /receipt/);
+    await compact.onLegacyAdopted(f.entry.fiber!.ctx, adopted, receipt);
+    const first = await request(f); assert.equal(first.code, 200); assert.equal(first.body.revision, 1);
+    assert.deepEqual(first.body.defaults, original);
+    assert.equal(first.body.legacyImport.sources[0].provenance, 'migration-operation');
+    assert.equal(first.body.legacyImport.sources[0].moduleEnabled, false);
+    assert.equal(first.body.legacyImport.sources[0].participationEnabled, true);
+    assert.equal(Object.hasOwn((ctx.llm as any)[symbols.original], 'stream'), false);
+    await compact.onLegacyAdopted(f.entry.fiber!.ctx, adopted, receipt);
+    assert.equal((await request(f)).body.revision, 1);
+});
+test('public delayed adoption preserves a prior canonical owner edit and keeps the exact nested original recoverable', async t => {
+    const ctx = await context(); t.after(() => ctx.fiber.dispose());
+    const f = await loaderFixture(t, { name: 'delayed-preserved', moduleIds: ['compact-context'], modulePlugins: { 'compact-context': compact } }, {
+        migration: { auto: false }, modules: { 'compact-context': { enabled: false } },
+    }, ctx);
+    await f.ready(); assert.equal((await request(f)).body.revision, 0);
+    const workspaceOverrides = { opaque: { enabled: false, rules: [] } };
+    const saved = await request(f, 'PUT', { expectedRevision: 0, defaults: policy('user-before-adoption'), workspaceOverrides });
+    assert.equal(saved.code, 200);
+    const original = { enabled: true, rules: [{ scope: 'all' as const, mode: 'inherit' as const }] };
+    await compact.onLegacyAdopted(f.entry.fiber!.ctx, { enabled: false, compactionReasoning: original }, {
+        operationId: 'native-operation-after-user-save', sourceModuleId: 'compact-context',
+    });
+    const after = await request(f); assert.equal(after.body.revision, 1);
+    assert.deepEqual(after.body.defaults, saved.body.defaults); assert.deepEqual(after.body.workspaceOverrides, workspaceOverrides);
+    const store = await openSharedCompactionStore(ctx);
+    const recovered = await store.recoverLegacy('compact-context', 1);
+    assert.deepEqual(recovered.defaults, original); assert.deepEqual(recovered.workspaceOverrides, workspaceOverrides);
+});
 test('native Loader disabled module preserves exact nested legacy policy while execution is off and never installs an executor', async (t) => {
     const ctx = await context();
     t.after(() => ctx.fiber.dispose());
