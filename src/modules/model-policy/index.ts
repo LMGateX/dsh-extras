@@ -62,4 +62,3 @@ export async function apply(ctx:Context,rawConfig:Record<string,unknown>={}):Pro
 export function mountSettings(ctx:Context,distribution:string):void {
  mountSharedCompactionRoutes(ctx,'/extras/'+encodeURIComponent(distribution)+'/shared-compaction');
 }
-
