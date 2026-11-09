@@ -42,7 +42,7 @@ export async function candidateFixture(t:any,distribution:string){
  const root=await mkdtemp(join(tmpdir(),'extras-real-native-recovery-'));
  t.after(async()=>{await ctx.fiber.dispose();assert.equal(dirname(root),resolve(tmpdir()));assert.ok(basename(root).startsWith('extras-real-native-recovery-'));if(!process.env.DSH_RECOVERY_KEEP)await rm(root,{recursive:true,force:true});else console.log('Candidate sandbox retained:',root);});
  const artifactDir=resolve(process.env.DSH_EXTRAS_ARTIFACT_DIR??join(repository,'artifacts'));
- const artifact=join(artifactDir,distribution+'-0.5.0.tgz');const artifactHash=sha(await readFile(artifact));
+ const artifact=join(artifactDir,distribution+'-0.5.1.tgz');const artifactHash=sha(await readFile(artifact));
  await exec('tar',['-xzf',artifact,'-C',root]);
  const dependencyRoot=join(dirname(anchor!),'node_modules');
  await symlink(dependencyRoot,join(root,'node_modules'),'dir');

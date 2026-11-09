@@ -12,8 +12,8 @@ import {distributions} from '../../scripts/distributions.mjs';
 const root = resolve(import.meta.dirname, '../..');
 const version = JSON.parse(await readFile(join(root,'package.json'),'utf8')).version;
 const artifactDir = join(root,'artifacts');
-assert.equal(distributions.length, 6, '0.5.0 delivers combined plus five independent splits');
-assert.equal(version, '0.5.0');
+assert.equal(distributions.length, 6, '0.5.1 delivers combined plus five independent splits');
+assert.equal(version, '0.5.1');
 const checksums = new Map((await readFile(join(artifactDir,'SHA256SUMS'),'utf8')).trim().split('\n').map(line => line.split('  ').reverse()));
 const hostRequire = createRequire(createRequire(join(root,'package.json')).resolve('@deepseek-ai/dsh/package.json'));
 for(const {name,modules} of distributions) test('packed installable distribution: '+name,{timeout:120000},async t=>{
