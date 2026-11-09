@@ -35,13 +35,15 @@ Initial c69 packed scope run: owner-HTTP same-operation gates passed 2/2; native
 
 An independently identified cross-layer defect was then reproduced RED against both actual packed host adapters: different browser operation IDs for one checkpoint produced a native canonical first-operation receipt, but Extras incorrectly required the submitted operation ID and returned 503. [The source bridge](../src/modules/retry/recovery.ts) and [client receipt parser](../client/request-recovery.ts) now retain the canonical native operation ID unchanged, while strictly validating its bounded identifier, execution identifier and exact checkpoint match. Public adapter/transport cases passed 6/6 after commit 1b50d02f44ad9eb046852ac19bd3e6bac6ed878c; actual packed distinct-operation GREEN must be recorded against the final rebuilt archive hashes, not inferred from source results.
 
-## Rebuilt recovery-scope receipt — 2026-11-09 12:54 Asia/Shanghai
+Prior milestone — 2026-11-09 12:54 Asia/Shanghai: build HEAD 571eb0ecbd95af087e8eb7649da376efae659e3f passed the same six cases (exit 0, 6 passed, no failures/skips, 8136.707354 ms). Its combined archive hash was 1aee5822db2ef16a26d114d5dbdaf90ca45e188a4d9c63af59caa4ef91ccc45a; retry-only was 66ac07795e32ce98eb5f8458bd926314dbc87add0bdda2d6d4b9bcd3c8f63378. That milestone was recorded in commit bedd5d2a4888b38d998111f5f29cda29d9cb8968 and its [historical six-case log](/tmp/extras-native-recovery-571eb0.acceptance.log). The parent then replaced combined/business artifacts to close an independent seed/lifecycle review finding. The old receipt is historical, not the current artifact receipt.
 
-Executed after the parent reported BUILD_PASS/PACK_PASS for build HEAD 571eb0ecbd95af087e8eb7649da376efae659e3f, including canonical receipt fix 1b50d02f44ad9eb046852ac19bd3e6bac6ed878c. Candidate anchor and implementation remained unchanged. The exact [manual six-case runner](../test/native-recovery/packed-native.acceptance.ts) completed with **exit 0: 6 tests, 6 passed, 0 failed, 0 skipped**, duration 8136.707354 ms. This is a completed recovery-scope receipt, **not whole-release/publish approval**.
+## Final current recovery-scope receipt — 2026-11-09 13:33 Asia/Shanghai
+
+Executed again from a new whitelist environment after the parent reported full typecheck/SOURCE_PASS/BUILD_PASS/PACK_PASS for final business commit 7f8a3e762e11bab76d430d563d30a04edd01a14c, including canonical receipt fix 1b50d02f44ad9eb046852ac19bd3e6bac6ed878c. Candidate anchor, five native replacement bundles and implementation 2121312aacce481d2970ae582fdfc9a3056039ca remained unchanged. The exact [manual six-case runner](../test/native-recovery/packed-native.acceptance.ts) completed with **exit 0: 6 tests, 6 passed, 0 failed, 0 skipped**, duration 7739.745192 ms. This is the final current recovery-scope receipt for the exact hashes below, **not whole-release/publish/install approval**.
 
 | Consumed distribution | Archive SHA-256 | Actual packed client SHA-256 | Gates passed |
 | --- | --- | --- | --- |
-| combined | 1aee5822db2ef16a26d114d5dbdaf90ca45e188a4d9c63af59caa4ef91ccc45a | 82ca115e3dfdf316ae44354942c04901c4a9fcede33b5914d7207b17ce07ad4f | owner HTTP; native owner/browser; completed tools/fresh process |
+| combined | 6689c4694d73f4e94169878d072e07532601226cf3960b9a3fd628a5c499e5c1 | 82ca115e3dfdf316ae44354942c04901c4a9fcede33b5914d7207b17ce07ad4f | owner HTTP; native owner/browser; completed tools/fresh process |
 | retry-only | 66ac07795e32ce98eb5f8458bd926314dbc87add0bdda2d6d4b9bcd3c8f63378 | 73343a3a9af81aba49a659e943b8ff00afb293c8b4c3e636aae813dd04cbaed5 | owner HTTP; native owner/browser; completed tools/fresh process |
 
 Both archive hashes matched the parent-generated [SHA256SUMS](../artifacts/SHA256SUMS) and each case rehashed its consumed archive unchanged at settlement. This real rebuilt-archive run closes the distinct-browser-operation RED above: both packed owner HTTP cases now return the shared native execution instead of the former second-browser 503, with exactly two total provider calls (initial failed request plus one recovery). Native budget counts were 3 → 6 → 7 for both distributions. Both completed-tool counters remained one and both independently spawned processes performed zero provider calls.
@@ -50,7 +52,7 @@ Unmodified stock frontend assets in both real-browser gates: index-BgUyXZcc.js S
 
 Execution environment was newly constructed with env -i: only PATH, disposable HOME/DSH_HOME/XDG cache/config/data/TMPDIR, DSH_PROFILE=isolated, CI/NO_COLOR, read-only Chromium executable and the two explicit candidate anchor/manifest variables were supplied. No NODE_OPTIONS, NODE_PATH, production profile, live URL or implicit user environment was inherited. The actual command was:
 
-    TEST_HOME=$(mktemp -d /tmp/extras-candidate-final-XXXXXX)
+    TEST_HOME=$(mktemp -d /tmp/extras-candidate-final-7f8a3e-XXXXXX)
     env -i PATH="$PATH" HOME="$TEST_HOME" DSH_HOME="$TEST_HOME/dsh" \
       XDG_CACHE_HOME="$TEST_HOME/cache" XDG_CONFIG_HOME="$TEST_HOME/config" \
       XDG_DATA_HOME="$TEST_HOME/data" TMPDIR="$TEST_HOME" DSH_PROFILE=isolated CI=1 NO_COLOR=1 \
@@ -59,7 +61,7 @@ Execution environment was newly constructed with env -i: only PATH, disposable H
       DSH_RECOVERY_CANDIDATE_MANIFEST=/tmp/dsh-native-recovery-stage-b70lEZ/manifest.json \
       node --test --test-concurrency=1 test/native-recovery/packed-native.acceptance.ts
 
-Raw local receipt: [six-case execution log](/tmp/extras-native-recovery-571eb0.acceptance.log). Temporary logs and profile state are not release assets or Git contents. Publication remains paused by the parent for an independently reviewed shared-policy seed/lifecycle issue. If any subsequent correction replaces these archives, this receipt remains historical and all six recovery cases must be rerun against the replacement hashes; passing this scope must not be relabeled as complete release acceptance.
+Raw current local receipt: [final six-case execution log](/tmp/extras-native-recovery-7f8a3e.acceptance.log). Temporary logs and profile state are not release assets or Git contents. The parent reports that the independent Spec/Standards blocking findings are now closed; that broader review disposition is the parent’s report, not a result inferred from these six tests. The retry-only archive and both packed client hashes are unchanged from the prior milestone; the combined archive changed and all six cases were nevertheless rerun against the current files. Broader artifact acceptance, source ledger, remote release checksums and any protected native installation remain parent-owned gates. If any subsequent correction replaces these archives, this receipt becomes historical and all six recovery cases must be rerun against the replacement hashes; passing this scope must not be relabeled as complete release acceptance.
 
 ## Explicit remaining boundaries
 
