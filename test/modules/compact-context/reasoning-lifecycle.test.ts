@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { Context, symbols } from '@deepseek-ai/cordis';
 import LlmRuntime, { type GenerateOptions, type StreamChunk } from '@deepseek-ai/dsh-llm';
 import * as plugin from '../../../src/modules/compact-context/index.ts';
-import { loaderFixture } from '../../integration/loader-harness.ts';
+import { loaderFixture, until } from '../../integration/loader-harness.ts';
 import Storage from '@deepseek-ai/dsh-storage';
 import * as Domain from '@deepseek-ai/dsh-storage-domain';
 import * as Json from '@deepseek-ai/dsh-storage-json';
@@ -34,9 +34,23 @@ test('real Loader volatile updates capture in-flight policy, remove disabled eff
     defaults: policy(effort) as CompactionReasoningPolicy, workspaceOverrides: {} });
   await savePolicy('one');
   const fixture = await loaderFixture(t, distribution, config('one'), ctx); await fixture.ready();
-  // Local enabled intent is separate from the single canonical rules authority.
-  const update = async (effort: string, enabled = true) => { await savePolicy(effort); await fixture.update(config('one', enabled)); };
   const status = () => fixture.status().modules['compact-context'].capabilities;
+  const admitted = (enabled: boolean, revision: number) => until(() => fixture.status(), value => {
+    const module = value.modules?.['compact-context'];
+    const reasoning = module?.capabilities?.compactionReasoning;
+    return module?.ready === true && module.phase === 'active' && module.enabled === true
+      && reasoning?.phase === (enabled ? 'active' : 'disabled')
+      && reasoning.participating === enabled && reasoning.revision === revision;
+  }, 'native compact-context admission at canonical revision ' + revision + ', participating=' + enabled);
+  // Loader/config persistence can finish before asynchronous ownership discovery
+  // republishes the exact feature capability. Await that public state, not time.
+  // Canonical revision and local participation fence out a stale prior projection.
+  const update = async (effort: string, enabled = true) => {
+    const accepted = await savePolicy(effort);
+    await fixture.update(config('one', enabled));
+    await admitted(enabled, accepted.revision);
+  };
+  await admitted(true, canonical.read().revision);
   assert.equal(status().compactionReasoning.phase, 'active'); assert.equal(status().tools.phase, 'disabled');
   const original = request(); const first = ctx.llm.stream(original);
   await update('two'); const second = ctx.llm.stream(original);
