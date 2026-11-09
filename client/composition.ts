@@ -33,7 +33,7 @@ export function createExtrasClient(descriptor: ExtrasClientDescriptor, React: an
       let live=true;
       const options:RecoveryMountOptions={rowId:descriptor.rowId,enabled:()=>{
         const accepted=root.getSnapshot();const current=status.getSnapshot().modules.retry;
-        return live&&accepted.status==='ready'&&(accepted.value as any)?.modules?.retry?.enabled!==false&&current?.enabled===true&&current.ready===true&&current.phase==='active';
+        return live&&accepted.status==='ready'&&!!accepted.value&&typeof accepted.value==='object'&&(accepted.value as any)?.modules?.retry?.enabled!==false&&current?.enabled===true&&current.ready===true&&current.phase==='active';
       },subscribe(listener){const offForm=root.subscribe(listener);const offStatus=status.subscribe(listener);return()=>{offForm();offStatus();};}};
       owned.ctx.effect(()=>{const off=recovery.mount(owned.ctx,options);return()=>{live=false;off();};},'extras: native failed request recovery');
     }
