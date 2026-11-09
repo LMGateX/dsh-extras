@@ -133,3 +133,46 @@ test('disabled model-policy has no compaction participation even when its nested
  const f=await fixture(t,{enabled:false,compactionReasoning:{enabled:true,rules:[]}});
  assert.equal(policy.runtimeStatus(f.fiber.ctx).capabilities.compactionReasoning.phase,'disabled');
 });
+
+for(const mode of ['creation','live-update']) test('unrelated accepted edit does not discard pending native '+mode+' selection',{timeout:10000},async t=>{
+ const target={provider:'deferred-policy',model:'wanted'};
+ const f=await fixture(t,{enabled:true,root:mode==='creation'?target:null});
+ let begin!:()=>void,release!:()=>void;const started=new Promise<void>(resolve=>{begin=resolve;});const gate=new Promise<void>(resolve=>{release=resolve;});t.after(()=>release());
+ class DeferredAdapter extends llm.LlmAdapter {async resolveModel(provider:string,model:string){begin();await gate;return {provider,id:model,name:model};}}
+ f.ctx.llm.registerAdapter(['deferred-policy'],new DeferredAdapter());
+ let root=mode==='live-update'?await f.create('deferred-'+mode,f.a):undefined;
+ let pending:Promise<any>;
+ if(root){f.config.root=target;pending=f.ctx.parallel('loader/volatile-update');}else pending=f.create('deferred-'+mode,f.a);
+ await started;
+ f.config.workspaceOverrides=[{workspaceId:f.wb.id,root:null}];f.config.compactionReasoning={enabled:false,rules:[]};
+ await f.ctx.parallel('loader/volatile-update');release();const result=await pending;if(!root)root=result;
+ assert.deepEqual(root!.agent.model.current(),target);
+ assert.equal(root!.agent.session.snapshotEvents().filter((event:any)=>event.type==='model/selection').length,1);
+});
+
+for(const boundary of ['enable-lifetime','target-cycle','explicit-native-selection']) test('pending metadata respects '+boundary+' invalidation',{timeout:10000},async t=>{
+ const f=await fixture(t,{enabled:true,root:null});const root=await f.create('boundary-'+boundary,f.a);
+ const gates:{started:Promise<void>;gate:Promise<void>;begin:()=>void;release:()=>void}[]=Array.from({length:3},()=>{let begin!:()=>void,release!:()=>void;const started=new Promise<void>(resolve=>{begin=resolve;});const gate=new Promise<void>(resolve=>{release=resolve;});return {started,gate,begin,release};});t.after(()=>gates.forEach(gate=>gate.release()));let calls=0;
+ class BoundaryAdapter extends llm.LlmAdapter {async resolveModel(provider:string,model:string){const gate=gates[calls++]!;gate.begin();await gate.gate;return {provider,id:model,name:model};}}
+ f.ctx.llm.registerAdapter(['boundary-offline'],new BoundaryAdapter());const a={provider:'boundary-offline',model:'a'};f.config.root=a;
+ const first=f.ctx.parallel('loader/volatile-update');await gates[0]!.started;
+ let second:Promise<any>|undefined,third:Promise<any>|undefined;
+ if(boundary==='explicit-native-selection')root.agent.model.select({provider:'native',model:'base'});
+ else if(boundary==='enable-lifetime'){f.config.enabled=false;await f.ctx.parallel('loader/volatile-update');f.config.enabled=true;second=f.ctx.parallel('loader/volatile-update');await gates[1]!.started;}
+ else {f.config.root={provider:'boundary-offline',model:'b'};second=f.ctx.parallel('loader/volatile-update');await gates[1]!.started;f.config.root=a;third=f.ctx.parallel('loader/volatile-update');await gates[2]!.started;}
+ gates[0]!.release();await first;assert.deepEqual(root.agent.model.current(),{provider:'native',model:'base'});
+ if(second){gates[1]!.release();await second;if(third)assert.deepEqual(root.agent.model.current(),{provider:'native',model:'base'});}
+ if(third){gates[2]!.release();await third;}
+ if(boundary!=='explicit-native-selection')assert.deepEqual(root.agent.model.current(),a);
+});
+
+test('awaited creation joins the newest accepted pending selection before publishing its return',{timeout:10000},async t=>{
+ const f=await fixture(t,{enabled:true,root:{provider:'join-offline',model:'a'}});
+ const gates:{started:Promise<void>;gate:Promise<void>;begin:()=>void;release:()=>void}[]=Array.from({length:2},()=>{let begin!:()=>void,release!:()=>void;const started=new Promise<void>(resolve=>{begin=resolve;});const gate=new Promise<void>(resolve=>{release=resolve;});return {started,gate,begin,release};});t.after(()=>gates.forEach(gate=>gate.release()));let calls=0;
+ class JoinAdapter extends llm.LlmAdapter {async resolveModel(provider:string,model:string){const gate=gates[calls++]!;gate.begin();await gate.gate;return {provider,id:model,name:model};}}
+ f.ctx.llm.registerAdapter(['join-offline'],new JoinAdapter());let returned=false;
+ const creation=f.create('join-created',f.a).then(root=>{returned=true;return root;});await gates[0]!.started;
+ f.config.root={provider:'join-offline',model:'b'};const update=f.ctx.parallel('loader/volatile-update');await gates[1]!.started;
+ gates[0]!.release();await new Promise<void>(resolve=>setImmediate(resolve));assert.equal(returned,false,'awaited creation must not release work while a newer accepted selection is pending');
+ gates[1]!.release();const root=await creation;await update;assert.deepEqual(root.agent.model.current(),{provider:'join-offline',model:'b'});
+});
