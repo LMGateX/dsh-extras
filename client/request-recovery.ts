@@ -7,6 +7,7 @@ export interface RequestRecoveryMount {
 }
 export interface RecoverySource {read(sessionId:string,signal?:AbortSignal):Promise<RecoveryView>;retry(command:RecoveryCommand):Promise<RecoveryReceipt>;}
 const rejected=(reason:string):RecoveryReceipt=>({status:'rejected',reason});
+const receiptId=(v:unknown):v is string=>typeof v==='string'&&v.length>0&&v.length<=512&&[...v].every(c=>c.charCodeAt(0)>32&&c.charCodeAt(0)!==127);
 const known=new Set(['agent-detached','agent-busy','exact-snapshot-unavailable','checkpoint-stale','foreign-session','invalid-operation-id','recovery-policy-rejected','recovery-admission-failed','module-disabled','native-recovery-unavailable','native-recovery-incompatible','native-recovery-rejected']);
 /** Same-origin cookie transport. Native owns checkpoint expiry, admission and idempotency. */
 export function createRequestRecoverySource(rowId:string,fetcher:typeof fetch=fetch):RecoverySource {
@@ -14,7 +15,7 @@ export function createRequestRecoverySource(rowId:string,fetcher:typeof fetch=fe
  return {
   async read(sessionId,signal){const r=await fetcher(path+'?sessionId='+encodeURIComponent(sessionId),{credentials:'same-origin',cache:'no-store',signal});if(!r.ok)throw Error('recovery-transport-unavailable');return acceptRecoveryView(await r.json(),sessionId);},
   async retry(command){const r=await fetcher(path,{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify(command)});const value=await r.json();
-   if(r.ok&&value?.status==='accepted'&&value.operationId===command.operationId&&value.checkpointId===command.checkpointId&&typeof value.executionId==='string')return {status:'accepted',checkpointId:value.checkpointId,operationId:value.operationId,executionId:value.executionId};
+   if(r.ok&&value?.status==='accepted'&&receiptId(value.operationId)&&value.checkpointId===command.checkpointId&&receiptId(value.executionId))return {status:'accepted',checkpointId:value.checkpointId,operationId:value.operationId,executionId:value.executionId};
    if(r.status===409&&value?.status==='rejected')return rejected(known.has(value.reason)?value.reason:'native-recovery-rejected');
    throw Error('recovery-transport-unavailable');
   },

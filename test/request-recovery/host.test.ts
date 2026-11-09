@@ -1,6 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {fixture,checkpoint} from './fixture.ts';
+import {createRequestRecoverySource} from '../../client/request-recovery.ts';
+
+test('native checkpoint-deduplicated receipt retains the first canonical operation identity for another browser',async t=>{
+ const f=await fixture(t);f.nativeLike.retry=async(command:any)=>({status:'accepted',checkpointId:command.checkpointId,operationId:'canonical-first-browser',executionId:'single-native-execution'});
+ const command={sessionId:'session-a',checkpointId:'checkpoint-1',expectedRevision:3,operationId:'second-browser'};
+ const result=await f.request('POST',command);assert.equal(result.code,200);assert.equal(result.json.operationId,'canonical-first-browser');
+ const source=createRequestRecoverySource('recovery-fixture',async()=>new Response(JSON.stringify(result.json),{status:200}) as any);
+ assert.deepEqual(await source.retry(command),result.json);
+ for(const receipt of [{...result.json,checkpointId:'other-checkpoint'},{...result.json,operationId:'unsafe identity'},{...result.json,executionId:''}]){
+  const invalid=createRequestRecoverySource('recovery-fixture',async()=>new Response(JSON.stringify(receipt),{status:200}) as any);await assert.rejects(invalid.retry(command));
+ }
+});
 
 test('present invalid optional native effort metadata closes the checkpoint rather than stripping it',async t=>{
  const f=await fixture(t);

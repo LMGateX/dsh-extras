@@ -63,7 +63,7 @@ export function mountRequestRecovery(ctx:Context,distribution:string,isEnabled:(
     // Native validates latest failure/cancellation/admission and returns prior idempotent receipts,
     // including after its read has become unavailable. Never replace that with a plugin replay cache.
     const receipt=await capability.retry(command);
-    if(record(receipt)&&receipt.status==='accepted'&&receipt.checkpointId===command.checkpointId&&receipt.operationId===command.operationId&&id(receipt.executionId))reply(200,{status:'accepted',checkpointId:receipt.checkpointId,operationId:receipt.operationId,executionId:receipt.executionId});
+    if(record(receipt)&&receipt.status==='accepted'&&receipt.checkpointId===command.checkpointId&&id(receipt.operationId)&&id(receipt.executionId))reply(200,{status:'accepted',checkpointId:receipt.checkpointId,operationId:receipt.operationId,executionId:receipt.executionId});
     else if(record(receipt)&&receipt.status==='rejected')refuse(code(receipt.reason,'native-recovery-rejected'));
     else reply(503,{error:'native-recovery-incompatible'});
    }catch{reply(503,{error:'native-recovery-unavailable'});}
