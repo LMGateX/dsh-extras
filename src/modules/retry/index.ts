@@ -6,6 +6,7 @@
  * and durable retry events.
  * @module dsh-stream-retry
  */
+export { mountRetrySettings, mountSettings } from './settings.ts';
 import Schema from '@deepseek-ai/schemastery';
 import type { Context } from '@deepseek-ai/cordis';
 // Side-effect type import: declares `ctx.llm` and the `llm/stream` event on Context.
