@@ -229,10 +229,25 @@ test('text validation rejects unsafe durations, attempts and malformed model/lis
 type Node = { type: string; props: Record<string, any>; children: any[] };
 function renderer() {
   const cleanups: (() => void)[] = [];
+  let nextId = 0;
   const React = {
+    // Hook values only; actual React/Chromium verifies visibility and focus.
+    createContext(initial: unknown) {
+      const context: any = { current: initial };
+      context.Provider = ({ value, children }: any) => {
+        context.current = value;
+        return { type: 'fragment', props: {}, children: Array.isArray(children) ? children : [children] };
+      };
+      return context;
+    },
+    useContext(context: any) { return context.current; },
+    useRef(initial: unknown) { return { current: initial }; },
+    useCallback(callback: unknown) { return callback; },
+    useMemo(factory: () => unknown) { return factory(); },
+    useId() { return 'oracle-' + ++nextId; },
     createElement(type: any, props: any, ...children: any[]): any {
-      if (typeof type === 'function') return type(props ?? {});
-      return { type, props: props ?? {}, children };
+      if (typeof type === 'function') return type({ ...props, children: children.length === 1 ? children[0] : children });
+      return { type, props: props ?? {}, children: children.flat(Infinity) };
     },
     useState(initial: any) { return [typeof initial === 'function' ? initial() : initial, () => {}]; },
     useEffect(effect: () => (() => void) | undefined) { const cleanup = effect(); if (cleanup) cleanups.push(cleanup); },
@@ -273,7 +288,7 @@ test('combined settings expose all original controls and exactly one custom chim
   }
   const view = createSettingsView(render.React, descriptor, ChimeEditor);
   const tree = view({ configForm: root.form });
-  const sections = nodes(tree).filter(node => node.type === 'section');
+  const sections = nodes(tree).filter(node => node.type === 'section' && node.props['data-module']);
   assert.deepEqual(sections.map(node => node.props['data-module']), all);
   assert.match(contents(sections[0]), /Compact-context/);
   assert.equal(sections.some(node => node.props['data-module'] === 'context'), false);
@@ -435,7 +450,7 @@ test('split descriptors render only selected modules and page form takes precede
     const render = renderer();
     const view = createSettingsView(render.React, { rowId: 'split-' + id, packageName: 'split-' + id, moduleIds: [id] });
     const tree = view({ configForm: shared.form, form: { state: native.form.getSnapshot(), mutate: native.form.mutate } });
-    assert.deepEqual(nodes(tree).filter(node => node.type === 'section').map(node => node.props['data-module']), [id]);
+    assert.deepEqual(nodes(tree).filter(node => node.type === 'section' && node.props['data-module']).map(node => node.props['data-module']), [id]);
     const enabled = nodes(tree).find(node => node.type === 'input' && node.props['data-field'] === 'enabled')!;
     await enabled.props.onChange({ target: { checked: false } });
     assert.equal(shared.writes.length, 0);

@@ -99,7 +99,7 @@ export function createSettingsGroupView(React: any, rowId: string, locale?: Sett
     const draft = React.useSyncExternalStore(editor.subscribe, editor.getSnapshot, editor.getSnapshot) as GroupDraft;
     const disabled = draft.status !== 'ready' || !draft.writable || draft.revision === undefined || draft.saving;
     const dirty = Object.keys(draft.intents).length > 0;
-    return h('fieldset', { className: 'extras-group', 'data-group': name, 'aria-label': label },
+    return h('fieldset', { className: 'extras-group', 'data-group': name, 'aria-label': label, 'data-extras-dirty': dirty },
       h('legend', null, label), hint && h('p', null, hint),
       ...fields.map(f => {
         const id = rowId + '-' + f.field;
