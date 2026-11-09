@@ -151,8 +151,23 @@ test('native CLI installs packed combined distribution into isolated web profile
   });
   await compactSection.getByRole('checkbox',{name:'Provide compaction reasoning from this module',exact:true}).click();
   await waitSaved(modules=>modules['compact-context']?.compactionReasoning?.enabled===true,'local compaction participation');
-  await reasoning.getByRole('checkbox',{name:'Enable compaction-request reasoning',exact:true}).check();
-  await reasoning.getByRole('button',{name:'Save policy',exact:true}).click();
+  const afterParticipation=await readPolicy();
+  assert.deepEqual({revision:afterParticipation.revision,defaults:afterParticipation.defaults,workspaceOverrides:afterParticipation.workspaceOverrides},
+    {revision:originalShared.revision,defaults:originalShared.defaults,workspaceOverrides:originalShared.workspaceOverrides},
+    'Changing local participation must not seed, revise or enable the canonical master policy: '+JSON.stringify({before:originalShared,after:afterParticipation,localSaved:(await readModules())['compact-context']?.compactionReasoning}));
+  const canonicalEnable=reasoning.getByRole('checkbox',{name:'Enable compaction-request reasoning',exact:true});
+  const enableBefore=afterParticipation;
+  try {
+    await expect(canonicalEnable).toBeEnabled();
+    await expect(canonicalEnable).not.toBeChecked();
+    await canonicalEnable.check();
+    await expect(canonicalEnable).toBeChecked();
+    await reasoning.getByRole('button',{name:'Save policy',exact:true}).click();
+  }
+  catch(cause) {
+    const ui=await compactSection.evaluate(node=>({checkboxes:[...node.querySelectorAll('input[type=checkbox]')].map(input=>({checked:(input as HTMLInputElement).checked,disabled:(input as HTMLInputElement).disabled})),dirty:[...node.querySelectorAll('[data-extras-dirty]')].map(node=>node.getAttribute('data-extras-dirty')),alerts:[...node.querySelectorAll('[role=alert]')].map(node=>node.textContent)}));
+    throw new Error('Canonical enable UI action failed: '+JSON.stringify({before:enableBefore,after:await readPolicy().catch(()=>({unavailable:true})),localSaved:(await readModules())['compact-context']?.compactionReasoning,ui,browserErrors:errors}),{cause});
+  }
   await reasoning.getByRole('status').filter({hasText:'Reasoning runtime: active'}).waitFor().catch(async error=>{
     const runtime=await page.evaluate(async()=> (await (await fetch('/extras/dsh-extras/status',{credentials:'same-origin',cache:'no-store'})).json()).modules['compact-context']);
     throw new Error('Canonical reasoning not active: '+JSON.stringify({runtime,canonical:await readPolicy(),saved:(await readModules())['compact-context']?.compactionReasoning,ui:await reasoning.getByRole('status').allTextContents(),alerts:await compactSection.getByRole('alert').allTextContents(),browserErrors:errors}),{cause:error});
