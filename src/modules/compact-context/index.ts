@@ -32,7 +32,8 @@ import { contextForAgent } from './scope.ts';
 import { installPtcTimeoutOverride } from './ptc-timeout.ts';
 import { selectNativeRetentionRange } from './manual.ts';
 import { buildStatus, renderStatus } from './status.ts';
-import { installCompactionReasoning, type ReasoningCapability } from './reasoning-runtime.ts';
+import { participateCompaction, mountSharedCompactionRoutes, type SharedCompactionStatus } from '../../shared-compaction/index.ts';
+import type { ReasoningCapability } from './reasoning-runtime.ts';
 import type { ContextStatus, StatusOptions } from './status.ts';
 
 /** Stable Cordis plugin name. */
@@ -41,7 +42,7 @@ export const name = 'extras-compact-context';
 /** Request reasoning is independent of tool-only service availability. */
 export const inject: string[] = [];
 const toolDependencies = ['tools', 'tokenMeter', 'systemPrompt', 'llm'];
-type CapabilityState = { compactionReasoning: ReasoningCapability; tools: ReasoningCapability };
+type CapabilityState = { compactionReasoning: SharedCompactionStatus; tools: ReasoningCapability };
 const runtimeStates = new WeakMap<Context['fiber'], CapabilityState>();
 
 /** Status is scoped to the exact feature fiber, never inferred from enabled config. */
@@ -52,6 +53,10 @@ export function runtimeStatus(ctx: Context): { capabilities: CapabilityState } {
 }
 
 export { Config, resolveConfig, validateConfig };
+/** Settings stay available while local participation is disabled. */
+export function mountSettings(ctx: Context, distribution: string): void {
+  mountSharedCompactionRoutes(ctx, '/extras/' + encodeURIComponent(distribution) + '/shared-compaction');
+}
 
 /** Prompt placement: after the PTC-only instruction (800), before tool guidance (900). */
 const SECTION_ORDER = 850;
@@ -577,14 +582,14 @@ function applyTools(ctx: Context, rawConfig: Record<string, unknown> = {}, obser
 }
 
 /** Keep the native request modifier alive even when tool injection is pending. */
-export function apply(ctx: Context, rawConfig: Record<string, unknown> = {}): void {
+export function apply(ctx: Context, rawConfig: Record<string, unknown> = {}): void | Promise<void> {
   // Direct module users may supply the documented minimal tool composition.
   if (typeof ctx.plugin !== 'function') { applyTools(ctx, rawConfig); return; }
   let accepted = resolveConfig(rawConfig);
   validateConfig(accepted);
   const state: CapabilityState = { compactionReasoning: { phase: 'disabled' }, tools: { phase: 'disabled' } };
   runtimeStates.set(ctx.fiber, state);
-  let disposeReasoning: (() => void) | undefined;
+  let reasoning: ReturnType<typeof participateCompaction> | undefined;
   let updateTools: ((next: ResolvedConfig) => void) | undefined;
   const refreshToolsStatus = (): void => {
     // PTC defaults share the dependent lifetime but are not agent-facing tools.
@@ -594,10 +599,8 @@ export function apply(ctx: Context, rawConfig: Record<string, unknown> = {}): vo
   };
   refreshToolsStatus();
   const mountReasoning = (): void => {
-    disposeReasoning?.();
-    state.compactionReasoning = { phase: 'disabled' };
-    disposeReasoning = accepted.compactionReasoning.enabled
-      ? installCompactionReasoning(ctx, accepted.compactionReasoning, value => { state.compactionReasoning = value; }) : undefined;
+    if (reasoning) reasoning.update(accepted.compactionReasoning);
+    else reasoning = participateCompaction(ctx, { module: 'compact-context', policy: accepted.compactionReasoning }, value => { state.compactionReasoning = value; });
   };
   mountReasoning();
   const child = {
@@ -618,5 +621,6 @@ export function apply(ctx: Context, rawConfig: Record<string, unknown> = {}): vo
     updateTools?.(next);
     refreshToolsStatus();
   });
-  ctx.effect(() => () => { disposeReasoning?.(); runtimeStates.delete(ctx.fiber); }, 'compaction request reasoning');
+  ctx.effect(() => () => { reasoning?.dispose(); runtimeStates.delete(ctx.fiber); }, 'compaction request reasoning');
+  return reasoning?.ready;
 }

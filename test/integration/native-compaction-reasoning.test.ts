@@ -3,8 +3,16 @@ import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import * as compactContext from '../../src/modules/compact-context/index.ts';
 import { createRuntime, runTurn, llm, runtimeVersion } from '../modules/retry/runtime.ts';
-import { loadHost, loaderFixture } from './loader-harness.ts';
+import { loadHost, loaderFixture, until } from './loader-harness.ts';
 import type { Distribution } from '../../src/types.ts';
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+async function mountCanonicalStorage(ctx: any): Promise<void> {
+  if (!ctx.get('storage')) await ctx.plugin((await loadHost('dsh-storage')).default).await();
+  await ctx.plugin(await loadHost('dsh-storage-json'), { root: await mkdtemp(join(tmpdir(), 'native-reasoning-policy-')) }).await();
+  await ctx.plugin(await loadHost('dsh-storage-domain'), { backend: 'json' }).await();
+}
 
 const signal = () => new AbortController().signal;
 const history = 'Synthetic project history, decisions and implementation details. '.repeat(1200);
@@ -57,9 +65,10 @@ async function fixture(t: TestContext, options: Record<string, any> = {}) {
   const rowConfig = { compactTool: false, compactionReasoning: inherit, ...options.plugin };
   const initial = { modules: { 'compact-context': { enabled: true, ...rowConfig } }, migration: { auto: false } };
   const distribution: Distribution = { name: 'dsh-extras-compact-context', moduleIds: ['compact-context'], modulePlugins: { 'compact-context': compactContext } };
+  if (options.loader) await mountCanonicalStorage(ctx);
   const loader = options.loader ? await loaderFixture(t, distribution, initial, ctx) : undefined;
   const plugin = loader?.fiber ?? ctx.plugin(compactContext, rowConfig);
-  if (loader) await loader.ready(); else await plugin.await();
+  if (loader) { await loader.ready(); await until(() => loader.status().modules['compact-context'].capabilities?.compactionReasoning.phase, phase => phase === 'active', 'canonical compaction seed admission'); } else await plugin.await();
   const adapter = new CaptureAdapter();
   Object.assign(adapter.windows, options.windows);
   adapter.defaultEffort = options.defaultEffort;
@@ -338,8 +347,10 @@ test('retained native preset engines compact exact independent sessions across p
   const ctx = runtime.ctx;
   await ctx.plugin((await loadHost('dsh-token-meter')).default).await();
   const distribution: Distribution = { name: 'dsh-extras-compact-context', moduleIds: ['compact-context'], modulePlugins: { 'compact-context': compactContext } };
+  await mountCanonicalStorage(ctx);
   const loader = await loaderFixture(t, distribution, { modules: { 'compact-context': { enabled: true, compactTool: false, compactionReasoning: inherit } }, migration: { auto: false } }, ctx);
   await loader.ready();
+  await until(() => loader.status().modules['compact-context'].capabilities?.compactionReasoning.phase, phase => phase === 'active', 'canonical compaction seed admission');
   loader.importTable.set('@deepseek-ai/dsh-compaction-basic', (await loadHost('dsh-compaction-basic')).default);
   await ctx.plugin((await loadHost('dsh-agent-preset-registry')).default, { default: 'one' }).await();
   const presets = ctx.get('agentPresets') as any;

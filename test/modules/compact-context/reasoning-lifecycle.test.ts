@@ -4,6 +4,14 @@ import { Context, symbols } from '@deepseek-ai/cordis';
 import LlmRuntime, { type GenerateOptions, type StreamChunk } from '@deepseek-ai/dsh-llm';
 import * as plugin from '../../../src/modules/compact-context/index.ts';
 import { loaderFixture } from '../../integration/loader-harness.ts';
+import Storage from '@deepseek-ai/dsh-storage';
+import * as Domain from '@deepseek-ai/dsh-storage-domain';
+import * as Json from '@deepseek-ai/dsh-storage-json';
+import { mkdtemp } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { openSharedCompactionStore } from '../../../src/shared-compaction/store.ts';
+import type { CompactionReasoningPolicy } from '../../../src/shared-compaction/index.ts';
 
 globalThis.fetch = (async () => { throw new Error('reasoning lifecycle tests forbid network'); }) as typeof fetch;
 const distribution = { name: '@dsh-extras/compact-context', moduleIds: ['compact-context'] as const, modulePlugins: { 'compact-context': plugin } };
@@ -18,12 +26,21 @@ test('real Loader volatile updates capture in-flight policy, remove disabled eff
   ctx.on('llm/stream', options => { seen.push(options); return (async function* () { yield { type: 'finish', reason: { kind: 'stop' } } as StreamChunk; })(); }, { global: true });
   const raw = (ctx.llm as unknown as Record<symbol, unknown>)[symbols.original] as LlmRuntime;
   const before = Object.getOwnPropertyDescriptor(raw, 'stream'); const prototype = Object.getOwnPropertyDescriptor(LlmRuntime.prototype, 'stream');
+  await ctx.plugin(Storage).await();
+  await ctx.plugin(Json, { root: await mkdtemp(join(tmpdir(), 'reasoning-lifecycle-')) }).await();
+  await ctx.plugin(Domain, { backend: 'json' }).await();
+  const canonical = await openSharedCompactionStore(ctx);
+  const savePolicy = (effort: string) => canonical.write({ expectedRevision: canonical.read().revision,
+    defaults: policy(effort) as CompactionReasoningPolicy, workspaceOverrides: {} });
+  await savePolicy('one');
   const fixture = await loaderFixture(t, distribution, config('one'), ctx); await fixture.ready();
+  // Local enabled intent is separate from the single canonical rules authority.
+  const update = async (effort: string, enabled = true) => { await savePolicy(effort); await fixture.update(config('one', enabled)); };
   const status = () => fixture.status().modules['compact-context'].capabilities;
   assert.equal(status().compactionReasoning.phase, 'active'); assert.equal(status().tools.phase, 'disabled');
   const original = request(); const first = ctx.llm.stream(original);
-  await fixture.update(config('two')); const second = ctx.llm.stream(original);
-  await fixture.update(config('three', false));
+  await update('two'); const second = ctx.llm.stream(original);
+  await update('three', false);
   assert.equal(status().compactionReasoning.phase, 'disabled'); assert.deepEqual(Object.getOwnPropertyDescriptor(raw, 'stream'), before);
   await Promise.all([consume(first), consume(second)]);
   assert.deepEqual(seen.map(value => value.reasoningEffort), ['one', 'two']);
@@ -33,16 +50,16 @@ test('real Loader volatile updates capture in-flight policy, remove disabled eff
   const lateRaw = (late.llm as unknown as Record<symbol, unknown>)[symbols.original] as LlmRuntime;
   assert.equal(Object.getOwnPropertyDescriptor(lateRaw, 'stream'), undefined);
   for (const effort of ['three', 'four', 'five']) {
-    await fixture.update(config(effort));
+    await update(effort);
     assert.equal(status().compactionReasoning.phase, 'active');
     const count = seen.length; await consume(ctx.llm.stream(original)); await consume(late.llm.stream(original));
     assert.equal(seen.length, count + 2); assert.deepEqual(seen.slice(-2).map(value => value.reasoningEffort), [effort, effort]);
-    await fixture.update(config(effort, false));
+    await update(effort, false);
     assert.equal(status().compactionReasoning.phase, 'disabled');
     assert.deepEqual(Object.getOwnPropertyDescriptor(raw, 'stream'), before);
     assert.equal(Object.getOwnPropertyDescriptor(lateRaw, 'stream'), undefined);
   }
-  await fixture.update(config('after-reenable'));
+  await update('after-reenable');
   const pending = ctx.llm.stream(original); await fixture.dispose(); await consume(pending);
   assert.equal(seen.at(-1)!.reasoningEffort, 'after-reenable');
   assert.deepEqual(Object.getOwnPropertyDescriptor(raw, 'stream'), before);
