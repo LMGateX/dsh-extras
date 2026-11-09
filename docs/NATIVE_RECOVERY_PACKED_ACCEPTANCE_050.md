@@ -35,7 +35,31 @@ Initial c69 packed scope run: owner-HTTP same-operation gates passed 2/2; native
 
 An independently identified cross-layer defect was then reproduced RED against both actual packed host adapters: different browser operation IDs for one checkpoint produced a native canonical first-operation receipt, but Extras incorrectly required the submitted operation ID and returned 503. [The source bridge](../src/modules/retry/recovery.ts) and [client receipt parser](../client/request-recovery.ts) now retain the canonical native operation ID unchanged, while strictly validating its bounded identifier, execution identifier and exact checkpoint match. Public adapter/transport cases passed 6/6 after commit 1b50d02f44ad9eb046852ac19bd3e6bac6ed878c; actual packed distinct-operation GREEN must be recorded against the final rebuilt archive hashes, not inferred from source results.
 
-Final rebuilt-archive six-case receipt: pending the parent-owned build/pack freeze. This appendix must be updated with the actually executed hashes/results before claiming that final gate passed.
+## Rebuilt recovery-scope receipt — 2026-11-09 12:54 Asia/Shanghai
+
+Executed after the parent reported BUILD_PASS/PACK_PASS for build HEAD 571eb0ecbd95af087e8eb7649da376efae659e3f, including canonical receipt fix 1b50d02f44ad9eb046852ac19bd3e6bac6ed878c. Candidate anchor and implementation remained unchanged. The exact [manual six-case runner](../test/native-recovery/packed-native.acceptance.ts) completed with **exit 0: 6 tests, 6 passed, 0 failed, 0 skipped**, duration 8136.707354 ms. This is a completed recovery-scope receipt, **not whole-release/publish approval**.
+
+| Consumed distribution | Archive SHA-256 | Actual packed client SHA-256 | Gates passed |
+| --- | --- | --- | --- |
+| combined | 1aee5822db2ef16a26d114d5dbdaf90ca45e188a4d9c63af59caa4ef91ccc45a | 82ca115e3dfdf316ae44354942c04901c4a9fcede33b5914d7207b17ce07ad4f | owner HTTP; native owner/browser; completed tools/fresh process |
+| retry-only | 66ac07795e32ce98eb5f8458bd926314dbc87add0bdda2d6d4b9bcd3c8f63378 | 73343a3a9af81aba49a659e943b8ff00afb293c8b4c3e636aae813dd04cbaed5 | owner HTTP; native owner/browser; completed tools/fresh process |
+
+Both archive hashes matched the parent-generated [SHA256SUMS](../artifacts/SHA256SUMS) and each case rehashed its consumed archive unchanged at settlement. This real rebuilt-archive run closes the distinct-browser-operation RED above: both packed owner HTTP cases now return the shared native execution instead of the former second-browser 503, with exactly two total provider calls (initial failed request plus one recovery). Native budget counts were 3 → 6 → 7 for both distributions. Both completed-tool counters remained one and both independently spawned processes performed zero provider calls.
+
+Unmodified stock frontend assets in both real-browser gates: index-BgUyXZcc.js SHA-256 c7e9821660f7e0f0524cc7cb1a375a5171eebbe68e167b80d290bd2ea391286d; vendor-BUMdD3V7.js SHA-256 7675048a90d0419365a342c4eb81713aa8582b82a76b08ba2a8fc27160575265. The gate used the actual emitted ui-renderer, ui-conversation, ui-chat, session-controller event-window export and locale factories. The actual TurnTailNodeView owned the extension outlet. Both browser cases verified the same-operation lost-response retry, accepted-started wording, unfiltered required audit events after refresh, and disable removal; only the deliberately aborted accepted POST's exact URL was allowed to produce ERR_FAILED.
+
+Execution environment was newly constructed with env -i: only PATH, disposable HOME/DSH_HOME/XDG cache/config/data/TMPDIR, DSH_PROFILE=isolated, CI/NO_COLOR, read-only Chromium executable and the two explicit candidate anchor/manifest variables were supplied. No NODE_OPTIONS, NODE_PATH, production profile, live URL or implicit user environment was inherited. The actual command was:
+
+    TEST_HOME=$(mktemp -d /tmp/extras-candidate-final-XXXXXX)
+    env -i PATH="$PATH" HOME="$TEST_HOME" DSH_HOME="$TEST_HOME/dsh" \
+      XDG_CACHE_HOME="$TEST_HOME/cache" XDG_CONFIG_HOME="$TEST_HOME/config" \
+      XDG_DATA_HOME="$TEST_HOME/data" TMPDIR="$TEST_HOME" DSH_PROFILE=isolated CI=1 NO_COLOR=1 \
+      DSH_EXTRAS_CHROMIUM=/home/dev/.cache/ms-playwright/chromium-1248/chrome-linux64/chrome \
+      DSH_RECOVERY_CANDIDATE_ANCHOR=/tmp/dsh-native-recovery-stage-b70lEZ/node_modules/@deepseek-ai/dsh/package.json \
+      DSH_RECOVERY_CANDIDATE_MANIFEST=/tmp/dsh-native-recovery-stage-b70lEZ/manifest.json \
+      node --test --test-concurrency=1 test/native-recovery/packed-native.acceptance.ts
+
+Raw local receipt: [six-case execution log](/tmp/extras-native-recovery-571eb0.acceptance.log). Temporary logs and profile state are not release assets or Git contents. Publication remains paused by the parent for an independently reviewed shared-policy seed/lifecycle issue. If any subsequent correction replaces these archives, this receipt remains historical and all six recovery cases must be rerun against the replacement hashes; passing this scope must not be relabeled as complete release acceptance.
 
 ## Explicit remaining boundaries
 
