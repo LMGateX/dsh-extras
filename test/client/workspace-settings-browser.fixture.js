@@ -1,13 +1,14 @@
 import React from 'react';
 import {createRoot} from 'react-dom/client';
 import {createModelPolicyAdapter} from '../../client/model-policy-settings.ts';
+import {SETTINGS_CSS} from '../../client/settings-ui.ts';
 const listeners=new Set();let snapshot={status:'ready',writable:true,revision:2,value:{root:{provider:'Global/P',model:'Global/M'},descendants:{provider:'Global/P',model:'Global/Child'},workspaceOverrides:[]}};
 window.writes=[];window.accepted=()=>snapshot;
 const form={getSnapshot:()=>snapshot,subscribe:fn=>{listeners.add(fn);return()=>listeners.delete(fn);},async mutate(ops,revision){window.writes.push({ops,revision});if(revision!==snapshot.revision)return false;const value=structuredClone(snapshot.value);for(const op of ops){if(op.op==='unset')delete value[op.path[0]];else value[op.path[0]]=op.value;}snapshot={...snapshot,value,revision:revision+1};for(const fn of listeners)fn();return true;}};
 const workspaceListeners=new Set();let workspaceState={items:[{workspaceId:'Opaque:A',title:'Workspace A',path:'/fixture/a',sessionIds:[],createdAt:'2026-01-01',updatedAt:'2026-01-01'},{workspaceId:'Opaque:B',title:'Workspace B',path:'/fixture/b',sessionIds:[],createdAt:'2026-01-01',updatedAt:'2026-01-01'}],archivedSessionIds:[],pinnedSessionIds:[],state:'idle',phase:'ready',error:null};
-const locale={getLocale:()=>({active:'en'}),subscribe:()=>()=>{},resolveText:text=>text.en};
+const language=new URLSearchParams(location.search).get('locale')==='zh'?'zh':'en';const locale={getLocale:()=>({active:language}),subscribe:()=>()=>{},resolveText:text=>text[language]};
 const workspaceService={list:{getSnapshot(){if(this!==workspaceService.list)throw Error('native workspace receiver lost');return workspaceState;},subscribe(fn){if(this!==workspaceService.list)throw Error('native subscription receiver lost');workspaceListeners.add(fn);return()=>workspaceListeners.delete(fn);}}};
 const cleanups=[];const ctx={get(name){return name==='locale'?locale:name==='workspaces'?workspaceService:undefined;},inject(names,callback){const off=callback(ctx);if(typeof off==='function')cleanups.push(off);return()=>{if(typeof off==='function')off();};},effect(callback){const off=callback();if(typeof off==='function')cleanups.push(off);}};
 window.workspaceSnapshot=()=>workspaceState;window.setWorkspaces=value=>{workspaceState=value;for(const fn of workspaceListeners)fn();};
-const View=createModelPolicyAdapter(React).createView(ctx);const root=createRoot(document.getElementById('root'));root.render(React.createElement(View,{form,runtime:{capabilities:{modelPolicy:{phase:'active'}}}}));
+const View=createModelPolicyAdapter(React).createView(ctx);const root=createRoot(document.getElementById('root'));root.render(React.createElement('div',{'data-extras-settings':''},React.createElement('style',null,SETTINGS_CSS),React.createElement('section',{className:'extras-module','data-module':'model-policy'},React.createElement(View,{form,runtime:{capabilities:{modelPolicy:{phase:'active'}}}}))));
 window.unmount=()=>{root.unmount();for(const off of cleanups.reverse())off();};
