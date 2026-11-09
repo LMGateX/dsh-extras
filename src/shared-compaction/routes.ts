@@ -2,6 +2,7 @@
 import type { Context } from '@deepseek-ai/cordis';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { openSharedCompactionStore, type SharedCompactionWrite } from './store.ts';
+import { prepareLegacyCompactionSeeds, legacyCompactionSeedStatus } from './legacy-seed.ts';
 const KEY = Symbol.for('dsh-extras.shared-compaction.routes.v1');
 const REQUIRED = Symbol.for('dsh-extras.shared-compaction.canonical-required.v1');
 interface RouteRecord {
@@ -57,6 +58,7 @@ export function mountSharedCompactionRoutes(ctx: Context, path: string): void {
                     }
                     let store;
                     try {
+                        await prepareLegacyCompactionSeeds(root);
                         store = await openSharedCompactionStore(root);
                     }
                     catch {
@@ -65,7 +67,9 @@ export function mountSharedCompactionRoutes(ctx: Context, path: string): void {
                     }
                     if (req.method === 'GET') {
                         try {
-                            json(200, store.read());
+                            const snapshot = store.read();
+                            const legacyImport = legacyCompactionSeedStatus(root, snapshot);
+                            json(200, {...snapshot, ...(legacyImport ? {legacyImport} : {})});
                         }
                         catch {
                             json(503, { error: 'shared-compaction-unavailable' });

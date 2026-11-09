@@ -34,6 +34,7 @@ import { selectNativeRetentionRange } from './manual.ts';
 import { buildStatus, renderStatus } from './status.ts';
 import { participateCompaction, mountSharedCompactionRoutes, type SharedCompactionStatus } from '../../shared-compaction/index.ts';
 import type { ReasoningCapability } from './reasoning-runtime.ts';
+import { mountLegacyCompactionSeed } from '../../shared-compaction/legacy-seed.ts';
 import type { ContextStatus, StatusOptions } from './status.ts';
 
 /** Stable Cordis plugin name. */
@@ -54,7 +55,8 @@ export function runtimeStatus(ctx: Context): { capabilities: CapabilityState } {
 
 export { Config, resolveConfig, validateConfig };
 /** Settings stay available while local participation is disabled. */
-export function mountSettings(ctx: Context, distribution: string): void {
+export function mountSettings(ctx: Context, distribution: string, _isActive?: () => boolean, getConfig?: () => Record<string, unknown>): void {
+  mountLegacyCompactionSeed(ctx, 'compact-context', distribution, getConfig);
   mountSharedCompactionRoutes(ctx, '/extras/' + encodeURIComponent(distribution) + '/shared-compaction');
 }
 

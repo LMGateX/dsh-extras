@@ -5,6 +5,7 @@ import { resolveCompactionReasoning, type CompactionReasoningPolicy } from '../m
 import { openSharedCompactionStore, type SharedCompactionStore, type SharedCompactionSnapshot } from './store.ts';
 import { canonicalCompactionRequired } from './routes.ts';
 import { resolveSessionWorkspace } from './workspace.ts';
+import { prepareLegacyCompactionSeeds, hasLegacyCompactionSeeds, legacyCompactionSeedStatus } from './legacy-seed.ts';
 export { mountSharedCompactionRoutes } from './routes.ts';
 export { openSharedCompactionStore } from './store.ts';
 export type { SharedCompactionSnapshot, SharedCompactionWrite } from './store.ts';
@@ -58,7 +59,8 @@ function coordinator(ctx: Context): Coordinator {
         participants: new Set(), capability: { phase: 'disabled' },
         ready() {
             if (!state.opening && (root.get('storageDomain') || canonicalCompactionRequired(root))) {
-                state.opening = openSharedCompactionStore(root).then(store => {
+                state.opening = openSharedCompactionStore(root).then(async store => {
+                    await prepareLegacyCompactionSeeds(root);
                     state.store = store;
                     store.subscribe(() => state.reconcile());
                 }, () => { state.storeError = true; }).then(() => state.reconcile());
@@ -76,7 +78,7 @@ function coordinator(ctx: Context): Coordinator {
                 state.storeError = true;
             }
             const waiting = state.storeError || (!!state.opening && !state.store) || (!state.store && canonicalCompactionRequired(root));
-            const ambiguous = snapshot?.revision === 0 && ambiguousSeeds(state);
+            const ambiguous = snapshot?.revision === 0 && (ambiguousSeeds(state) || legacyCompactionSeedStatus(root, snapshot)?.phase === 'conflict');
             const acceptedEnabled = snapshot ? snapshot.defaults.enabled || Object.values(snapshot.workspaceOverrides).some(p => p.enabled) : true;
             const selected = duplicates || waiting || ambiguous || !acceptedEnabled ? undefined
                 : enabled.find(p => p.options.module === 'compact-context') ?? enabled[0];
@@ -136,7 +138,7 @@ export function participateCompaction(ctx: Context, options: ParticipationOption
         if (disposed || !state.store)
             return;
         // Disabled new-module placeholders must not preempt an old explicit seed.
-        if (meaningful(p.options.policy))
+        if (!hasLegacyCompactionSeeds(ctx) && meaningful(p.options.policy))
             p.legacyPolicy = await state.store.importLegacy(p.options.module, p.options.policy, state.store.read().revision !== 0 || !ambiguousSeeds(state));
         if (!disposed)
             state.reconcile();
