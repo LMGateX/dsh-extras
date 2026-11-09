@@ -1,14 +1,20 @@
-import test from 'node:test';
+import test,{type TestContext} from 'node:test';
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 import {once} from 'node:events';
 import {build} from 'esbuild';
 import {chromium} from '@playwright/test';
 
-test('emitted settings navigate global and multiple workspaces with explicit override and live inheritance',{timeout:30000},async t=>{
+async function openSettings(t:TestContext,presentation?:{language:'en'|'zh';width:number;dark:boolean}){
  const code=(await build({entryPoints:[new URL('./workspace-settings-browser.fixture.js',import.meta.url).pathname],bundle:true,write:false,platform:'browser',format:'iife'})).outputFiles[0]!.text;
- const server=createServer((req,res)=>{if(req.url==='/view.js'){res.setHeader('content-type','text/javascript');res.end(code);return;}res.setHeader('content-type','text/html');res.end('<div id="root"></div><script src="/view.js"></script>');});server.listen(0,'127.0.0.1');await once(server,'listening');t.after(()=>new Promise<void>(resolve=>server.close(()=>resolve())));const addr=server.address();assert.ok(addr&&typeof addr==='object');assert.notEqual(addr.port,3080);
- const browser=await chromium.launch({headless:true,executablePath:process.env.DSH_EXTRAS_CHROMIUM,args:['--no-sandbox']});t.after(()=>browser.close());const page=await browser.newPage();page.setDefaultTimeout(5000);const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await page.goto('http://127.0.0.1:'+addr.port);
+ const theme=presentation?'<style>body{margin:16px;background:var(--dsw-alias-bg-layer-3,#fff)}@media(prefers-color-scheme:dark){:root{--dsw-alias-label-primary:#e3e5e8;--dsw-alias-label-secondary:#a7aebb;--dsw-alias-bg-layer-2:#24272e;--dsw-alias-bg-layer-3:#181b20;--dsw-alias-border-l1:#49515f;--dsw-alias-border-l2:#596374;--dsw-alias-state-business-primary:#94a7ff}}</style>':'';
+ const server=createServer((req,res)=>{if(req.url==='/view.js'){res.setHeader('content-type','text/javascript');res.end(code);return;}res.setHeader('content-type','text/html');res.end(theme+'<div id="root"></div><script src="/view.js"></script>');});let browser:Awaited<ReturnType<typeof chromium.launch>>|undefined;
+ t.after(async()=>{await browser?.close();server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));});server.listen(0,'127.0.0.1');await once(server,'listening');const addr=server.address();assert.ok(addr&&typeof addr==='object');assert.notEqual(addr.port,3080);
+ browser=await chromium.launch({headless:true,executablePath:process.env.DSH_EXTRAS_CHROMIUM,args:['--no-sandbox']});const page=await browser.newPage(presentation?{viewport:{width:presentation.width,height:800},colorScheme:presentation.dark?'dark':'light'}:undefined);page.setDefaultTimeout(5000);const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await page.goto('http://127.0.0.1:'+addr.port+(presentation?'/?locale='+presentation.language:''));return {page,errors};
+}
+
+test('emitted settings navigate global and multiple workspaces with explicit override and live inheritance',{timeout:30000},async t=>{
+ const {page,errors}=await openSettings(t);
  const scope=page.getByRole('combobox',{name:'Scope',exact:true});await scope.waitFor();
  assert.equal(await scope.locator('option').filter({hasText:'Workspace A'}).count(),1,'registered workspace A is selectable without typing an opaque ID');
  assert.equal(await scope.locator('option').filter({hasText:'Workspace B'}).count(),1,'all registered workspaces are available, not only current');
@@ -31,8 +37,6 @@ test('emitted settings navigate global and multiple workspaces with explicit ove
 });
 
 for(const [language,width,dark] of [['en',900,false],['zh',360,true]] as const)test('emitted workspace inheritance presentation '+language+' '+width+' '+dark,{timeout:30000},async t=>{
- const code=(await build({entryPoints:[new URL('./workspace-settings-browser.fixture.js',import.meta.url).pathname],bundle:true,write:false,platform:'browser',format:'iife'})).outputFiles[0]!.text;
- const server=createServer((req,res)=>{if(req.url==='/view.js'){res.setHeader('content-type','text/javascript');res.end(code);return;}res.setHeader('content-type','text/html');res.end('<style>body{margin:16px;background:var(--dsw-alias-bg-layer-3,#fff)}@media(prefers-color-scheme:dark){:root{--dsw-alias-label-primary:#e3e5e8;--dsw-alias-label-secondary:#a7aebb;--dsw-alias-bg-layer-2:#24272e;--dsw-alias-bg-layer-3:#181b20;--dsw-alias-border-l1:#49515f;--dsw-alias-border-l2:#596374;--dsw-alias-state-business-primary:#94a7ff}}</style><div id="root"></div><script src="/view.js"></script>');});server.listen(0,'127.0.0.1');await once(server,'listening');t.after(()=>new Promise<void>(resolve=>server.close(()=>resolve())));const addr=server.address();assert.ok(addr&&typeof addr==='object');assert.notEqual(addr.port,3080);
- const browser=await chromium.launch({headless:true,executablePath:process.env.DSH_EXTRAS_CHROMIUM,args:['--no-sandbox']});t.after(()=>browser.close());const page=await browser.newPage({viewport:{width,height:800},colorScheme:dark?'dark':'light'});await page.goto('http://127.0.0.1:'+addr.port+'/?locale='+language);const scope=page.getByRole('combobox',{name:language==='zh'?'范围':'Scope',exact:true});await scope.selectOption('native:Opaque%3AA');const badge=page.locator('[data-policy-source="inherited"] .extras-scope-badge').first();await badge.waitFor();assert.notEqual(await badge.evaluate(el=>getComputedStyle(el).borderTopLeftRadius),'0px','source has a visible independent badge, not an unstyled word');
+ const {page,errors}=await openSettings(t,{language,width,dark});const scope=page.getByRole('combobox',{name:language==='zh'?'范围':'Scope',exact:true});await scope.selectOption('native:Opaque%3AA');const badge=page.locator('[data-policy-source="inherited"] .extras-scope-badge').first();await badge.waitFor();assert.notEqual(await badge.evaluate(el=>getComputedStyle(el).borderTopLeftRadius),'0px','source has a visible independent badge, not an unstyled word');
  await scope.focus();assert.equal(await scope.evaluate(el=>getComputedStyle(el).outlineStyle),'solid');assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'narrow layouts never overflow horizontally');if(process.env.DSH_EXTRAS_UI_SCREENSHOTS)await page.screenshot({path:process.env.DSH_EXTRAS_UI_SCREENSHOTS+'/workspace-'+language+'-'+(dark?'dark':'light')+'-'+width+'.png',fullPage:true});await page.evaluate(()=>(window as any).unmount());
 });
