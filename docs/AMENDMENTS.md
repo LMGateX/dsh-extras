@@ -4,6 +4,12 @@ Changes must cite the observed host/source constraint, explain the trade-off, an
 
 No amendments at the original specification freeze. Later approved amendments follow.
 
+## 2026-11-09 — Approved workspace policy, shared compaction ownership, settings and retry (0.5.0)
+
+The user approved the read-only design, then explicitly chose standalone capability in both compact-context and model-policy with one deterministic runtime executor and two shared-setting surfaces. The [fixed 0.5.0 contract](WORKSPACE_POLICY_050.md) supplements the baseline: five modules/six artifacts; opt-in workspace root/descendant defaults; profile-authoritative shared compaction policy and safe handover; hierarchical settings; native provider retry management. Native preparation captures selection before pre-step and deprecated agent/request forbids routing; native always retry is provider-owned and has broader permanent-error semantics. Message-free terminal recovery remains a mandatory evidence/explicit-scope-decision gate, not permission to fabricate an API or silently omit the feature. All prior native compaction/retry authority and old safety gates remain.
+
+The user confirmed four public test seams before tests and authorized isolated subagent work, push/release, and (after clarification) installation into the current local DSH. Production installation is an explicit new exception only after isolated/remote release verification, restricted backup and native target discovery; all development/tests still exclude live profile/GUI. GitHub Actions and npm publication remain prohibited.
+
 ## 2026-11-07 — Requested exact DSH rc.1 compatibility baseline (0.4.0)
 
 The direct user request authorizes isolated/subagent adaptation to DSH 0.2.2-rc.1, push and release without production installation. Official release notes identify breaking Cordis/Fiber, tool/prompt, request-model and projection contracts; the registry publishes an exact synchronized rc.1 package set. The [fixed compatibility contract](DSH_RC1_040.md) sets a new exact audited baseline rather than widening alpha.3 guards without evidence, and adds RC-1 through RC-6 while retaining all previous safety and acceptance gates. Alpha.3 remains served by 0.3.1. GitHub Actions and npm publication remain prohibited.

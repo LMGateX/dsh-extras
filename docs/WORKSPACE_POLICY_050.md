@@ -1,0 +1,47 @@
+# Workspace execution policies and settings — 0.5.0 implementation contract
+
+Fixed before implementation: 2026-11-09 (Asia/Shanghai). Direct user approved the preceding read-only proposal and clarified that compact-context and the new model-policy module must each ship the complete compaction reasoning capability: either distribution works alone; when both are enabled exactly one implementation runs, while both settings surfaces edit the same accepted policy. User subsequently authorized documentation, isolated/subagent implementation and tests, push/release, and explicitly confirmed installation into the current local DSH after release verification. No GitHub Actions or npm publication.
+
+## Scope and safe defaults
+
+Target Extras 0.5.0, exact DSH 0.2.2-rc.1 / Cordis 4.1.0. Add model-policy and its independent split distribution; combined plus five splits means six synchronized release archives. Preserve old four modules and every existing gate except the explicit amendments below. A new model-policy module and newly introduced policy effects default off on fresh installs/upgrades. Existing compact-context policies/false/zero/empty lists are preserved.
+
+### Model policy
+
+Workspace defaults, not an unsupported every-step enforcement promise. Configure root and all descendant agents separately with exact provider/model/optional native reasoning effort ids. Null/inherit means retain native selection, not invent an effort. Workspace identity uses native registry and durable delegation provenance, not mutable cwd or path prefix; child worktree/cd does not select a different policy. Unknown identity fails closed. Ordinary root forks must not be mistaken for active delegations.
+
+Use native agent.model.select before preparation, awaited creation/resume lifecycle and explicit accepted updates for already live agents; do not route via deprecated agent/request or change a captured pre-step selection. Cover spawn, fork seeds, deeper descendants, resident wake, cold resume and two concurrent workspaces. Human or explicit subsequent native selections remain permitted in default mode. Closing a policy stops future selection; it does not silently restore/overwrite a prior durable human choice. Capture in-flight selection; future safe steps receive accepted updates. Unsupported providers/backends expose bounded unavailable diagnostics. Do not modify upstream installation or implement hidden step-loop patches.
+
+### Shared compaction reasoning
+
+One implementation source is included in model-policy and compact-context packages. Keep summary provider/model, native engine, retention and transaction authority unchanged; only exact compaction-purpose effort control is shared. Keep full native automatic/manual/tool/overflow/model-switch coverage and clone-first receiver/cancellation preservation.
+
+There is one profile-scoped canonical policy/revision authority with optional workspace overrides, editable from both surfaces. Preserve all/provider/provider-model matching and fixed/inherit action semantics; inherit reads last effective durable request header, never pending model selection. Native exact-model effort validation is authoritative. No silent mapping across providers. Existing profile config migration is recoverable, explicit existing values win and inconsistent old duplicate inputs are diagnosed rather than guessed.
+
+Each module has its own participation/enable intent. Both may be enabled, but one coordinator per host service root elects exactly one executor using deterministic priority compact-context before model-policy (not load order). Same-module combined/split duplicate ownership protections remain. Other enabled module is standby, not conflict. Executor disable/unload yields owned wrappers and lets standby take over safely; foreign ownership or failed release fails closed rather than stacking. Already-started calls keep captured policy. Both disabled removes all effects. Persisted policy survives owner switch/restart and either standalone package remains functional. Runtime status distinguishes local participation, accepted policy, actual executor, standby/handover/unavailable. Closing one participant must not imply the other is closed.
+
+### Settings
+
+Two-level collapse: module then responsibility group. Headers keep enable/state/dirty/error summary visible; ordinary collapse hides rather than unmounts editors, preserves drafts and does not write runtime configuration. Keyboard/focus, light/dark, Chinese/English, narrow layouts and saved-vs-active status remain. Add expand/collapse-all. New model settings allow global defaults/current-workspace overrides with explicit reset-to-inherit and conflict-safe save. Shared compaction editors use the same store/revision, not two synchronized copies.
+
+### Retry
+
+Expose provider-owned native retry policy from Extras retry settings without creating another request loop. normal maxRetries=5 means up to five additional attempts, not five total. always has no budget; native backoff initialDelayMs/maxDelayMs/jitterRatio, multiplier 2. Fixed delay maps initial=max and jitter=0. Preserve provider fields/secrets using native path updates and revision fencing; show target provider scope. Unlimited defaults off and warns that native always includes permanent model request failures; do not label it transient-only. Native cancellation/unload/events remain authoritative. Compaction-tool bounded retry is separate and must not be silently converted to unlimited.
+
+### Message-free retry recovery
+
+Required target: show an action only for host-proven terminal budget exhaustion; do not infer from retry count+error text. Recovery must not append synthetic user messages, rerun completed tools/entire turns, bypass native request/permission/workspace/Goal admission, or directly call a provider. It needs structured disposition and a latest-failure-bound, revision-fenced/idempotent host recovery capability. Unknown/incompatible host reports unavailable and never a fake working button. Current static audit found no such stock operation; the implementation lane must verify the actual host and record evidence. If no safe public capability exists, this remains an explicit unresolved release gate: obtain an explicit scope decision before shipping a subset, not silently declare the requested button complete. No edit of original host sources or production package files to fabricate a seam.
+
+## Agreed public test seams
+
+The user explicitly confirmed these four seams before tests were written:
+1. Plugin config/lifecycle: semantic admission, safe defaults, workspace selection, single owner/standby/transfer, disable/HMR/concurrency. Does not prove real provider quality.
+2. Native Agent/LLM interfaces with deterministic offline adapters: all depths/spawn/fork/resident/resume, exact summary effort and dispatch counts, native retry/cancellation/recovery capability. Does not claim paid upstream execution.
+3. Emitted and actual packed settings/operation interfaces in isolated browser: collapse/draft stability, two entry shared store, revisions/conflicts, scoped writes, auth/origin fences and actual supported recovery action. Source string checks are not browser evidence.
+4. Six packed consumers and disposable DSH installation/upgrade/recovery: artifacts, source selection/declarations/ownership/migration, native persisted settings, published checksums. Test homes/profiles/cache are explicit temporary paths, ports never production 3080.
+
+## Release and local installation
+
+Run full old and new focused/source/type/artifact/native/browser gates plus independent standards/spec review. Fix failures, retain precise evidence. Scoped commits, clean push, annotated 0.5.0 tag, six verified archives and checksums, direct authenticated GitHub Release and downloaded checksum verification. Do not enable GitHub Actions.
+
+Only after isolated acceptance and remote release verification, identify current live DSH profile using non-secret native discovery, snapshot package/config ownership and restricted backups, install using native plugin management, preserve existing explicit settings and leave new policies default off. Production install is now expressly authorized; this supersedes old no-production-install text only for this requested verified release. Do not restart the active host without necessity/disclosure; distinguish installed, saved/reload-required, and observed active. Do not expose credentials or session data in source/release/evidence. Record rollback instructions and final status.

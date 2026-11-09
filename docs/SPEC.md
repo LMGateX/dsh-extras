@@ -8,6 +8,8 @@ For 0.3.0, apply the approved [latest legacy parity contract](LEGACY_PARITY_030.
 
 For 0.3.1, additionally apply the [standalone migration entry contract](MIGRATION_CLI_031.md). Independent CLI/API startup must not assume hoisted host peers; all previous migration and owner-safety gates remain mandatory.
 
+For 0.5.0 additionally apply the approved [workspace policy contract](WORKSPACE_POLICY_050.md): five modules/six synchronized distributions, standalone shared compaction capability with single execution ownership, workspace model defaults, collapsible settings and native retry management. The explicit production-install authorization applies only after isolated and published-artifact verification.
+
 ## Required deliverables
 
 1. One combined installable distribution, dsh-extras, one plugin card and unified settings grouped into four independently enabled modules.
