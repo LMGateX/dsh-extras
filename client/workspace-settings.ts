@@ -79,6 +79,7 @@ export function createWorkspaceScopeView(React:any,locale?:SettingsLocale) {
     const state:CatalogSnapshot=React.useSyncExternalStore(catalog?.subscribe??noSubscribe,catalog?.getSnapshot??readUnavailable,catalog?.getSnapshot??readUnavailable);
     // Manual mode survives discovery/configured-ID changes while an ID is being typed.
     const [manual,setManual]=React.useState(workspaceId==='');
+    const [manualValue,setManualValue]=React.useState(workspaceId??'');
     const entries=new Map<string,{title?:string;saved:boolean}>();
     for(const item of state.items)entries.set(item.workspaceId,{title:item.title,saved:false});
     for(const id of configuredIds)if(typeof id==='string' && id.length)entries.set(id,{...entries.get(id),saved:true});
@@ -104,9 +105,9 @@ export function createWorkspaceScopeView(React:any,locale?:SettingsLocale) {
       h('label',null,scopeLabel,h('select',{'aria-label':scopeLabel,value:selected,disabled:locked,onChange:(event:any)=>{
         if(locked)return;
         const value=event.target.value;
-        if(value==='global'){setManual(false);onChange(undefined);}
-        else if(value==='workspace'){setManual(true);if(workspaceId===undefined)onChange('');}
-        else if(options.has(value)){setManual(false);onChange(options.get(value)!);}
+        if(value==='global'){if(workspaceId!==undefined)setManualValue(workspaceId);setManual(false);onChange(undefined);}
+        else if(value==='workspace'){setManual(true);if(workspaceId===undefined)onChange(manualValue);}
+        else if(options.has(value)){const id=options.get(value)!;setManualValue(id);setManual(false);onChange(id);}
       }},
       h('option',{value:'global'},t('Global defaults','全局默认值')),
       ...[...options].map(([key,id])=>{
@@ -116,7 +117,7 @@ export function createWorkspaceScopeView(React:any,locale?:SettingsLocale) {
         return h('option',{key,value:key},name+' ('+id+')'+suffix);
       }),
       h('option',{value:'workspace'},t('Enter workspace ID (advanced)','输入工作区 ID（高级）')))),
-      selected==='workspace'&&h('label',null,inputLabel,h('input',{type:'text','aria-label':inputLabel,value:workspaceId??'',disabled:locked,maxLength:200,spellCheck:false,onChange:(event:any)=>{if(!locked)onChange(event.target.value);}})),
+      selected==='workspace'&&h('label',null,inputLabel,h('input',{type:'text','aria-label':inputLabel,value:workspaceId??'',disabled:locked,maxLength:200,spellCheck:false,onChange:(event:any)=>{if(!locked){setManualValue(event.target.value);onChange(event.target.value);}}})),
       notices[state.status]&&h('p',{role:'status'},notices[state.status]),
       locked&&h('small',null,t('Save or discard this draft before changing its scope.','请先保存或丢弃草稿，再更改范围。')));
   };

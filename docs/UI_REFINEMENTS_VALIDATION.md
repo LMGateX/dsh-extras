@@ -1,0 +1,17 @@
+# UI refinements — working validation ledger
+
+Status: implementation/verification in progress, not release or live installation. Baseline a253960; new branch refine-recovery-workspace-ui in a dedicated nested worktree. No push/tag/release/install/restart requested or performed for this follow-up. [Fixed contract](UI_REFINEMENTS_050.md) is authoritative; original public test seams are reused.
+
+## Scoped source and focused evidence
+
+- Contract-first commit fbfb73f. Read-only reference audit identified the actual global/all-workspace picker, per-leaf source display and native workspace controller stream; source paths and readiness distinctions are recorded in the contract.
+- Shared selector/source committed alone as a7884c3 after parent actual emitted-browser RED (0 workspace A choices, expected 1) then GREEN at /tmp/extras-workspace-ui-first-green.wTMSZO. Native controller methods remain receiver-bound; its stream remains native-owned.
+- Recovery-only commit 2f60be6058c930a2aaaf0576f0e161c230a133f7: real UiConversation/native TurnTail regression first exposed ordinary closed-turn notice, then historical-tail leak, then missing independent card styling. Final focused safety 10/10 and typecheck green in /tmp/extras-recovery-ui-run.u5QSjk. Uses public complete turnOutline/head plus exact structured turn-end error/identity, never newest loaded old event. No native recovery authority changes. Four actual emitted/native-chat screenshots cover EN/ZH and light/dark/narrow; parent inspected zh-dark-360 and en-light-900. Existing old six packed native recovery cases still require rebuilt artifacts.
+- Parent model source integration first browser RED exposed missing effective global selection, then GREEN. Added global + A/B inheritance, explicit null, global update propagating to B only, orphan saved override, staged reset and original expected-revision/draft assertions. Initial combined run failed only hidden option visibility wait and manual ID forgotten on global roundtrip; fixed actual manual-memory regression and waited for option attachment, not popup visibility. Existing assertions retained.
+- Parent public editor RED exposed empty workspace row after unsetting its last role; GREEN 4/4 after removing only empty selected row, preserving another workspace explicit null.
+- Parent final current model matrix /tmp/extras-workspace-catalog-matrix.kbk9MQ/result.log: 7/7, exit 0. Includes old EN/ZH model browser tests, editor tests, global+two registry workspaces, effective inheritance/role distinction, global-name opaque workspace ID collision, stale/error/empty/malformed catalog preserving scope and drafts, no raw remote error and no catalog-triggered writes. Fixture uses literal native WorkspaceSnapshot shape and enforces method receiver.
+- Shared compaction integration is being developed independently at the same public emitted-browser/ConfigForm seam; its original immediate explicit CAS reset is intentionally retained, with clear action wording and in-flight scope lock.
+
+## Remaining acceptance
+
+Finish shared multi-workspace regression and UI checks; typecheck/full source; rebuild/pack all six distributions and artifact suite; exact rebuilt packed native recovery six; independent Standards and Spec reviews; scoped commits and final report. Earlier 0.5.0 acceptance counts are historical, not evidence for these new bytes. Active host and profile must not become test fixtures.

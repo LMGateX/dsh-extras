@@ -21,6 +21,11 @@ test('reset global scope stages native unset operations without discarding inher
  assert.deepEqual(writes[0].ops.filter((op:any)=>op.op==='unset').map((op:any)=>op.path),[['root'],['descendants']]);stop();
 });
 
+test('restoring the last inherited model role removes only its empty workspace override',async()=>{
+ const value={root:{provider:'global',model:'base'},descendants:null,workspaceOverrides:[{workspaceId:'a',root:{provider:'custom',model:'a'}},{workspaceId:'b',root:null}]};const writes:any[]=[];
+ const form:any={getSnapshot:()=>({status:'ready',writable:true,revision:9,value}),subscribe:()=>()=>{},mutate:async(ops:any)=>{writes.push(ops);return true;}};const editor=createModelPolicyEditor(form);const stop=editor.start();editor.setSelection('root',undefined,'a');await editor.save();assert.deepEqual(writes[0],[{op:'set',path:['workspaceOverrides'],value:[{workspaceId:'b',root:null}]}]);stop();
+});
+
 test('invalid workspace targets never fall back to global and a dirty draft cannot change scope',async()=>{
  const value={root:{provider:'global',model:'keep-root'},descendants:{provider:'global',model:'keep-child'},workspaceOverrides:[]};const writes:any[]=[];
  const form:any={getSnapshot:()=>({status:'ready',writable:true,revision:8,value}),subscribe:()=>()=>{},mutate:async(ops:any,revision:any)=>{writes.push({ops,revision});return true;}};

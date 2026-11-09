@@ -18,9 +18,13 @@ Discover names/IDs from the existing public native workspace registry/client ser
 
 A workspace without an override inherits global. Clearly show inherited/customized state and effective inherited values. Model roles inherit independently; explicit null retains native selection and is not missing data. Shared compaction retains its whole-policy override semantics: false and empty rules are explicit values, not inheritance.
 
-Reading/selecting scope creates no overrides. Editing one workspace never changes global/another workspace. Reset removes only that workspace override and returns to the latest accepted global policy after Save. Global updates propagate to inheritors without copied workspace policies; custom workspaces remain unchanged.
+Reading/selecting scope creates no overrides. Editing one workspace never changes global/another workspace. Model reset remains staged until Save. Shared compaction retains its existing explicit, immediate, CAS-guarded reset operation (reasoning.ts submit/reset); its label must make immediate acceptance clear. Either reset removes only the selected workspace override and returns to the latest accepted global policy, never restores a stale copied global value. Global updates propagate to inheritors without copied workspace policies; custom workspaces remain unchanged.
 
 Unsaved/in-flight drafts lock scope switching, preserve conflict/revision checks and never auto-save/rebase. Collapse preserves drafts. Catalog discovery/refresh does not write or change policy revisions. Canonical shared storage shape, profile namespace and single executor remain unchanged. Selected-feature packaging must not pull model/shared features into unrelated distributions.
+
+## Read-only reference and native interface evidence
+
+The named reference [client scope picker and per-leaf source display](/home/dev/dev/dsh-mattpocock-skills/src/client.ts#L1420-L1498), [decoder](/home/dev/dev/dsh-mattpocock-skills/src/client.ts#L1021-L1027) and [host list](/home/dev/dev/dsh-mattpocock-skills/src/host.ts#L1263-L1267) establish all-workspace selection and explicit inheritance. Its instrument-specific gates and transport are not reused. Native browser integration instead uses the already public workspace controller: ctx.workspaces.list.getSnapshot()/subscribe(), whose WorkspaceSnapshot is items + state (idle/loading/error) + phase (pending/ready) + error. A complete healthy list requires ready + idle + null error; ready alone is only arrival history. Native rows use workspaceId/title, not the reference host projection id/status. Extras subscribes with bound receiver and never starts/stops the native follow stream. Only the model and compact-context selected client manifests gain the workspace-controller dependency; canonical policy storage and backend routes do not change.
 
 ## Existing agreed seams and acceptance
 
