@@ -10,9 +10,11 @@ export interface ChimeAdapter {
 export type ChimeAdapterFactory = (React: any) => ChimeAdapter;
 export type ExtrasClientDescriptor = SettingsDescriptor;
 export type SettingsAdapterFactory = (React: any) => { createView(ctx: any): unknown };
+export interface RecoveryMountOptions { rowId:string; enabled:()=>boolean; subscribe(listener:()=>void):()=>void; }
+export type RecoveryAdapterFactory = (React:any)=>{mount(ctx:any,options:RecoveryMountOptions):()=>void};
 
 /** Public build seam: generated entry supplies selected imports and platform React. */
-export function createExtrasClient(descriptor: ExtrasClientDescriptor, React: any, makeChime?: ChimeAdapterFactory, makeReasoning?: SettingsAdapterFactory, makeModelPolicy?: SettingsAdapterFactory, makeRetry?: SettingsAdapterFactory) {
+export function createExtrasClient(descriptor: ExtrasClientDescriptor, React: any, makeChime?: ChimeAdapterFactory, makeReasoning?: SettingsAdapterFactory, makeModelPolicy?: SettingsAdapterFactory, makeRetry?: SettingsAdapterFactory, makeRecovery?:RecoveryAdapterFactory) {
   if (!descriptor.rowId || !descriptor.packageName) throw new TypeError('Distribution identities are required');
   const inject = ['slots', 'configForms'];
   const pageServedAt = capturePageProof(descriptor.rowId);
@@ -26,6 +28,15 @@ export function createExtrasClient(descriptor: ExtrasClientDescriptor, React: an
     const reasoning = descriptor.moduleIds.some(id=>id==='compact-context'||id==='model-policy') ? makeReasoning?.(React) : undefined;
     const modelPolicy=descriptor.moduleIds.includes('model-policy')?makeModelPolicy?.(React):undefined;
     const retry=descriptor.moduleIds.includes('retry')?makeRetry?.(React):undefined;
+    const recovery=descriptor.moduleIds.includes('retry')?makeRecovery?.(React):undefined;
+    if(recovery) {
+      let live=true;
+      const options:RecoveryMountOptions={rowId:descriptor.rowId,enabled:()=>{
+        const accepted=root.getSnapshot();const current=status.getSnapshot().modules.retry;
+        return live&&accepted.status==='ready'&&(accepted.value as any)?.modules?.retry?.enabled!==false&&current?.enabled===true&&current.ready===true&&current.phase==='active';
+      },subscribe(listener){const offForm=root.subscribe(listener);const offStatus=status.subscribe(listener);return()=>{offForm();offStatus();};}};
+      owned.ctx.effect(()=>{const off=recovery.mount(owned.ctx,options);return()=>{live=false;off();};},'extras: native failed request recovery');
+    }
     // Read the exact served namespace's accepted store; page.mutate remains the only page write endpoint.
     const accepted = { getSnapshot: () => root.getSnapshot(), subscribe: (listener: () => void) => root.subscribe(listener) };
     const View = createSettingsView(React, descriptor, chime?.createView(owned.ctx), status, reasoning?.createView(owned.ctx), accepted, owned.ctx.get('locale'), modelPolicy?.createView(owned.ctx), retry?.createView(owned.ctx));
