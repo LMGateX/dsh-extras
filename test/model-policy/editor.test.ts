@@ -20,3 +20,16 @@ test('reset global scope stages native unset operations without discarding inher
  const editor=createModelPolicyEditor(form);const stop=editor.start();editor.resetScope();assert.equal(writes.length,0);await editor.save();
  assert.deepEqual(writes[0].ops.filter((op:any)=>op.op==='unset').map((op:any)=>op.path),[['root'],['descendants']]);stop();
 });
+
+test('invalid workspace targets never fall back to global and a dirty draft cannot change scope',async()=>{
+ const value={root:{provider:'global',model:'keep-root'},descendants:{provider:'global',model:'keep-child'},workspaceOverrides:[]};const writes:any[]=[];
+ const form:any={getSnapshot:()=>({status:'ready',writable:true,revision:8,value}),subscribe:()=>()=>{},mutate:async(ops:any,revision:any)=>{writes.push({ops,revision});return true;}};
+ const editor=createModelPolicyEditor(form);const stop=editor.start();
+ for(const id of ['', '   ', 'bad\u0001id', 'x'.repeat(201)]) {editor.setSelection('root',{provider:'wrong',model:'wrong'},id);editor.resetScope(id);assert.equal(editor.getSnapshot().dirty,false);assert.deepEqual(editor.getSnapshot().value.root,value.root);assert.equal(await editor.save(),false);}
+ assert.equal(writes.length,0);
+ editor.setSelection('root',{provider:'workspace',model:'only-here'},'workspace-a');
+ editor.setSelection('root',{provider:'wrong',model:'global-overwrite'});editor.resetScope('workspace-b');
+ assert.deepEqual(editor.getSnapshot().value.root,value.root);assert.deepEqual(editor.getSnapshot().value.workspaceOverrides,[{workspaceId:'workspace-a',root:{provider:'workspace',model:'only-here'}}]);
+ assert.equal(await editor.save(),true);assert.deepEqual(writes[0],{revision:8,ops:[{op:'set',path:['workspaceOverrides'],value:[{workspaceId:'workspace-a',root:{provider:'workspace',model:'only-here'}}]}]});
+ editor.discard();editor.setSelection('root',{provider:'global',model:'allowed'});assert.equal(editor.getSnapshot().value.root?.model,'allowed');stop();
+});
