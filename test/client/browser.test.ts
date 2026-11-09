@@ -59,7 +59,7 @@ test('Chromium emitted client: rendered settings, rest persistence, audio, disab
     await page.evaluate(() => (window as any).disableChime());
     await page.waitForFunction(() => !document.querySelector('[aria-pressed]'));
     assert.equal(await page.locator('[data-module]').count(), 4, 'sibling settings remain after disabling chime');
-    assert.deepEqual(errors, []);
+    assert.deepEqual([...errors], []);
 
     // A stale page that loaded legacy remains silent even after server status is ready.
     legacy = true; await page.evaluate(() => localStorage.clear()); await page.reload();
@@ -80,6 +80,6 @@ test('Chromium emitted client: rendered settings, rest persistence, audio, disab
     assert.deepEqual(await fresh.evaluate(()=>(window as any).slotRenderErrors),[]);
     await fresh.evaluate(() => (window as any).unload()); await page.evaluate(() => (window as any).unload());
     await page.close(); await fresh.close();
-    assert.deepEqual(errors, []);
+    assert.deepEqual([...errors], []);
   } finally { await browser?.close(); server.close(); await once(server, 'close'); }
 });
