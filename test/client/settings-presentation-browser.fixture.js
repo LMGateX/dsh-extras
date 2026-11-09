@@ -14,6 +14,7 @@ let snapshot = {status:'ready', writable:true, revision:7, value:{
     retry:{enabled:true,errorCodes:['STREAM_ERROR'],providers:['Original/Route'],retryEmptyResponse:true},
     goalWait:{enabled:true,waitForJobs:true,waitForSubagents:true,maxHoldMs:12000},
     chime:{enabled:true,durationMs:0},
+    'model-policy':{enabled:false,root:{provider:'Original/Provider',model:'Original/Model',reasoningEffort:'Opaque/Base'},descendants:null,workspaceOverrides:[],compactionReasoning:{enabled:false,rules:[]}},
   },
 }};
 window.writes = [];

@@ -8,6 +8,7 @@ import {createServer} from 'node:http';
 import {once} from 'node:events';
 import {build} from 'esbuild';
 import {chromium, type Page} from '@playwright/test';
+import {canonicalPolicyHttpFixture} from './canonical-http.fixture.ts';
 
 const root = new URL('../../', import.meta.url).pathname;
 const dependency = createRequire(new URL('../../package.json', import.meta.url));
@@ -16,14 +17,16 @@ const modules = {
   retry:{zh:'流式与空响应重试',en:'Stream and empty-response retry'},
   chime:{zh:'会话提示音',en:'Session chime'},
   goalWait:{zh:'目标等待',en:'Goal wait'},
+  'model-policy':{zh:'模型策略',en:'Model policy'},
 };
 type ModuleId = keyof typeof modules;
 const distributions: {name:string;ids:ModuleId[];field: string;draft:string;value:unknown}[] = [
-  {name:'dsh-extras',ids:['compact-context','retry','chime','goalWait'],field:'guidanceText',draft:'Unsaved guidance / 保留草稿',value:'Unsaved guidance / 保留草稿'},
+  {name:'dsh-extras',ids:['compact-context','retry','chime','goalWait','model-policy'],field:'guidanceText',draft:'Unsaved guidance / 保留草稿',value:'Unsaved guidance / 保留草稿'},
   {name:'dsh-extras-compact-context',ids:['compact-context'],field:'guidanceText',draft:'Unsaved guidance / 保留草稿',value:'Unsaved guidance / 保留草稿'},
   {name:'dsh-extras-retry',ids:['retry'],field:'providers',draft:'Route/Exact-Case',value:['Route/Exact-Case']},
   {name:'dsh-extras-chime',ids:['chime'],field:'durationMs',draft:'3000',value:3000},
   {name:'dsh-extras-goal-wait',ids:['goalWait'],field:'maxHoldMs',draft:'2500',value:2500},
+  {name:'dsh-extras-model-policy',ids:['model-policy'],field:'provider',draft:'Unsaved/Provider',value:'Unsaved/Provider'},
 ];
 const chinese = /[\u3400-\u9fff]/;
 
@@ -67,6 +70,53 @@ async function chineseControls(page: Page, ids: ModuleId[]) {
     assert.match(await form.locator('#dsh-session-chime-durationMs').locator('..').innerText(),/毫秒/);
     assert.ok(await form.getByRole('button',{name:'保存',exact:true}).count());
     assert.ok(await form.getByRole('button',{name:'放弃草稿',exact:true}).count());
+  }
+}
+
+async function modelDraftScenario(page:Page) {
+  const section=page.locator('[data-module="model-policy"]');
+  const group=()=>section.getByRole('group',{name:'Workspace model defaults',exact:true});
+  const provider=section.locator('input[aria-label$=" provider"]').first();
+  const before=await page.evaluate(()=>(window as any).accepted());
+  const original=await provider.inputValue();
+  await provider.fill('Unsaved/Provider');const identity=await provider.elementHandle();
+  for(const language of ['zh','en']){
+    await page.evaluate(language=>(window as any).setLocale(language),language);
+    await section.getByRole('button',{name:language==='zh'?'保存模型策略':'Save model policy',exact:true}).waitFor();
+    assert.equal(await provider.inputValue(),'Unsaved/Provider');
+    assert.equal(await provider.evaluate((node,old)=>node===old,identity),true,'model draft is not remounted on locale switch');
+    assert.deepEqual(await page.evaluate(()=>(window as any).accepted()),before);
+    assert.deepEqual(await page.evaluate(()=>(window as any).writes),[]);
+  }
+  await group().getByRole('button',{name:'Discard model draft',exact:true}).click();
+  assert.equal(await provider.inputValue(),original);
+  await provider.fill('Unsaved/Provider');
+  await group().getByRole('button',{name:'Save model policy',exact:true}).click();
+  await page.waitForFunction(()=>(window as any).accepted().revision===8);
+  const root={...before.value.modules['model-policy'].root,provider:'Unsaved/Provider'};
+  assert.deepEqual(await page.evaluate(()=>(window as any).writes),[{revision:7,ops:[
+    {op:'set',path:['modules','model-policy','root'],value:root},
+    {op:'set',path:['modules','model-policy','descendants'],value:null},
+  ]}]);
+  const expected=structuredClone(before);expected.revision=8;expected.value.modules['model-policy'].root=root;
+  assert.deepEqual(await page.evaluate(()=>(window as any).accepted()),expected,'model save preserves every sibling, participation and default-off enable flag');
+  await group().getByRole('button',{name:'Reset scope to inherit (staged)',exact:true}).click();
+  assert.equal(await page.evaluate(()=>(window as any).writes.length),1,'reset stays staged');
+  await group().getByRole('button',{name:'Save model policy',exact:true}).click();
+  await page.waitForFunction(()=>(window as any).accepted().revision===9);
+  assert.deepEqual(await page.evaluate(()=>(window as any).writes.at(-1)),{revision:8,ops:[
+    {op:'unset',path:['modules','model-policy','root']},{op:'unset',path:['modules','model-policy','descendants']},
+  ]});
+  await group().getByRole('combobox',{name:'Root agent mode',exact:true}).selectOption('exact');
+  await provider.fill('Retained/Stale');await page.evaluate(()=>(window as any).externalUpdate());
+  await group().getByRole('alert').filter({hasText:'Configuration changed'}).waitFor();
+  assert.equal(await provider.inputValue(),'Retained/Stale');
+  assert.equal(await group().getByRole('button',{name:'Save model policy',exact:true}).isDisabled(),true);
+  await group().getByRole('button',{name:'Discard model draft',exact:true}).click();
+  for(const patch of [{writable:false},{writable:true,status:'loading'},{status:'unavailable'},{status:'ready',revision:undefined}]){
+    await page.evaluate(patch=>(window as any).setFormState(patch),patch);
+    assert.equal(await group().getByRole('button',{name:'Reset scope to inherit (staged)',exact:true}).isDisabled(),true);
+    assert.equal(await group().getByRole('combobox',{name:'Root agent mode',exact:true}).isDisabled(),true);
   }
 }
 
@@ -114,9 +164,9 @@ async function presentation(page: Page, theme:'light'|'dark') {
 
 // Build and pack exactly as selected-payload.test.ts does. No source-only entry,
 // release output mutation, profile install, live GUI, or persistent web server.
-test('all five actual packed settings localize, retain drafts and use native themed presentation', {timeout:180000}, async t => {
+test('all six actual packed settings localize, retain drafts and use native themed presentation', {timeout:180000}, async t => {
   const sandbox=await mkdtemp('/tmp/dxp-presentation-');
-  const env={PATH:process.env.PATH,HOME:join(sandbox,'home'),DSH_HOME:join(sandbox,'dsh'),
+  const env={PATH:process.env.PATH,HOME:join(sandbox,'home'),DSH_HOME:join(sandbox,'dsh'),DSH_PROFILE:'fixture',
     XDG_CONFIG_HOME:join(sandbox,'config'),XDG_CACHE_HOME:join(sandbox,'cache'),XDG_DATA_HOME:join(sandbox,'data'),
     npm_config_cache:join(sandbox,'npm'),TMPDIR:sandbox};
   for(const path of Object.values(env)) if(path?.startsWith(sandbox)) await mkdir(path,{recursive:true});
@@ -149,7 +199,9 @@ test('all five actual packed settings localize, retain drafts and use native the
     const harness=(await build({entryPoints:[join(root,'test/client/settings-presentation-browser.fixture.js')],bundle:true,write:false,
       platform:'browser',format:'iife',alias:{react:dependency.resolve('react'),'react-dom/client':dependency.resolve('react-dom/client')}})).outputFiles[0]!.text;
     let goalRuntime:any;
-    const server=createServer((req,res)=>{
+    const canonicalHttp=canonicalPolicyHttpFixture();
+    const server=createServer(async(req,res)=>{
+      if(await canonicalHttp(req,res))return;
       const url=new URL(req.url ?? '/', 'http://127.0.0.1');
       if(url.pathname==='/harness.js'){res.setHeader('content-type','text/javascript');res.end(harness);return;}
       const name=url.pathname.slice(1).replace(/\.js$/,'');
@@ -209,7 +261,7 @@ test('all five actual packed settings localize, retain drafts and use native the
           }
           const id = ids[0]!;
           const section = page.locator('[data-module="'+id+'"]');
-          const control = id==='chime' ? section.locator('#dsh-session-chime-durationMs') : section.locator('[data-field="'+field+'"] textarea, [data-field="'+field+'"] input');
+          const control = id==='chime' ? section.locator('#dsh-session-chime-durationMs') : id==='model-policy'?section.locator('input[aria-label$=" provider"]').first():section.locator('[data-field="'+field+'"] textarea, [data-field="'+field+'"] input');
           await control.fill(draft);
           await page.evaluate(()=>(window as any).externalUpdate());
           const alert = section.getByRole('alert').first(); await alert.waitFor();
@@ -222,7 +274,7 @@ test('all five actual packed settings localize, retain drafts and use native the
           await page.getByRole('heading',{name:'Extras settings',exact:true}).waitFor();
           assert.match(await alert.innerText(),/configuration changed/i);
         }));
-        for(const id of ids.filter(id=>id!=='chime')) await t.test(name+': '+id+' grouped policy is atomic across language switch, reset, conflict and permission fences',()=>scenario('en',async page=>{
+        for(const id of ids.filter(id=>id!=='chime'&&id!=='model-policy')) await t.test(name+': '+id+' grouped policy is atomic across language switch, reset, conflict and permission fences',()=>scenario('en',async page=>{
           const specs = {
             retry:{name:'retry-policy',fields:['errorCodes','providers','retryEmptyResponse'],edits:{errorCodes:'EXACT',providers:'',retryEmptyResponse:false},expected:[['errorCodes',['EXACT']],['providers',[]],['retryEmptyResponse',false]]},
             'compact-context':{name:'compact-timeouts',fields:['retryAttempts','retryDelayMs','ptcTimeoutMs','ptcModelTimeouts'],edits:{retryAttempts:'0',retryDelayMs:'0.125',ptcTimeoutMs:'0',ptcModelTimeouts:''},expected:[['retryAttempts',0],['retryDelayMs',125],['ptcTimeoutMs',0],['ptcModelTimeouts',{}]]},
@@ -313,9 +365,11 @@ test('all five actual packed settings localize, retain drafts and use native the
             });
           } finally {goalRuntime=undefined;}
         });
+        if(ids.includes('model-policy')&&ids[0]!=='model-policy') await t.test(name+': model defaults retain locale drafts, save atomically and fence conflicts',()=>scenario('en',modelDraftScenario));
         await t.test(name+': subscribed locale switches retain drafts and module-scoped writes',()=>scenario('en',async page=>{
           await titles(page,ids,'en');
           const id=ids[0]!;
+          if(id==='model-policy'){await modelDraftScenario(page);return;}
           const section=page.locator('[data-module="'+id+'"]');
           const groupName=id==='retry'?'retry-policy':id==='goalWait'?'goal-policy':undefined;
           const fieldRoot=id==='chime' ? section.locator('form') : groupName ? section.locator('[data-group="'+groupName+'"]') : section.locator('[data-field="'+field+'"]');
@@ -389,8 +443,10 @@ test('all five actual packed settings localize, retain drafts and use native the
             await policy.getByRole('checkbox',{name:'Enable compaction-request reasoning',exact:true}).check();
             await policy.getByRole('button',{name:'Add rule',exact:true}).click();
             await policy.getByRole('button',{name:'Save policy',exact:true}).click();
-            await page.waitForFunction(()=>(window as any).accepted().revision===10);
-            assert.deepEqual(await page.evaluate(()=>(window as any).writes.at(-1)),{revision:9,ops:[{op:'set',path:['modules','compact-context','compactionReasoning'],value:{enabled:true,rules:[{scope:'all',mode:'inherit'}]}}]});
+            await page.waitForFunction(async()=>(await(await fetch('/fixture/shared-document')).json()).document.revision===4);
+            assert.deepEqual(await page.evaluate(async()=>(await(await fetch('/fixture/shared-document')).json()).writes),[{expectedRevision:3,defaults:{enabled:true,rules:[{scope:'all',mode:'inherit'}]},workspaceOverrides:{}}]);
+            assert.equal(await page.evaluate(()=>(window as any).accepted().revision),9,'shared canonical save is independent of the module configuration revision');
+            assert.equal(await page.evaluate(()=>(window as any).writes.length),2,'shared save does not add a module configuration write');
           }
         }));
       }
