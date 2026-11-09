@@ -37,7 +37,7 @@ export function createExtrasPlugin(distribution: Distribution) {
         const enabled = moduleConfig(id).enabled;
         return (enabled === undefined ? moduleDefaultEnabled(id) : enabled === true)
           && controller?.state().modules[id]?.ready === true && statuses[id]?.phase === 'active';
-      });
+      }, () => moduleConfig(id));
       const get = (name: string) => ctx.get(name);
       const migrationHost = {
         profileContext: root.profileContext,

@@ -15,7 +15,7 @@ export interface FeaturePlugin {
   readonly Config?: unknown;
   apply(ctx: any, config?: any): unknown;
   /** Selected distribution settings remain accessible when feature participation is disabled. */
-  mountSettings?(ctx: any, distributionName: string, isActive?: () => boolean): unknown;
+  mountSettings?(ctx: any, distributionName: string, isActive?: () => boolean, getConfig?: () => Record<string, unknown>): unknown;
   /** Side-effect-free, non-secret capability state for this exact mounted fiber. */
   runtimeStatus?(ctx: any): { capabilities: Record<string, CapabilityStatus>; details?: Record<string, unknown> };
 }

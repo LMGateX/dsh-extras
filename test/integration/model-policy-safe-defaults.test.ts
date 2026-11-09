@@ -31,14 +31,20 @@ test('native root exposes selected settings while default-off model feature stay
   let mounts = 0;
   let active = 0;
   let admitted = () => false;
+  let settingsConfig: (()=>Record<string,unknown>) | undefined;
   const feature = {...modelPolicy,
-    mountSettings(_ctx:unknown, distribution:string, isActive?:()=>boolean) { assert.equal(distribution,'dsh-extras-model-policy'); admitted=isActive??(()=>false); mounts++; },
+    mountSettings(_ctx:unknown, distribution:string, isActive?:()=>boolean, getConfig?:()=>Record<string,unknown>) { assert.equal(distribution,'dsh-extras-model-policy'); admitted=isActive??(()=>false); settingsConfig=getConfig; mounts++; },
     apply(ctx:any) { active++; ctx.effect(() => () => { active--; }); }
   };
   const distribution: Distribution = {name:'dsh-extras-model-policy',moduleIds:['model-policy'],modulePlugins:{'model-policy':feature}};
   const f = await loaderFixture(t,distribution,{migration:{auto:false}});
   await f.ready();
   assert.equal(mounts,1);
+  assert.equal(typeof settingsConfig,'function','disabled settings can inspect accepted module config without starting it');
+  const detached=settingsConfig!();
+  assert.equal(detached.enabled,false);
+  detached.enabled=true;
+  assert.equal(settingsConfig!().enabled,false,'settings read cannot mutate accepted config');
   assert.equal(active,0);
   assert.equal(f.status().modules['model-policy'].enabled,false);
   assert.equal(f.status().modules['model-policy'].phase,'disabled');
@@ -46,6 +52,7 @@ test('native root exposes selected settings while default-off model feature stay
   await until(() => f.status(), value => value.modules['model-policy'].phase === 'active','model explicit enable');
   assert.equal(active,1);
   assert.equal(admitted(),true,'operation admission follows actual active native fiber');
+  assert.equal(settingsConfig!().enabled,true,'settings getter observes accepted volatile updates');
   assert.equal(mounts,1,'volatile opt-in retains selected settings surface');
   await f.update({modules:{'model-policy':{enabled:false}},migration:{auto:false}});
   await until(() => f.status(), value => value.modules['model-policy'].phase === 'disabled','model disable');
