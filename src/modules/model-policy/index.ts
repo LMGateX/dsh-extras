@@ -3,7 +3,8 @@ import {resolveConfig,validateConfig,selectionFor,type ResolvedConfig} from './c
 import {resolveSessionIdentity,type SessionIdentity} from './workspace.ts';
 import {participateCompaction,type SharedCompactionStatus} from '../../shared-compaction/index.ts';
 import {mountSharedCompactionRoutes} from '../../shared-compaction/routes.ts';
-import {mountLegacyCompactionSeed} from '../../shared-compaction/legacy-seed.ts';
+import {mountLegacyCompactionSeed,adoptLegacyCompactionSeed} from '../../shared-compaction/legacy-seed.ts';
+import type {LegacyAdoptionReceipt} from '../../types.ts';
 export {Config,resolveConfig,validateConfig} from './config.ts';
 export {resolveSessionWorkspace} from './workspace.ts';
 export const name='extras-model-policy';
@@ -85,4 +86,8 @@ export async function apply(ctx:Context,rawConfig:Record<string,unknown>={}):Pro
 export function mountSettings(ctx:Context,distribution:string,_isActive?:()=>boolean,getConfig?:()=>Record<string,unknown>):void {
  mountLegacyCompactionSeed(ctx,'model-policy',distribution,getConfig);
  mountSharedCompactionRoutes(ctx,'/extras/'+encodeURIComponent(distribution)+'/shared-compaction');
+}
+/** Only the root migration boundary supplies authenticated journal/source provenance. */
+export async function onLegacyAdopted(ctx:Context,config:Record<string,unknown>,receipt:LegacyAdoptionReceipt):Promise<void> {
+ await adoptLegacyCompactionSeed(ctx,'model-policy',config,receipt);
 }
