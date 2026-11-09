@@ -14,6 +14,12 @@ For the approved 0.3.0 parity extension, ordinary Goal-wait rows are audited at 
 
 Runtime discovery receives the actual continuation Context, inspects cooperating root-lifetime/owner-callback markers and correlates native callbacks with verified Loader entries. A caller-supplied startupOwner=null does not overrule an observed owner. Offline CLI inspection may still produce a useful plan, but cannot prove absence of a live programmatic goal owner: affected Goal-wait operations fail closed with an explicit runtime/restart verification requirement. Other independently valid modules are not disabled merely by this missing goal evidence.
 
+## Additive 0.5.0 upgrade
+
+The new model-policy module has no legacy predecessor and must not invent one. It defaults disabled even for a fresh profile, absent legacy context or a pre-existing 0.4.0 completed journal. A completed older journal may append a newly schema/owner-validated fresh-module decision while preserving its operation identity, original target identity, backup, steps, original decisions and rollback provenance; it must not reimport or silently rewrite the old profile. Interrupted/prepared or malformed old journals still require their original recovery validation, not an assumed additive upgrade.
+
+Canonical compaction-reasoning initialization is a separate recorded seed import into shared native storage. It must preserve accepted canonical edits and retain recoverable legacy input; module-local seed fields are no longer a competing live rule authority. This does not give either participating module ownership of the other module, or permission to modify legacy package/configuration outside the original handover contract.
+
 ## Precedence and state
 
 Explicit target Extras fields > migrated old effective values > known legacy defaults. Preserve enabled/disabled state, false, zero, empty strings/arrays, durations in original units and replacement array semantics. With any legacy migration context, absent capabilities remain off. Never copy transient holds, timers, playback queues, credentials or a live gate's continuation authority. Do not execute dynamic expressions to import them.
