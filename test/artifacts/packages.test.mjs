@@ -29,12 +29,15 @@ for(const {name,modules} of distributions) test('packed installable distribution
   assert.equal(pkg.version,version);assert.equal(pkg.name,name);assert.equal(pkg.private,undefined);
   assert.equal(pkg.engines.dsh,'0.2.2-rc.1');assert.equal(pkg.dsh.client.platform,'web');
   assert.equal(pkg.dsh.client.platforms,undefined);assert.equal(pkg.dsh.bundle.patch,'cordis.patch.yml');
+  assert.equal(pkg.dsh.client.inject.includes('@deepseek-ai/dsh-api-session-controller'), modules.includes('retry') || modules.includes('chime'), 'selected session-controller dependency does not depend on chime transitively');
   const patch=await readFile(join(packageDir,'cordis.patch.yml'),'utf8');assert.ok(patch.includes('id: '+name));
   const listing=execFileSync('tar',['-tzf',archive],{encoding:'utf8'}).split('\n');
   assert.ok(!listing.some(file=>file.includes('node_modules/')||file.includes('.dsh-extras/')||file.includes('.env')));
   const server=await readFile(join(packageDir,'lib/index.js'),'utf8');
   const browser=await readFile(join(packageDir,'lib/client.js'),'utf8');
   assert.ok(browser.includes(name));assert.ok(browser.includes('__ModuleLoader__'));
+  const browserMap=JSON.parse(await readFile(join(packageDir,'lib/client.js.map'),'utf8'));
+  assert.equal(browserMap.sources.some(path=>path.endsWith('/client/request-recovery.ts')),modules.includes('retry'),'recovery adapter ships only with selected retry');
   for(const id of ['compact-context','retry','chime','goalWait','model-policy']) {
     const notice=listing.some(file=>file==='package/notices/'+id+'.txt');
     assert.equal(notice,modules.includes(id),'selected feature notice '+id);
