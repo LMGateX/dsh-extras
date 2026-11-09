@@ -51,8 +51,8 @@ export function createSharedCompactionSource(fetcher:typeof fetch=(...args)=>glo
   const key=workspaceId??'';const existing=forms.get(key);if(existing)return existing;
   let lastVersion=-1;let snapshot:ConfigFormSnapshot<CompactionReasoningPolicy>;
   const result:ConfigForm<CompactionReasoningPolicy>={
-   getSnapshot(){if(lastVersion!==version){lastVersion=version;const policy=document?(workspaceId?document.workspaceOverrides[workspaceId]??document.defaults:document.defaults):resolveCompactionReasoning();
-    snapshot={status,writable:status==='ready'&&!busy,revision:document?.revision,value:structuredClone(policy),base:structuredClone(workspaceId?document?.defaults??resolveCompactionReasoning():resolveCompactionReasoning()),user:workspaceId?structuredClone(document?.workspaceOverrides[workspaceId]):structuredClone(document?.defaults)};}return snapshot;},
+   getSnapshot(){if(lastVersion!==version){lastVersion=version;const own=workspaceId!==undefined&&document&&Object.hasOwn(document.workspaceOverrides,workspaceId)?document.workspaceOverrides[workspaceId]:undefined;const policy=document?(workspaceId!==undefined?own??document.defaults:document.defaults):resolveCompactionReasoning();
+    snapshot={status,writable:status==='ready'&&!busy,revision:document?.revision,value:structuredClone(policy),base:structuredClone(workspaceId?document?.defaults??resolveCompactionReasoning():resolveCompactionReasoning()),user:workspaceId!==undefined?structuredClone(own):structuredClone(document?.defaults)};}return snapshot;},
    subscribe(listener){listeners.add(listener);return()=>{listeners.delete(listener);};},
    async mutate(ops:readonly PathOperation[],expectedRevision?:number){
     if(status!=='ready'||busy||!document||!rowId||expectedRevision!==document.revision||ops.length!==1||ops[0]!.path.length!==0)return false;
@@ -68,7 +68,7 @@ export function createSharedCompactionSource(fetcher:typeof fetch=(...args)=>glo
    },
   };forms.set(key,result);return result;
  }
- return {refresh,form,start,legacyImport:()=>document?.legacyImport&&structuredClone(document.legacyImport)};
+ return {refresh,form,start,workspaceIds:()=>Object.keys(document?.workspaceOverrides??{}),legacyImport:()=>document?.legacyImport&&structuredClone(document.legacyImport)};
 }
 export type SharedCompactionSource=ReturnType<typeof createSharedCompactionSource>;
 const BROWSER_AUTHORITY=Symbol.for('dsh-extras.shared-compaction.browser.v1');

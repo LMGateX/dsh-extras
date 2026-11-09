@@ -1,5 +1,6 @@
 import { bindSection, type ConfigForm } from './forms.ts';
 import {browserSharedCompactionSource,type SharedCompactionSource} from './shared-compaction.ts';
+import {createWorkspaceCatalog,createWorkspaceScopeView,type WorkspaceCatalog} from './workspace-settings.ts';
 import { createReasoningEditor } from './reasoning.ts';
 import { capabilityText, type SettingsStatus } from './settings-core.ts';
 import { useSettingsText, translateSettingsError, type SettingsLocale } from './settings-ui.ts';
@@ -46,9 +47,12 @@ function translateReasoningError(error: string, t: (en: string, zh: string) => s
 }
 
 /** Selected feature source shared by combined, split, and source consumers. */
-export function createReasoningSettingsView(React: any, catalog?: ReasoningCatalogSource, locale?: SettingsLocale, shared?: SharedCompactionSource) {
+export function createReasoningSettingsView(React: any, catalog?: ReasoningCatalogSource, locale?: SettingsLocale, shared?: SharedCompactionSource, workspaces?:WorkspaceCatalog) {
   const h = React.createElement;
-  function ReasoningControl({ form, runtime, writableGate=true, onDirtyChange }: { form: ConfigForm; runtime?: CapabilityStatus;writableGate?:boolean;onDirtyChange?:(dirty:boolean)=>void }) {
+  const WorkspaceScope=createWorkspaceScopeView(React,locale);
+  const invalidSnapshot={status:'unavailable' as const,writable:false,value:{enabled:false,rules:[]}};
+  const invalidForm:ConfigForm={getSnapshot:()=>invalidSnapshot,subscribe:()=>()=>{},mutate:async()=>false};
+  function ReasoningControl({ form, runtime, writableGate=true, onPendingChange, resetLabel }: { form: ConfigForm; runtime?: CapabilityStatus;writableGate?:boolean;onPendingChange?:(pending:boolean)=>void;resetLabel?:string }) {
     const t = useSettingsText(React, locale);
     const [editor] = React.useState(() => createReasoningEditor(form));
     const [metadata, setMetadata] = React.useState({ busy: false, notice: '' as MetadataNotice, groups: [] as NativeCatalogGroup[] });
@@ -75,7 +79,7 @@ export function createReasoningSettingsView(React: any, catalog?: ReasoningCatal
     React.useEffect(() => editor.start(), [editor]);
     const draft = React.useSyncExternalStore(editor.subscribe, editor.getSnapshot, editor.getSnapshot);
     const syncDirty=typeof window==='undefined'?React.useEffect:(React.useLayoutEffect??React.useEffect);
-    syncDirty(()=>{onDirtyChange?.(draft.dirty);},[draft.dirty,onDirtyChange]);
+    syncDirty(()=>{onPendingChange?.(draft.dirty||draft.saving);},[draft.dirty,draft.saving,onPendingChange]);
     const disabled = !writableGate || draft.status !== 'ready' || !draft.writable || draft.revision === undefined || draft.saving;
     const notices: Record<MetadataNotice, string> = {
       '': '',
@@ -129,25 +133,27 @@ export function createReasoningSettingsView(React: any, catalog?: ReasoningCatal
       h('div', {className:'extras-actions'},
         h('button', {type:'button',className:'extras-primary',disabled: disabled || !draft.dirty || draft.conflict,onClick:()=>{void editor.save();}}, t('Save policy', '保存策略')),
         h('button', {type:'button',disabled: draft.saving || !draft.dirty && !draft.conflict,onClick:()=>editor.discard()}, t('Discard policy draft', '丢弃策略草稿')),
-        h('button', {type:'button',disabled:disabled || draft.conflict,onClick:()=>{void editor.reset();}}, t('Reset policy to inherited', '将策略重置为继承'))));
+        h('button', {type:'button',disabled:disabled || draft.conflict,onClick:()=>{void editor.reset();}}, resetLabel??t('Reset policy to inherited', '将策略重置为继承'))));
   }
 
   function SharedReasoningSection({form,runtime,rowId}:{form:ConfigForm;runtime?:NonNullable<SettingsStatus['modules']>['compact-context'];rowId:string}) {
     const t=useSettingsText(React,locale);
-    const [workspace,setWorkspace]=React.useState('');
-    const [workspaceDraft,setWorkspaceDraft]=React.useState('');
+    const [workspace,setWorkspace]=React.useState(undefined as string|undefined);
     const [error,setError]=React.useState('');
     const [saving,setSaving]=React.useState(false);
-    const [dirty,setDirty]=React.useState(false);
+    const [pending,setPending]=React.useState(false);
     React.useEffect(()=>shared!.start(rowId),[rowId]);
     const local=React.useSyncExternalStore(form.subscribe,form.getSnapshot,form.getSnapshot);
-    const policyForm=React.useMemo(()=>shared!.form(workspace||undefined),[workspace]);
+    const policyForm=React.useMemo(()=>{try{return shared!.form(workspace);}catch{return invalidForm;}},[workspace]);
     const policy=React.useSyncExternalStore(policyForm.subscribe,policyForm.getSnapshot,policyForm.getSnapshot);
+    const scopeValid=policyForm!==invalidForm;
+    const scopeLocked=pending||saving||policy.status==='ready'&&!policy.writable;
+    const accepted=policy.value as {enabled:boolean;rules:unknown[]}|undefined;
     const value=local.value as any;
     const localEnabled=value?.compactionReasoning?.enabled===true;
     const capability=runtime?.capabilities?.compactionReasoning as any;
     const executor=capability?.executor??(runtime as any)?.details?.compactionReasoning?.executor;
-    return h('div',{'data-shared-compaction':'','data-workspace':workspace},
+    return h('div',{'data-shared-compaction':'','data-workspace':workspace??''},
       h('label',null,h('input',{type:'checkbox',checked:localEnabled,disabled:saving||!local.writable||local.status!=='ready',onChange:async(event:any)=>{
         const next=Boolean(event.target.checked);const current=form.getSnapshot();if(current.revision!==local.revision)return;setSaving(true);setError('');
         try{if(!await form.mutate([{op:'set',path:['compactionReasoning','enabled'],value:next}],local.revision))setError(t('Local participation changed; reload before saving.','本模块参与状态已更改，请重新读取后保存。'));}
@@ -158,12 +164,15 @@ export function createReasoningSettingsView(React: any, catalog?: ReasoningCatal
       shared!.legacyImport()?.phase==='conflict'&&h('p',{role:'alert'},t('Legacy policies disagree. Originals are backed up; no winner was guessed. Review and save the shared policy explicitly.','旧策略存在冲突。原值已备份，系统未猜测采用哪一份；请核对并明确保存共享策略。')),
       shared!.legacyImport()?.phase==='unavailable'&&h('p',{role:'alert'},t('Legacy policy import is unavailable. Existing canonical policy is unchanged; inspect the protected backup and native status before editing.','旧策略导入不可用。现有共享策略未改变；编辑前请检查受保护的备份和原生状态。')),
       h('div',{className:'extras-actions'},h('button',{type:'button',onClick:()=>{void shared!.refresh(rowId);}},t('Refresh shared policy','刷新共享策略'))),
-      h('label',null,t('Workspace ID (blank: profile defaults)','工作区 ID（留空：全局默认）'),h('input',{type:'text',value:workspaceDraft,maxLength:200,onChange:(event:any)=>setWorkspaceDraft(event.target.value),'aria-label':t('Compaction workspace ID','压缩策略工作区 ID')})),
-      h('button',{type:'button',disabled:dirty||saving||policy.writable===false&&policy.status==='ready',onClick:()=>{try{shared!.form(workspaceDraft||undefined);setWorkspace(workspaceDraft);setError('');}catch{setError(t('Invalid workspace identity.','工作区标识无效。'));}}},t('Select policy scope','选择策略范围')),
-      h('small',null,t('Use the exact native workspace ID. Reset removes only this workspace override; blank edits profile defaults.','请使用准确的原生工作区 ID。重置仅移除该工作区覆盖；留空编辑全局默认。')),
+      h(WorkspaceScope,{catalog:workspaces,workspaceId:workspace,configuredIds:shared!.workspaceIds(),locked:scopeLocked,label:t('Compaction policy scope','压缩策略范围'),manualLabel:t('Compaction workspace ID','压缩策略工作区 ID'),onChange:(id:string|undefined)=>{if(!scopeLocked){setWorkspace(id);setError('');}}}),
+      !scopeValid&&h('p',{role:'alert'},t('Invalid workspace identity. Enter an exact native ID; this scope never edits global defaults.','工作区标识无效。请输入精确的原生 ID；此范围绝不会修改全局默认值。')),
+      scopeValid&&policy.status==='ready'&&h('p',{role:'status',className:'extras-scope-badge','data-policy-source':workspace===undefined?'global':policy.user===undefined?'inherited':'workspace','aria-label':t('Accepted compaction policy','已接受的压缩策略')},
+        workspace===undefined?t('Global defaults','全局默认值'):policy.user===undefined?t('Inherited from global defaults','继承全局默认值'):t('Custom workspace policy','工作区自定义策略'),
+        ' · '+t('Effective accepted policy: ','已接受的生效策略：')+(accepted?.enabled?t('enabled','已启用'):t('disabled','已关闭'))+' · '+t('rules: ','规则数：')+(accepted?.rules.length??0)),
+      h('small',null,t('Selecting scope does not save. Reset is an immediate operation: it removes only this workspace override, or restores safe defaults in global scope.','选择范围不会保存。重置会立即生效：仅移除本工作区覆盖；全局范围则恢复安全初始值。')),
       error&&h('p',{role:'alert'},error),
       policy.status!=='ready'&&h('p',{role:'status'},t('Shared policy unavailable or loading; native policy is not changed.','共享策略尚未就绪或不可用；不会修改原生策略。')),
-      h(ReasoningControl,{key:workspace,form:policyForm,runtime:capability,onDirtyChange:setDirty,writableGate:local.status==='ready'&&local.writable}));
+      h(ReasoningControl,{key:workspace===undefined?'global':'workspace:'+workspace,form:policyForm,runtime:capability,onPendingChange:setPending,writableGate:scopeValid&&local.status==='ready'&&local.writable,resetLabel:workspace===undefined?t('Reset global policy to safe defaults now','立即将全局策略恢复为安全初始值'):t('Reset workspace policy to global now','立即恢复工作区对全局策略的继承')}));
   }
   return function ReasoningSection({ form, runtime, rowId }: { form: ConfigForm; runtime?: NonNullable<SettingsStatus['modules']>['compact-context'];rowId?:string }) {
     if(shared&&rowId)return h(SharedReasoningSection,{form,runtime,rowId});
@@ -184,7 +193,7 @@ export function createReasoningAdapter(React: any, rowId?: string) {
         catalogRemote = scope.get('remote');
         return () => { catalogRemote = undefined; };
       });
-      const View=createReasoningSettingsView(React,{load:()=>catalogRemote?.session?.modelCatalog()},locale,rowId?browserSharedCompactionSource():undefined);
+      const View=createReasoningSettingsView(React,{load:()=>catalogRemote?.session?.modelCatalog()},locale,rowId?browserSharedCompactionSource():undefined,rowId?createWorkspaceCatalog(ctx):undefined);
       return rowId?function SharedEntry(props:any){return React.createElement(View,{...props,rowId});}:View;
     },
   };
