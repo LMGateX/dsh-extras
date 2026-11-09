@@ -15,12 +15,12 @@ export interface RetrySettingsTarget {
 }
 export interface RetrySettingsSnapshot {
   writable: boolean; targets: RetrySettingsTarget[];
-  recovery: {phase:'unavailable';reason:'native-terminal-recovery-unavailable'};
+  recovery: {phase:'per-session';reason:'native-recovery-checked-per-failed-session'};
   diagnostic?: string;
 }
 export const RETRY_BODY_LIMIT = 8192;
 const providers = ['dsh-llm-deepseek-api-key','dsh-llm-deepseek-account','dsh-llm-pi-ai'];
-const recovery = {phase:'unavailable',reason:'native-terminal-recovery-unavailable'} as const;
+const recovery = {phase:'per-session',reason:'native-recovery-checked-per-failed-session'} as const;
 const plain = (v: any): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v) && Object.getPrototypeOf(v) === Object.prototype;
 function fail(status: number, code: string): never { throw Object.assign(new Error(code), {status,code}); }
 function draft(value: any, resolve: any): RetryPolicyDraft {

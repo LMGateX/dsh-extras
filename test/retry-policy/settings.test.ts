@@ -8,7 +8,7 @@ import {response} from '../integration/loader-harness.ts';
 
 test('owner can edit actual provider native policy while classifier disabled, without restating provider fields', async t => {
   const f=await fixture(t); const before=await f.request(); assert.equal(before.code,200);
-  assert.equal(before.json.recovery.phase,'unavailable'); assert.equal(before.json.targets.length,1);
+  assert.equal(before.json.recovery.phase,'per-session'); assert.equal(before.json.targets.length,1);
   const target=before.json.targets[0]; assert.equal(target.provider,'deepseek-official');
   const llm=f.ctx.get('llm') as any; assert.equal(llm.providerRetryPolicy('deepseek-official').maxRetries,5); assert.equal(target.policy.maxRetries,5);
   const after=await f.request('PUT',{targetId:target.id,expectedRevision:target.revision,policy:{mode:'always',initialDelayMs:75,maxDelayMs:75,jitterRatio:0}});

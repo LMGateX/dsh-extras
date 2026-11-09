@@ -21,7 +21,7 @@ export function acceptRecoveryView(raw:unknown,sessionId:string):RecoveryView {
  if(!record(raw)||raw.protocol!==REQUEST_RECOVERY_PROTOCOL||raw.lifetime!=='process-local')return unavailable('native-recovery-incompatible');
  if(raw.status==='unavailable')return unavailable(code(raw.reason));
  const p=raw.checkpoint;
- if(raw.status!=='available'||!record(p)||p.sessionId!==sessionId||!id(p.checkpointId)||!id(p.attemptId)||!['revision','attemptSeq','terminalSeq','turn','step'].every(k=>integer(p[k]))||p.disposition!=='budget-exhausted'||!record(p.selection)||!id(p.selection.provider)||!id(p.selection.model))return unavailable('native-recovery-incompatible');
+ if(raw.status!=='available'||!record(p)||p.sessionId!==sessionId||!id(p.checkpointId)||!id(p.attemptId)||!['revision','attemptSeq','terminalSeq','turn','step'].every(k=>integer(p[k]))||p.disposition!=='budget-exhausted'||!record(p.selection)||!id(p.selection.provider)||!id(p.selection.model)||(Object.hasOwn(p.selection,'reasoningEffort')&&!id(p.selection.reasoningEffort)))return unavailable('native-recovery-incompatible');
  return {protocol:REQUEST_RECOVERY_PROTOCOL,lifetime:'process-local',status:'available',checkpoint:{sessionId,checkpointId:p.checkpointId,revision:p.revision,attemptId:p.attemptId,attemptSeq:p.attemptSeq,terminalSeq:p.terminalSeq,turn:p.turn,step:p.step,selection:{provider:p.selection.provider,model:p.selection.model,...id(p.selection.reasoningEffort)?{reasoningEffort:p.selection.reasoningEffort}:{}},disposition:'budget-exhausted'}};
 }
 /** Root mount; caller supplies accepted module participation, not browser intent. */

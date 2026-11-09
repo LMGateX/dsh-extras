@@ -75,7 +75,7 @@ export function createRetrySettingsView(React:any, supplied?:RetrySettingsSource
     const [notice,setNotice]=React.useState('');
     React.useEffect(()=>{let live=true;setSnapshot(undefined);source.load().then((v:RetrySettingsSnapshot)=>{if(live){setSnapshot(v);setNotice('');}},()=>{if(live)setNotice('unavailable');});return()=>{live=false;};},[source]);
     return h('section',{'aria-label':t('Native provider retry policy','原生提供方重试策略')},
-      h('p',{role:'status'},t('Message-free recovery unavailable: this host has no terminal failed-request recovery capability.','无消息恢复不可用：此宿主没有终态失败请求恢复能力。')),
+      h('p',{role:'status'},t('Stock rc.1 lacks terminal recovery; optional adapted-host capability is checked per failed session.','原版 rc.1 不提供终态恢复；可选适配宿主的能力将按各失败会话核实。')),
       !snapshot?h('p',{role:notice?'alert':'status'},notice?t('Native retry settings unavailable.','原生重试设置不可用。'):t('Loading native provider policy…','正在加载原生提供方策略…')):null,
       snapshot?.targets.length===0?h('p',{role:'status'},t('No supported native provider settings are available.','没有可用的受支持原生提供方设置。')):null,
       ...(snapshot?.targets??[]).map((target:RetrySettingsTarget)=>h(Provider,{key:target.id,target,writable:snapshot!.writable,source,onSaved:setSnapshot})));

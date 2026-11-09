@@ -43,5 +43,5 @@ test('emitted retry editor saves fixed/always native provider settings without a
   await card.getByText('Saved; future native requests use this policy.',{exact:true}).waitFor();
   row=(f.ctx.get('settings') as any).describe().find((x:any)=>x.ns==='custom-deepseek');assert.equal(row.value.retryPolicy.mode,'always');
   assert.equal(await page.getByRole('button',{name:/recover|retry now/i}).count(),0);
-  await page.getByText('Message-free recovery unavailable: this host has no terminal failed-request recovery capability.',{exact:true}).waitFor();
+  await page.getByText('Stock rc.1 lacks terminal recovery; optional adapted-host capability is checked per failed session.',{exact:true}).waitFor();
 });

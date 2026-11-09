@@ -2,6 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {fixture,checkpoint} from './fixture.ts';
 
+test('present invalid optional native effort metadata closes the checkpoint rather than stripping it',async t=>{
+ const f=await fixture(t);
+ for(const reasoningEffort of [null,undefined,'',17,'bad effort']){
+  f.setState({protocol:'dsh.request-recovery.v1',lifetime:'process-local',status:'available',checkpoint:{...checkpoint,selection:{...checkpoint.selection,reasoningEffort}}});
+  assert.equal((await f.request()).json.status,'unavailable');
+ }
+});
+
 test('HTTP adapts optional public native recovery capability and retains idempotent command keys',async t=>{
  const f=await fixture(t);const read=await f.request();assert.equal(read.code,200);assert.equal(read.json.status,'available');assert.deepEqual(read.json.checkpoint,checkpoint);
  const command={sessionId:'session-a',checkpointId:'checkpoint-1',expectedRevision:3,operationId:'operation-1'};
