@@ -5,11 +5,13 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createRuntime, load, llm, runTurn, startChild} from '../modules/retry/runtime.ts';
 import * as policy from '../../src/modules/model-policy/index.ts';
+import { nativeProfileFixture } from '../native-profile-fixture.ts';
 
 async function fixture(t: any, raw: any) {
  const directory = await mkdtemp(join(tmpdir(),'extras-model-policy-'));
  const runtime = await createRuntime({product:false,retry:false,persistent:true,subagents:true});
  t.after(async()=>{await runtime.dispose();await rm(directory,{recursive:true,force:true});});
+ (await nativeProfileFixture(t, { home: join(directory, 'home') })).provide(runtime.ctx);
  for(const [name,config] of [['dsh-storage',{}],['dsh-storage-json',{root:join(directory,'storage')}],['dsh-storage-domain',{backend:'json'}],['dsh-workspace',{}]] as const) {
   const m = await load<any>(name); await runtime.ctx.plugin(m.default ?? m,config).await();
  }

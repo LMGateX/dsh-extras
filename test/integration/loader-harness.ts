@@ -2,8 +2,8 @@
 import { Context } from '@deepseek-ai/cordis';
 import Loader, { Group } from '@deepseek-ai/cordis-plugin-loader';
 import { createRequire } from 'node:module';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { join, resolve, dirname, basename } from 'node:path';
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { join, resolve, dirname, basename, isAbsolute, sep } from 'node:path';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
 import type { TestContext } from 'node:test';
@@ -24,9 +24,19 @@ export function response() {
 }
 export async function loaderFixture(t: TestContext, distribution: Distribution, config: Record<string, any>, suppliedContext?: Context, extraRows: Record<string, any>[] = [], suppliedPlugin?: FeaturePlugin, suppliedImports: Record<string, unknown> = {}) {
   const root = await mkdtemp(join(tmpdir(), 'extras-root-lifecycle-'));
-  const profile = join(root, 'home', 'profiles', 'isolated');
-  const home = join(root, 'home'); await mkdir(profile, { recursive: true });
   const ctx = suppliedContext ?? new Context();
+  const selected = ctx.get('profileContext') as Record<string, any> | undefined;
+  // A caller may accept canonical policy before mounting its Loader row. Keep
+  // that explicitly supplied native profile, rather than silently replacing it.
+  if (selected && (![selected.dir, selected.home, selected.patchPath].every(value => typeof value === 'string' && isAbsolute(value) && resolve(value).startsWith(resolve(tmpdir()) + sep))
+      || resolve(selected.patchPath) !== join(resolve(selected.dir), 'cordis.patch.yml'))) throw new Error('loader fixture requires a disposable native profile');
+  if (selected) {
+    const temporaryRoot = await realpath(tmpdir()) + sep;
+    const directories = await Promise.all([realpath(selected.dir), realpath(selected.home)]);
+    if (directories.some(directory => !directory.startsWith(temporaryRoot))) throw new Error('loader fixture profile resolves outside temporary storage');
+  }
+  const profile = selected?.dir ?? join(root, 'home', 'profiles', 'isolated');
+  const home = selected?.home ?? join(root, 'home'); await mkdir(profile, { recursive: true });
   ctx.baseUrl = pathToFileURL(requireHost.resolve('@deepseek-ai/dsh/package.json')).href;
   const routes = new Map<string, any>(); const importTable = new Map<string, any>(Object.entries(suppliedImports));
   const initial = structuredClone(config);
@@ -46,7 +56,7 @@ export async function loaderFixture(t: TestContext, distribution: Distribution, 
   await writeFile(join(profile, 'package.json'), JSON.stringify({ name: 'isolated-root-profile', private: true, dependencies: {}, dsh: { profile: { bundles: [] } } }));
   const save = async (rows: unknown[]) => writeFile(patchPath, JSON.stringify([{ insert: rows }], null, 2));
   await save([{ id: distribution.name, name: distribution.name, config: initial }, ...extraRows]);
-  ctx.reflect.provide('profileContext', { dir: profile, patchPath, home, installAnchor: requireHost.resolve('@deepseek-ai/dsh/package.json'), overlays: [] });
+  if (!selected) ctx.reflect.provide('profileContext', { dir: profile, patchPath, home, installAnchor: requireHost.resolve('@deepseek-ai/dsh/package.json'), overlays: [] });
   ctx.reflect.provide('webServer', { register(route: any) { if (routes.has(route.path)) throw new Error('duplicate route'); routes.set(route.path, route); return () => { if (routes.get(route.path) === route) routes.delete(route.path); }; } });
   const records = new Map();
   ctx.reflect.provide('credentials', { async modifyRecord(key: string, edit: (value: any) => Promise<any>) { const next = await edit(records.get(key)); if (next !== undefined) records.set(key, next); return records.get(key); } });

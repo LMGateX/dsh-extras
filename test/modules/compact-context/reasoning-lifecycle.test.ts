@@ -7,7 +7,8 @@ import { loaderFixture, until } from '../../integration/loader-harness.ts';
 import Storage from '@deepseek-ai/dsh-storage';
 import * as Domain from '@deepseek-ai/dsh-storage-domain';
 import * as Json from '@deepseek-ai/dsh-storage-json';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { nativeProfileFixture } from '../../native-profile-fixture.ts';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { openSharedCompactionStore } from '../../../src/shared-compaction/store.ts';
@@ -21,13 +22,16 @@ const request = (): GenerateOptions => Object.freeze({ provider: 'route', model:
 async function consume(stream: AsyncIterable<StreamChunk>): Promise<void> { for await (const _chunk of stream) { /* drain */ } }
 
 test('real Loader volatile updates capture in-flight policy, remove disabled effects and never stack across repeated re-enables', async t => {
-  const ctx = new Context(); t.after(() => ctx.fiber.dispose()); await ctx.plugin(LlmRuntime).await();
+  const directory = await mkdtemp(join(tmpdir(), 'reasoning-lifecycle-'));
+  const ctx = new Context(); t.after(async () => { await ctx.fiber.dispose(); await rm(directory, { recursive: true, force: true }); });
+  (await nativeProfileFixture(t, { home: join(directory, 'home') })).provide(ctx);
+  await ctx.plugin(LlmRuntime).await();
   const seen: GenerateOptions[] = [];
   ctx.on('llm/stream', options => { seen.push(options); return (async function* () { yield { type: 'finish', reason: { kind: 'stop' } } as StreamChunk; })(); }, { global: true });
   const raw = (ctx.llm as unknown as Record<symbol, unknown>)[symbols.original] as LlmRuntime;
   const before = Object.getOwnPropertyDescriptor(raw, 'stream'); const prototype = Object.getOwnPropertyDescriptor(LlmRuntime.prototype, 'stream');
   await ctx.plugin(Storage).await();
-  await ctx.plugin(Json, { root: await mkdtemp(join(tmpdir(), 'reasoning-lifecycle-')) }).await();
+  await ctx.plugin(Json, { root: directory }).await();
   await ctx.plugin(Domain, { backend: 'json' }).await();
   const canonical = await openSharedCompactionStore(ctx);
   const savePolicy = (effort: string) => canonical.write({ expectedRevision: canonical.read().revision,
