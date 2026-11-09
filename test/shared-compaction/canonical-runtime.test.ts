@@ -11,7 +11,39 @@ import { join } from 'node:path';
 import { openSharedCompactionStore } from '../../src/shared-compaction/store.ts';
 import { participateCompaction } from '../../src/shared-compaction/index.ts';
 import { nativeProfileFixture } from '../native-profile-fixture.ts';
+import { WorkspaceId } from '@deepseek-ai/dsh-workspace';
 const fixed = (effort: string) => ({ enabled: true, rules: [{ scope: 'all' as const, mode: 'fixed' as const, effort }] });
+
+test('native compaction inherits canonical defaults for a legal prototype-like workspace ID when another override exists', async t => {
+    const ctx = new Context();
+    t.after(() => ctx.fiber.dispose());
+    (await nativeProfileFixture(t)).provide(ctx);
+    await ctx.plugin(LlmRuntime).await();
+    await ctx.plugin(Storage).await();
+    await ctx.plugin(Json, { root: await mkdtemp(join(tmpdir(), 'shared-opaque-workspace-')) }).await();
+    await ctx.plugin(Domain, { backend: 'json' }).await();
+    const store = await openSharedCompactionStore(ctx);
+    await store.write({ expectedRevision: 0, defaults: fixed('canonical-default'), workspaceOverrides: { another: fixed('other-workspace') } });
+    const seen: GenerateOptions[] = [];
+    ctx.on('llm/stream', options => {
+        seen.push(options);
+        return (async function* () { yield { type: 'finish', reason: { kind: 'stop' } } as StreamChunk; })();
+    }, { global: true });
+    const participant = participateCompaction(ctx, {
+        module: 'compact-context', policy: fixed('local-is-not-authority'),
+        workspaceForSession: sessionId => WorkspaceId(sessionId === 'inheritor-session' ? 'toString' : 'another'),
+    }, () => {});
+    await participant.ready;
+    for (const sessionId of ['inheritor-session', 'custom-session']) {
+        const request = { provider: 'route', model: 'model', messages: [], purpose: 'compaction', sessionId } as unknown as GenerateOptions;
+        for await (const _ of ctx.llm.stream(request)) {}
+    }
+    assert.deepEqual(seen.map(options => options.reasoningEffort), ['canonical-default', 'other-workspace']);
+    assert.equal(seen.length, 2, 'one native dispatch per compaction request');
+    assert.deepEqual(store.read(), { revision: 1, defaults: fixed('canonical-default'), workspaceOverrides: { another: fixed('other-workspace') } });
+    participant.dispose();
+});
+
 test('canonical policy survives executor switch and async workspace lookup captures accepted snapshot', async (t) => {
     const ctx = new Context();
     t.after(() => ctx.fiber.dispose());

@@ -101,7 +101,7 @@ function coordinator(ctx: Context): Coordinator {
                     return OFF;
                 const resolve = selected.options.workspaceForSession ?? ((id: string, ctx: Context) => resolveSessionWorkspace(ctx, id, options.signal));
                 // The canonical snapshot is detached before the asynchronous native identity read.
-                return Promise.resolve(resolve(options.sessionId, callCtx)).then(id => id ? (captured.workspaceOverrides[id] ?? captured.defaults) : OFF, () => OFF);
+                return Promise.resolve(resolve(options.sessionId, callCtx)).then(id => id ? (Object.hasOwn(captured.workspaceOverrides, id) ? captured.workspaceOverrides[id]! : captured.defaults) : OFF, () => OFF);
             }
             function publish(): void {
                 for (const p of state.participants) {
