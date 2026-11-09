@@ -40,8 +40,11 @@ test('Chromium emitted client: rendered settings, rest persistence, audio, disab
   let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
   try {
     browser = await chromium.launch({ headless: true, executablePath: process.env.DSH_EXTRAS_CHROMIUM, args: ['--no-sandbox','--autoplay-policy=no-user-gesture-required'] });
-    const page = await browser.newPage(); const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
-    await page.goto(url); await page.waitForFunction(() => document.querySelector('[aria-pressed]'));
+    const page = await browser.newPage(); const errors: string[] = []; const consoleErrors: string[] = []; page.on('pageerror', error => errors.push(error.message)); page.on('console',message=>{if(message.type()==='error')consoleErrors.push(message.text());});
+    await page.goto(url);
+    try { await page.waitForFunction(() => document.querySelector('[aria-pressed]') || (window as any).slotRenderErrors?.length);
+      assert.deepEqual(await page.evaluate(()=>(window as any).slotRenderErrors),[],'slot render must not contaminate host status publication'); }
+    catch (cause) { const state=await page.evaluate(()=>({moduleStatus:[...document.querySelectorAll('[data-module] > p[role=status]')].map(node=>node.textContent),slotRenderErrors:(window as any).slotRenderErrors,ready:(window as any).ready,loaded:(window as any).loadedId,fixture:(window as any).slotDiagnostics?.()})); throw new Error('Chime did not mount; captured diagnostics: '+JSON.stringify({errors,consoleErrors,state}),{cause}); }
     assert.equal(await page.locator('[data-module]').count(), 4);
     assert.equal(await page.locator('[data-package="dsh-extras"]').count(), 1);
     await page.getByRole('button', { name: '🔔 正常', exact: true }).click();
@@ -50,6 +53,8 @@ test('Chromium emitted client: rendered settings, rest persistence, audio, disab
     await page.getByRole('button', { name: '🌙 休息中', exact: true }).click();
     await page.evaluate(() => { (window as any).setRunning(true); (window as any).setRunning(false); });
     await page.waitForFunction(() => (window as any).starts === 1);
+    assert.deepEqual(await page.evaluate(()=>(window as any).turnTailMetadata('a')),[{slot:'conversation.chat.turnTail',id:'dsh-extras#request-recovery',sessionId:'a',bound:true}], 'recovery stays registered and binds only through an explicit session owner');
+    assert.equal(await page.locator('[data-request-recovery]').count(),0,'the settings page does not fabricate a conversation turn owner');
     await page.getByRole('button', { name: 'Stop the chime', exact: true }).click();
     await page.evaluate(() => (window as any).disableChime());
     await page.waitForFunction(() => !document.querySelector('[aria-pressed]'));
@@ -63,7 +68,7 @@ test('Chromium emitted client: rendered settings, rest persistence, audio, disab
     await page.evaluate(() => { (window as any).setRunning(true); (window as any).setRunning(false); });
     assert.equal(await page.evaluate(() => (window as any).starts), 0);
     legacy = false; reloadAfter = Date.now();
-    const fresh = await browser.newPage(); await fresh.goto(url);
+    const fresh = await browser.newPage(); fresh.on('pageerror',error=>errors.push('fresh: '+error.message)); await fresh.goto(url);
     await fresh.waitForFunction(() => document.querySelector('[aria-pressed]'));
     await fresh.evaluate(() => { (window as any).setRunning(true); (window as any).setRunning(false); });
     await fresh.waitForFunction(() => (window as any).starts === 1);
@@ -71,6 +76,8 @@ test('Chromium emitted client: rendered settings, rest persistence, audio, disab
     hostAvailable = false;
     await fresh.waitForFunction(() => !document.querySelector('[aria-pressed]'));
     assert.equal(await fresh.locator('[data-module]').count(), 4);
+    assert.deepEqual(await page.evaluate(()=>(window as any).slotRenderErrors),[]);
+    assert.deepEqual(await fresh.evaluate(()=>(window as any).slotRenderErrors),[]);
     await fresh.evaluate(() => (window as any).unload()); await page.evaluate(() => (window as any).unload());
     await page.close(); await fresh.close();
     assert.deepEqual(errors, []);

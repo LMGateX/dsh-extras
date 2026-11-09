@@ -39,17 +39,37 @@ const form = {
 const provide = (name, value) => { ctx.provide(name); ctx.set(name, value); };
 provide('locale', { getLocale: () => ({ active: 'en' }), subscribe: () => () => {}, resolveText: text => typeof text === 'string' ? text : text.en });
 
+window.slotRenderErrors = [];
+// Only these shell owners exist in this harness. Session/turn slots remain
+// registered, but must be invoked by a conversation owner with a session ID.
+const pageSlots = new Set(['plugins.bundle.config','sidebar.footer.action','shell.overlay']);
 function render() {
-  root.render(h(React.Fragment, null, ...[...views].filter(([key]) => !key.startsWith('plugins.row.config:')).map(([key, entry]) => h(entry.view, { key, view: 'page', ...(entry.options.inject?.() ?? {}) }))));
+  root.render(h(React.Fragment, null, ...[...views].filter(([,entry]) => pageSlots.has(entry.options.name)).map(([key, entry]) => {
+    try { return h(entry.view, { key, view: 'page', ...(entry.options.inject?.() ?? {}) }); }
+    catch(error) { window.slotRenderErrors.push({slot:entry.options.name,message:error.message}); throw error; }
+  })));
 }
 provide('configForms', { get: () => form, whileServed(rows, callback) { return callback(); } });
 provide('slots', {
   inject(name, callback) { return callback(); },
   register(options, view) { const key = options.name + ':' + (options.key ?? options.id); views.set(key, { options, view }); render(); return () => { views.delete(key); render(); }; },
 });
+window.slotDiagnostics = () => [...views].map(([key,entry])=>({key,slot:entry.options.name,hasInject:typeof entry.options.inject==='function'}));
 let sessions = { ids: [], byId: {} };
 const sessionListeners = new Set();
-provide('sessions', { list: { getSnapshot: () => sessions, subscribe(fn) { sessionListeners.add(fn); return () => sessionListeners.delete(fn); } } });
+provide('sessions', {
+  list: { getSnapshot: () => sessions, subscribe(fn) { sessionListeners.add(fn); return () => sessionListeners.delete(fn); } },
+  binding(sessionId) {
+    if(typeof sessionId !== 'string' || !sessionId) throw new Error('Session-owned slots require an explicit session ID');
+    return sessions.byId[sessionId] ? {session:{getSnapshot:()=>sessions.byId[sessionId],subscribe(fn){sessionListeners.add(fn);return()=>sessionListeners.delete(fn);}}} : undefined;
+  },
+});
+// A turn tail belongs to its conversation/session owner, not the settings page.
+// Keep registration/injection testable without inventing a sessionless render.
+window.turnTailMetadata = sessionId => [...views.values()].filter(entry=>entry.options.name==='conversation.chat.turnTail').map(entry=>{
+  const props=entry.options.inject(sessionId);
+  return {slot:entry.options.name,id:entry.options.id,sessionId:props.sessionId,bound:Boolean(props.session)};
+});
 window.setRunning = running => { sessions = { ids: ['a'], byId: { a: { running, title: 'Browser test session' } } }; for (const fn of sessionListeners) fn(); };
 window.accepted = () => snapshot.value;
 window.disableChime = () => form.mutate([{op:'set',path:['modules','chime','enabled'],value:false}],snapshot.revision);
