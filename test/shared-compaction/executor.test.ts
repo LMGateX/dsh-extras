@@ -11,6 +11,7 @@ import { build } from 'esbuild';
 import Storage from '@deepseek-ai/dsh-storage';
 import * as Domain from '@deepseek-ai/dsh-storage-domain';
 import * as Json from '@deepseek-ai/dsh-storage-json';
+import { nativeProfileFixture } from '../native-profile-fixture.ts';
 const policy = (effort: string) => ({ enabled: true, rules: [{ scope: 'all' as const, mode: 'fixed' as const, effort }] });
 test('native participants elect compact first regardless of arrival and transfer without duplicate dispatch', async (t) => {
     const ctx = new Context();
@@ -76,10 +77,12 @@ test('independently bundled standalone copies share profile CAS and one executor
     await symlink(modules, join(dir, 'node_modules'), 'dir');
     const compact = await import(pathToFileURL(join(dir, 'compact.mjs')).href), model = await import(pathToFileURL(join(dir, 'model.mjs')).href);
     const data = join(dir, 'profile-data');
-    const mount = async () => { const ctx = new Context(); await ctx.plugin(LlmRuntime).await(); await ctx.plugin(Storage).await(); await ctx.plugin(Json, { root: data }).await(); await ctx.plugin(Domain, { backend: 'json' }).await(); return ctx; };
+    const profile = await nativeProfileFixture(t, { home: join(dir, 'dsh') });
+    const mount = async () => { const ctx = new Context(); profile.provide(ctx); await ctx.plugin(LlmRuntime).await(); await ctx.plugin(Storage).await(); await ctx.plugin(Json, { root: data }).await(); await ctx.plugin(Domain, { backend: 'json' }).await(); return ctx; };
     const ctx = await mount();
     t.after(() => ctx.fiber.dispose());
-    const a = await compact.openSharedCompactionStore(ctx), b = await model.openSharedCompactionStore(ctx);
+    const [a, b] = await Promise.all([compact.openSharedCompactionStore(ctx), model.openSharedCompactionStore(ctx)]);
+    assert.equal(a, b, 'independent bundles must share the pending first open, not merely a warmed store');
     const written = await Promise.allSettled([a.write({ expectedRevision: 0, defaults: policy('canonical'), workspaceOverrides: {} }), b.write({ expectedRevision: 0, defaults: policy('racing'), workspaceOverrides: {} })]);
     assert.deepEqual(written.map(x => x.status), ['fulfilled', 'rejected']);
     let ms: any, cs: any;

@@ -40,7 +40,7 @@ test('real native imported journal calls the selected settings owner once, never
  for(let i=0;i<4;i++)f.status();assert.equal(received.length,1,'status reads carry no adoption side effects');
  await f.update({migration:{auto:false},modules:{retry:received[0]!.config}});await f.update({migration:{auto:true},modules:{retry:received[0]!.config}});
  await until(()=>f.status(),state=>state.report?.modules.retry?.phase==='applied','same real retry journal reobserved');
- assert.equal(await readFile(f.ctx.get('profileContext').patchPath,'utf8'),journal.steps[1].after,'same durable after-image proves this is the same eligible operation');
+ assert.equal(await readFile(f.ctx.get('profileContext')!.patchPath,'utf8'),journal.steps[1].after,'same durable after-image proves this is the same eligible operation');
  assert.equal(received.length,1,'same eligible operation is delivered once to this settings owner');
  const next={migration:{auto:true},modules:{retry:{...received[0]!.config,retryEmptyResponse:true}}};
  await f.update(next);assert.equal(received.length,1,'ordinary edits are not a new import');

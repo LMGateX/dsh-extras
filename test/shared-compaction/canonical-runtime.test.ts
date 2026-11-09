@@ -10,10 +10,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openSharedCompactionStore } from '../../src/shared-compaction/store.ts';
 import { participateCompaction } from '../../src/shared-compaction/index.ts';
+import { nativeProfileFixture } from '../native-profile-fixture.ts';
 const fixed = (effort: string) => ({ enabled: true, rules: [{ scope: 'all' as const, mode: 'fixed' as const, effort }] });
 test('canonical policy survives executor switch and async workspace lookup captures accepted snapshot', async (t) => {
     const ctx = new Context();
     t.after(() => ctx.fiber.dispose());
+    (await nativeProfileFixture(t)).provide(ctx);
     await ctx.plugin(LlmRuntime).await();
     await ctx.plugin(Storage).await();
     await ctx.plugin(Json, { root: await mkdtemp(join(tmpdir(), 'shared-policy-')) }).await();
@@ -45,6 +47,7 @@ test('canonical policy survives executor switch and async workspace lookup captu
 test('inconsistent initial legacy seeds fail closed until an explicit canonical save', async (t) => {
     const ctx = new Context();
     t.after(() => ctx.fiber.dispose());
+    (await nativeProfileFixture(t)).provide(ctx);
     await ctx.plugin(LlmRuntime).await();
     await ctx.plugin(Storage).await();
     await ctx.plugin(Json, { root: await mkdtemp(join(tmpdir(), 'shared-seeds-')) }).await();

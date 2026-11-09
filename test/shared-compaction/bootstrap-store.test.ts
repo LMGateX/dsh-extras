@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { Context } from '@deepseek-ai/cordis';
 import Storage, { storageBackendServiceKey, type StorageBackend } from '@deepseek-ai/dsh-storage';
@@ -8,21 +8,22 @@ import { mkdtemp } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { openSharedCompactionStore, CompactionConflictError } from '../../src/shared-compaction/store.ts';
+import { nativeProfileFixture } from '../native-profile-fixture.ts';
 import { resolveCompactionReasoning } from '../../src/modules/compact-context/reasoning-policy.ts';
 import { mountLegacyCompactionSeed, prepareLegacyCompactionSeeds, legacyCompactionSeedStatus } from '../../src/shared-compaction/legacy-seed.ts';
 
 const fixed = (effort: string) => resolveCompactionReasoning({ enabled: true, rules: [{ scope: 'all', mode: 'fixed', effort }] });
 const inherit = () => resolveCompactionReasoning({ enabled: true, rules: [{ scope: 'all', mode: 'inherit' }] });
 const admitted = () => true;
-async function context(root: string) {
-    const ctx = new Context(); await ctx.plugin(Storage).await();
+async function context(t: TestContext, root: string) {
+    const ctx = new Context(); (await nativeProfileFixture(t, { home: join(root, 'dsh') })).provide(ctx); await ctx.plugin(Storage).await();
     await ctx.plugin(Json, { root }).await(); await ctx.plugin(Domain, { backend: 'json' }).await();
     return ctx;
 }
 
 test('native bootstrap snapshot and consumed metadata survive service-root restart without materializing canonical revision', async t => {
     const root = await mkdtemp(join(tmpdir(), 'compaction-bootstrap-restart-'));
-    const first = await context(root); t.after(() => first.fiber.dispose());
+    const first = await context(t, root); t.after(() => first.fiber.dispose());
     const store = await openSharedCompactionStore(first);
     const initial = store.read(); const source = 'bootstrap-source';
     const captured = await store.captureLegacyBootstrap(source, { policy: resolveCompactionReasoning(), moduleEnabled: false }, admitted);
@@ -30,7 +31,7 @@ test('native bootstrap snapshot and consumed metadata survive service-root resta
     await store.completeLegacyBootstrap(source, admitted);
     assert.deepEqual(store.read(), initial);
     await first.fiber.dispose();
-    const second = await context(root); t.after(() => second.fiber.dispose());
+    const second = await context(t, root); t.after(() => second.fiber.dispose());
     const reloaded = await openSharedCompactionStore(second);
     const remembered = await reloaded.captureLegacyBootstrap(source, { policy: inherit(), moduleEnabled: true }, admitted);
     assert.deepEqual(remembered, { policy: resolveCompactionReasoning(), moduleEnabled: false, consumed: true });
@@ -42,7 +43,7 @@ test('native bootstrap snapshot and consumed metadata survive service-root resta
 
 test('native migration receipts retain exact immutable backups, reject reuse and preserve accepted canonical edits and overrides', async t => {
     const root = await mkdtemp(join(tmpdir(), 'compaction-adoption-receipts-'));
-    const ctx = await context(root); t.after(() => ctx.fiber.dispose());
+    const ctx = await context(t, root); t.after(() => ctx.fiber.dispose());
     const store = await openSharedCompactionStore(ctx);
     const original = inherit();
     const pending = store.adoptLegacyReceipt('operation-a', 'compact-context', original, admitted);
@@ -61,7 +62,7 @@ test('native migration receipts retain exact immutable backups, reject reuse and
     assert.equal(recovered.revision, 3); assert.deepEqual(recovered.defaults, fixed('late-original'));
     assert.deepEqual(recovered.workspaceOverrides, overrides);
     await ctx.fiber.dispose();
-    const cold = await context(root); t.after(() => cold.fiber.dispose());
+    const cold = await context(t, root); t.after(() => cold.fiber.dispose());
     const persisted = await openSharedCompactionStore(cold);
     assert.equal(await persisted.adoptLegacyReceipt('operation-b', 'compact-context', fixed('late-original'), admitted), 'preserved');
     assert.equal(persisted.read().revision, 3);
@@ -69,7 +70,7 @@ test('native migration receipts retain exact immutable backups, reject reuse and
 });
 
 test('consumed conflicting bootstrap cannot pick a master when another settings owner unloads', async t => {
-    const ctx = await context(await mkdtemp(join(tmpdir(), 'compaction-consumed-conflict-')));
+    const ctx = await context(t, await mkdtemp(join(tmpdir(), 'compaction-consumed-conflict-')));
     t.after(() => ctx.fiber.dispose());
     const first = ctx.plugin({ name: 'compact-conflict-settings', apply(scope: Context) {
         mountLegacyCompactionSeed(scope, 'compact-context', 'compact-conflict', () => ({ enabled: false, compactionReasoning: inherit() }));
@@ -88,7 +89,7 @@ test('consumed conflicting bootstrap cannot pick a master when another settings 
 });
 
 test('a receipt cannot resolve conflicting bootstrap inputs by load order', async t => {
-    const ctx = await context(await mkdtemp(join(tmpdir(), 'compaction-adoption-conflict-')));
+    const ctx = await context(t, await mkdtemp(join(tmpdir(), 'compaction-adoption-conflict-')));
     t.after(() => ctx.fiber.dispose()); const store = await openSharedCompactionStore(ctx);
     assert.equal(await store.adoptLegacyReceipt('operation-conflict', 'compact-context', inherit(), admitted, false), 'conflict');
     assert.equal(store.read().revision, 0); assert.equal(store.read().defaults.enabled, false);
@@ -97,15 +98,18 @@ test('a receipt cannot resolve conflicting bootstrap inputs by load order', asyn
     assert.deepEqual((await store.recoverLegacyAdoption('operation-conflict', 0)).defaults, inherit());
 });
 
-async function pausedContext(tableName: string) {
-    const ctx = new Context(); await ctx.plugin(Storage).await();
-    await ctx.plugin(Json, { root: await mkdtemp(join(tmpdir(), 'compaction-adoption-paused-')) }).await();
+async function pausedContext(t: TestContext, tableName: string) {
+    const ctx = new Context();
+    const root = await mkdtemp(join(tmpdir(), 'compaction-adoption-paused-'));
+    (await nativeProfileFixture(t, { home: join(root, 'dsh') })).provide(ctx);
+    await ctx.plugin(Storage).await(); await ctx.plugin(Json, { root }).await();
     const native = ctx.get(storageBackendServiceKey('json')) as StorageBackend;
     const kv = native.kv; assert.ok(kv, 'native JSON must expose its public KV backend');
     let entered!: () => void; let release!: () => void; let paused = false;
     const backing = new Promise<void>(resolve => { entered = resolve; });
     const gate = new Promise<void>(resolve => { release = resolve; });
     const delayed: StorageBackend = { kv: { open: async descriptor => {
+        assert.match(descriptor.name, /^dsh_extras_compaction_[0-9a-f]{64}$/);
         const unit = await kv.open(descriptor);
         return { loadAll: () => unit.loadAll(), putRecord: async (table, key, value) => {
             if (table === tableName && !paused) { paused = true; entered(); await gate; }
@@ -122,7 +126,7 @@ async function pausedContext(tableName: string) {
 }
 
 test('a settings source admitted during pending bootstrap is included before the shared preparation promise resolves', async t => {
-    const { ctx, backing, release } = await pausedContext('bootstrap');
+    const { ctx, backing, release } = await pausedContext(t, 'bootstrap');
     t.after(() => ctx.fiber.dispose()); t.after(() => release());
     await ctx.plugin({ name: 'initial-compact-settings', apply(scope: Context) {
         mountLegacyCompactionSeed(scope, 'compact-context', 'initial-compact', () => ({ enabled: false, compactionReasoning: inherit() }));
@@ -144,7 +148,7 @@ test('a settings source admitted during pending bootstrap is included before the
 });
 
 test('a paused native receipt backup cannot seed after admission expires and remains retryable rather than consumed', async t => {
-    const { ctx, backing, release } = await pausedContext('adoptions');
+    const { ctx, backing, release } = await pausedContext(t, 'adoptions');
     t.after(() => ctx.fiber.dispose()); t.after(() => release());
     const store = await openSharedCompactionStore(ctx); let live = true;
     const pending = store.adoptLegacyReceipt('operation-paused', 'compact-context', inherit(), () => live);

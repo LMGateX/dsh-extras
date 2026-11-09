@@ -8,10 +8,12 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openSharedCompactionStore } from '../../src/shared-compaction/store.ts';
+import { nativeProfileFixture } from '../native-profile-fixture.ts';
 const defaults = { enabled: true, rules: [{ scope: 'all' as const, mode: 'fixed' as const, effort: 'saved' }] };
 test('native profile authority serializes two entry CAS writes and preserves empty overrides', async (t) => {
     const ctx = new Context();
     t.after(() => ctx.fiber.dispose());
+    (await nativeProfileFixture(t)).provide(ctx);
     await ctx.plugin(Storage).await();
     await ctx.plugin(Json, { root: await mkdtemp(join(tmpdir(), 'shared-store-')) }).await();
     await ctx.plugin(Domain, { backend: 'json' }).await();
@@ -27,7 +29,8 @@ test('native profile authority serializes two entry CAS writes and preserves emp
 });
 test('legacy import is recoverable, preserves false/empty and never overwrites accepted canonical policy', async (t) => {
     const root = await mkdtemp(join(tmpdir(), 'shared-import-'));
-    const mount = async () => { const ctx = new Context(); await ctx.plugin(Storage).await(); await ctx.plugin(Json, { root }).await(); await ctx.plugin(Domain, { backend: 'json' }).await(); return { ctx, store: await openSharedCompactionStore(ctx) }; };
+    const profile = await nativeProfileFixture(t, { home: join(root, 'dsh') });
+    const mount = async () => { const ctx = new Context(); profile.provide(ctx); await ctx.plugin(Storage).await(); await ctx.plugin(Json, { root }).await(); await ctx.plugin(Domain, { backend: 'json' }).await(); return { ctx, store: await openSharedCompactionStore(ctx) }; };
     const first = await mount();
     t.after(() => first.ctx.fiber.dispose());
     assert.equal(await first.store.importLegacy('compact-context', { enabled: false, rules: [] }), 'imported');

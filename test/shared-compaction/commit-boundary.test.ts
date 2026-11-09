@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { Context } from '@deepseek-ai/cordis';
 import Storage, { storageBackendServiceKey, type StorageBackend } from '@deepseek-ai/dsh-storage';
@@ -8,15 +8,18 @@ import { mkdtemp } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { openSharedCompactionStore } from '../../src/shared-compaction/store.ts';
+import { nativeProfileFixture } from '../native-profile-fixture.ts';
 import { resolveCompactionReasoning } from '../../src/modules/compact-context/reasoning-policy.ts';
 import { mountLegacyCompactionSeed, prepareLegacyCompactionSeeds, adoptLegacyCompactionSeed, legacyCompactionSeedStatus } from '../../src/shared-compaction/legacy-seed.ts';
 
 const inherit = () => resolveCompactionReasoning({ enabled: true, rules: [{ scope: 'all', mode: 'inherit' }] });
 const different = () => resolveCompactionReasoning({ enabled: true, rules: [{ scope: 'all', mode: 'fixed', effort: 'subsequent-original' }] });
 const nativeTurn = () => new Promise<void>(resolve => setImmediate(resolve));
-async function pausedContext(options: { pauseAt?: 'global' | 'legacy'; failGlobal?: boolean; failAck?: boolean; pauseAck?: boolean } = {}) {
-    const ctx = new Context(); await ctx.plugin(Storage).await();
-    await ctx.plugin(Json, { root: await mkdtemp(join(tmpdir(), 'compaction-final-global-')) }).await();
+async function pausedContext(t: TestContext, options: { pauseAt?: 'global' | 'legacy'; failGlobal?: boolean; failAck?: boolean; pauseAck?: boolean } = {}) {
+    const ctx = new Context();
+    const root = await mkdtemp(join(tmpdir(), 'compaction-final-global-'));
+    (await nativeProfileFixture(t, { home: join(root, 'dsh') })).provide(ctx);
+    await ctx.plugin(Storage).await(); await ctx.plugin(Json, { root }).await();
     const native = ctx.get(storageBackendServiceKey('json')) as StorageBackend;
     const kv = native.kv; assert.ok(kv);
     let entered!: () => void; let release!: () => void; let paused = false; let failed = false;
@@ -28,6 +31,7 @@ async function pausedContext(options: { pauseAt?: 'global' | 'legacy'; failGloba
     const stats = { acknowledgementAttempts: 0 };
     const pause = async () => { if (!paused) { paused = true; entered(); await gate; } };
     const delayed: StorageBackend = { kv: { open: async descriptor => {
+        assert.match(descriptor.name, /^dsh_extras_compaction_[0-9a-f]{64}$/);
         const unit = await kv.open(descriptor);
         return { loadAll: () => unit.loadAll(), putRecord: async (table, key, value) => {
             if (options.pauseAt === 'legacy' && table === 'legacy') await pause();
@@ -74,7 +78,7 @@ test('public native async effect disposer is a real disposal-completion barrier'
 });
 
 test('an admitted bootstrap global write keeps its native settings owner disposal pending until durability', async t => {
-    const { ctx, backing, release } = await pausedContext();
+    const { ctx, backing, release } = await pausedContext(t);
     t.after(async () => { release(); await ctx.fiber.dispose(); });
     const { owner } = await settings(ctx, 'compact-context', 'bootstrap-commit-owner', inherit());
     const originalPreparation = prepareLegacyCompactionSeeds(ctx); await backing;
@@ -92,7 +96,7 @@ test('an admitted bootstrap global write keeps its native settings owner disposa
 });
 
 test('a committed helper adoption survives owner closure without a false cancellation or dead-owner publication', async t => {
-    const { ctx, backing, release, acknowledging, releaseAck } = await pausedContext({ pauseAck: true });
+    const { ctx, backing, release, acknowledging, releaseAck } = await pausedContext(t, { pauseAck: true });
     t.after(async () => { releaseAck(); release(); await ctx.fiber.dispose(); });
     const { owner, scope } = await settings(ctx, 'compact-context', 'adoption-commit-owner');
     await prepareLegacyCompactionSeeds(ctx);
@@ -116,7 +120,7 @@ test('a committed helper adoption survives owner closure without a false cancell
 });
 
 test('direct store callers can reserve the actual commit and receive imported after post-admission liveness changes', async t => {
-    const { ctx, backing, release } = await pausedContext();
+    const { ctx, backing, release } = await pausedContext(t);
     t.after(async () => { release(); await ctx.fiber.dispose(); });
     const store = await openSharedCompactionStore(ctx); let live = true; let ticket: Promise<void> | undefined;
     const operation = store.adoptLegacyReceipt('direct-admitted-operation', 'compact-context', inherit(), () => live, true,
@@ -129,7 +133,7 @@ test('direct store callers can reserve the actual commit and receive imported af
 });
 
 test('a source enrolled after irreversible admission is subsequent preserved input with its exact backup', async t => {
-    const { ctx, backing, release } = await pausedContext();
+    const { ctx, backing, release } = await pausedContext(t);
     t.after(async () => { release(); await ctx.fiber.dispose(); });
     await settings(ctx, 'compact-context', 'first-admitted-source', inherit());
     const originalPreparation = prepareLegacyCompactionSeeds(ctx); await backing;
@@ -142,7 +146,7 @@ test('a source enrolled after irreversible admission is subsequent preserved inp
 });
 
 test('conflicting source enrollment before final global admission still backs up both originals and seeds nothing', async t => {
-    const { ctx, backing, release } = await pausedContext({ pauseAt: 'legacy' });
+    const { ctx, backing, release } = await pausedContext(t, { pauseAt: 'legacy' });
     t.after(async () => { release(); await ctx.fiber.dispose(); });
     await settings(ctx, 'compact-context', 'pre-admitted-first', inherit());
     const originalPreparation = prepareLegacyCompactionSeeds(ctx); await backing;
@@ -155,7 +159,7 @@ test('conflicting source enrollment before final global admission still backs up
 });
 
 test('rejected native global durability leaves the original receipt unconsumed and retryable', async t => {
-    const { ctx, backing, release } = await pausedContext({ failGlobal: true });
+    const { ctx, backing, release } = await pausedContext(t, { failGlobal: true });
     t.after(async () => { release(); await ctx.fiber.dispose(); });
     const store = await openSharedCompactionStore(ctx);
     const operation = store.adoptLegacyReceipt('failed-global-operation', 'compact-context', inherit(), () => true);
@@ -167,7 +171,7 @@ test('rejected native global durability leaves the original receipt unconsumed a
 });
 
 test('failed receipt acknowledgement after committed global IO is neither fabricated cancellation nor a consumed marker', async t => {
-    const { ctx, backing, release, stats } = await pausedContext({ failAck: true });
+    const { ctx, backing, release, stats } = await pausedContext(t, { failAck: true });
     t.after(async () => { release(); await ctx.fiber.dispose(); });
     const store = await openSharedCompactionStore(ctx);
     const operation = store.adoptLegacyReceipt('failed-ack-operation', 'compact-context', inherit(), () => true);
