@@ -80,6 +80,20 @@ const spec = defineDomain({ name: 'dsh_extras_compaction', version: 1, global: {
     bootstrap: { valueSchema: seedSchema(true) },
     adoptions: { valueSchema: seedSchema(false) },
 } });
+/** Called synchronously before irreversible global IO. Direct callers own any
+ * lifecycle drain; the completion includes durable receipt acknowledgement. */
+export type LegacyCommitObserver = (completion: Promise<void>) => void;
+async function irreversibleCommit<T>(onCommit: LegacyCommitObserver | undefined, work: () => Promise<T>): Promise<T> {
+    let resolve!: () => void; let reject!: (error: unknown) => void;
+    const completion = new Promise<void>((yes, no) => { resolve = yes; reject = no; });
+    // A lifecycle observer may join later; the operation's original rejection is
+    // still returned to its caller, not converted into a successful ticket.
+    void completion.catch(() => {});
+    try {
+        onCommit?.(completion);
+        const result = await work(); resolve(); return result;
+    } catch (error) { reject(error); throw error; }
+}
 export interface SharedCompactionStore {
     read(): SharedCompactionSnapshot;
     write(candidate: SharedCompactionWrite): Promise<SharedCompactionSnapshot>;
@@ -88,8 +102,8 @@ export interface SharedCompactionStore {
     recoverLegacy(source: 'compact-context' | 'model-policy', expectedRevision: number): Promise<SharedCompactionSnapshot>;
     captureLegacyBootstrap(source: string, candidate: Omit<LegacyBootstrapSnapshot, 'consumed'>, admitted: () => boolean): Promise<LegacyBootstrapSnapshot>;
     completeLegacyBootstrap(source: string, admitted: () => boolean): Promise<void>;
-    seedLegacyBootstrap(policy: CompactionReasoningPolicy, admitted: () => boolean): Promise<'imported' | 'preserved' | 'cancelled'>;
-    adoptLegacyReceipt(source: string, module: 'compact-context' | 'model-policy', policy: CompactionReasoningPolicy, admitted: () => boolean, apply?: boolean): Promise<'imported' | 'preserved' | 'conflict' | 'cancelled'>;
+    seedLegacyBootstrap(policy: CompactionReasoningPolicy, admitted: () => boolean, onCommit?: LegacyCommitObserver): Promise<'imported' | 'preserved' | 'cancelled'>;
+    adoptLegacyReceipt(source: string, module: 'compact-context' | 'model-policy', policy: CompactionReasoningPolicy, admitted: () => boolean, apply?: boolean, onCommit?: LegacyCommitObserver): Promise<'imported' | 'preserved' | 'conflict' | 'cancelled'>;
     recoverLegacyAdoption(source: string, expectedRevision: number): Promise<SharedCompactionSnapshot>;
 }
 const KEY = Symbol.for('dsh-extras.shared-compaction.store.v1');
@@ -154,17 +168,21 @@ export function openSharedCompactionStore(ctx: Context): Promise<SharedCompactio
                     if (!previous.consumed) await bootstrap.put(source, { ...previous, consumed: true });
                 });
             },
-            seedLegacyBootstrap(policy, admitted) {
+            seedLegacyBootstrap(policy, admitted, onCommit) {
                 const backup = resolveCompactionReasoning(policy);
                 return enqueue(async () => {
                     if (!admitted()) return 'cancelled';
                     const current = domain.global.get(); validate(current);
                     if (current.revision !== 0) return 'preserved';
                     const next = { ...current, revision: 1, defaults: backup };
-                    validate(next); await domain.global.set(next); notify(); return 'imported';
+                    validate(next);
+                    return irreversibleCommit(onCommit, async () => {
+                        if (!admitted()) return 'cancelled' as const;
+                        await domain.global.set(next); notify(); return 'imported' as const;
+                    });
                 });
             },
-            adoptLegacyReceipt(source, module, policy, admitted, apply = true) {
+            adoptLegacyReceipt(source, module, policy, admitted, apply = true, onCommit) {
                 seedKey(source);
                 const backup = resolveCompactionReasoning(policy);
                 return enqueue(async () => {
@@ -180,12 +198,17 @@ export function openSharedCompactionStore(ctx: Context): Promise<SharedCompactio
                     if (!admitted()) return 'cancelled';
                     const current = domain.global.get(); validate(current);
                     const result = current.revision !== 0 ? 'preserved' : apply ? 'imported' : 'conflict';
-                    if (result === 'imported') {
+                    if (result === 'imported') return irreversibleCommit(onCommit, async () => {
+                        // This final fence ends cancellable admission. A later owner
+                        // closure must drain, not relabel a durable write cancelled.
+                        if (!admitted()) return 'cancelled' as const;
                         await domain.global.set({ ...current, revision: 1, defaults: backup });
                         notify();
-                    }
-                    // A pending backup is not a consumed receipt. A remounted root can
-                    // retry the same immutable input after disposal or durable failure.
+                        // A failed acknowledgement rejects honestly with the global
+                        // already committed; the immutable pending receipt can retry.
+                        await adoptions.put(source, { policy: backup, consumed: true });
+                        return 'imported' as const;
+                    });
                     if (!admitted()) return 'cancelled';
                     await adoptions.put(source, { policy: backup, consumed: true });
                     return result;

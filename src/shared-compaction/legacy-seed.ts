@@ -14,6 +14,7 @@ export async function adoptLegacyCompactionSeed(ctx: Context, module: Module, co
     const policy = resolveCompactionReasoning(config.compactionReasoning);
     const moduleEnabled = config.enabled === undefined ? module === 'compact-context' : config.enabled === true;
     const state = registry(ctx);
+    if (state) retireInactive(state);
     const owners = [...(state?.entries ?? [])].filter(e => e.live && e.owner === ctx.fiber && e.module === module);
     if (!state || owners.length !== 1) throw new Error('legacy adoption settings owner unavailable or ambiguous');
     const entry = owners[0]!;
@@ -21,11 +22,15 @@ export async function adoptLegacyCompactionSeed(ctx: Context, module: Module, co
     const source = JSON.stringify(['migration', entry.distribution, module, operationId, receipt.sourceModuleId]);
     await prepareLegacyCompactionSeeds(ctx);
     const generation = state.generation;
-    const admitted = () => entry.live && entry.owner === ctx.fiber && state.entries.has(entry) && state.generation === generation;
+    const admitted = () => { retireInactive(state); return ownerActive(entry) && entry.owner === ctx.fiber && state.entries.has(entry) && state.generation === generation; };
     if (!admitted()) throw new Error('legacy adoption owner disposed');
     const store = await openSharedCompactionStore(ctx.root);
-    const result = await store.adoptLegacyReceipt(source, module, policy, admitted, state.diagnostic.phase !== 'conflict');
-    if (result === 'cancelled' || !admitted()) throw new Error('legacy adoption owner disposed');
+    const result = await store.adoptLegacyReceipt(source, module, policy, admitted, state.diagnostic.phase !== 'conflict',
+        completion => registerCommit([entry], completion));
+    if (result === 'cancelled') throw new Error('legacy adoption owner disposed before global-write admission');
+    // Success is real even if closure began after irreversible admission. The
+    // owner drains its ticket, but an expired projection must not be published.
+    if (!admitted()) return;
     state.diagnostic = { phase: result, sources: [{ module, distribution: entry.distribution, provenance: 'migration-operation',
         explicitness: 'unverified', operationId, moduleEnabled, participationEnabled: policy.enabled }] };
     state.adopted = true;
@@ -36,6 +41,7 @@ interface Entry {
     initial?: Omit<LegacyBootstrapSnapshot, 'consumed'>;
     owner: Context['fiber'];
     live: boolean;
+    commits: Set<Promise<void>>;
 }
 export interface LegacySeedDiagnostic {
     phase: 'none' | 'pending' | 'imported' | 'preserved' | 'conflict' | 'unavailable';
@@ -57,6 +63,22 @@ interface Registry {
     diagnostic: LegacySeedDiagnostic;
     adopted?: boolean;
 }
+// Public Cordis states: LOADING=1 and ACTIVE=2. UNLOADING closes admission
+// before asynchronous effect cleanup itself gets its native Promise turn.
+function ownerActive(entry: Entry): boolean { return entry.live && (entry.owner.state === 1 || entry.owner.state === 2); }
+function retire(state: Registry, entry: Entry): void {
+    entry.live = false;
+    if (state.entries.delete(entry)) state.generation++;
+}
+function retireInactive(state: Registry): void {
+    for (const entry of state.entries) if (!ownerActive(entry)) retire(state, entry);
+}
+function registerCommit(entries: Entry[], completion: Promise<void>): void {
+    for (const entry of entries) entry.commits.add(completion);
+    const release = () => { for (const entry of entries) entry.commits.delete(completion); };
+    void completion.then(release, release);
+}
+const PRESERVED = 'canonical authority already won global-write admission; subsequent legacy input is backed up, and accepted policy is preserved';
 const KEY = Symbol.for('dsh-extras.shared-compaction.legacy-seeds.v1');
 function registry(ctx: Context, create = false): Registry | undefined {
     const root = ctx.root as Context & {
@@ -71,7 +93,7 @@ export function legacyCompactionSeedStatus(ctx: Context, snapshot?: SharedCompac
     const value = registry(ctx)?.diagnostic;
     if (!value)
         return;
-    return structuredClone(value.phase === 'conflict' && snapshot && snapshot.revision > 0 ? { ...value, phase: 'preserved' as const, reason: 'accepted canonical policy wins over legacy input' } : value);
+    return structuredClone(value.phase === 'conflict' && snapshot && snapshot.revision > 0 ? { ...value, phase: 'preserved' as const, reason: PRESERVED } : value);
 }
 /** Register settings-root input even when the whole feature fiber is absent. */
 export function mountLegacyCompactionSeed(ctx: Context, module: Module, distribution: string, getConfig?: () => Record<string, unknown>): void {
@@ -84,10 +106,15 @@ export function mountLegacyCompactionSeed(ctx: Context, module: Module, distribu
         initial = { policy: resolveCompactionReasoning(config.compactionReasoning),
             moduleEnabled: config.enabled === undefined ? module === 'compact-context' : config.enabled === true };
     } catch { /* Invalid accepted input is reported fail closed by preparation. */ }
-    const entry: Entry = { module, distribution, initial, owner: ctx.fiber, live: true };
+    const entry: Entry = { module, distribution, initial, owner: ctx.fiber, live: true, commits: new Set() };
     state.entries.add(entry);
     state.generation++;
-    ctx.effect(() => () => { entry.live = false; state.entries.delete(entry); state.generation++; });
+    ctx.effect(() => async () => {
+        retire(state, entry);
+        // Never wait on pre-admission backups or another owner's unreserved work.
+        // Native global IO already admitted for this owner is not cancellable.
+        await Promise.allSettled([...entry.commits]);
+    });
     ctx.inject(['storageDomain'], () => { void prepareLegacyCompactionSeeds(ctx); });
 }
 /** Deferred same-root batch, so two settings surfaces cannot import by load order. */
@@ -99,9 +126,10 @@ export function prepareLegacyCompactionSeeds(ctx: Context): Promise<void> {
         return state.pending;
     let processedGeneration = state.generation;
     const batch = async () => {
+        retireInactive(state);
         const generation = state.generation;
         const entries = [...state.entries].filter(e => e.live);
-        const admitted = () => generation === state.generation && entries.every(e => e.live) && entries.length > 0;
+        const admitted = () => { retireInactive(state); return generation === state.generation && entries.every(ownerActive) && entries.length > 0; };
         try {
             const candidates: {
                 entry: Entry;
@@ -146,7 +174,7 @@ export function prepareLegacyCompactionSeeds(ctx: Context): Promise<void> {
                 return;
             const current = store.read();
             if (current.revision !== 0) {
-                state.diagnostic = { phase: 'preserved', sources, reason: 'accepted canonical policy wins over legacy input' };
+                state.diagnostic = { phase: 'preserved', sources, reason: PRESERVED };
                 await complete();
                 return;
             }
@@ -157,8 +185,9 @@ export function prepareLegacyCompactionSeeds(ctx: Context): Promise<void> {
             }
             if (!admitted())
                 return;
-            const result = await store.seedLegacyBootstrap(candidates[0]!.policy, admitted);
-            if (result === 'cancelled') return;
+            const result = await store.seedLegacyBootstrap(candidates[0]!.policy, admitted,
+                completion => registerCommit(candidates.map(candidate => candidate.entry), completion));
+            if (result === 'cancelled' || !admitted()) return;
             state.diagnostic = { phase: result, sources };
             await complete();
         }
