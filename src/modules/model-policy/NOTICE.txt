@@ -1,0 +1,4 @@
+Model policy — original DSH Extras implementation, MIT License.
+Copyright (c) 2026 DSH Extras contributors.
+Shared compaction reasoning is sourced from the same Extras shared-compaction source as compact-context; original compact-context attribution remains in its NOTICE.
+Uses public native DSH Agent/LLM/workspace interfaces; no upstream host implementation is copied or patched.

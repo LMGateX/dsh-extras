@@ -1,5 +1,20 @@
 # Release acceptance matrix
 
+For 0.5.0 additionally execute the [workspace policy contract](WORKSPACE_POLICY_050.md) and the rows below; the independent [native terminal recovery extension](NATIVE_RECOVERY_050.md) has its own adapted-host gate. Stock rc.1 must report recovery unavailable, not a working button. Earlier gates remain unless the explicit 0.5.0 amendments change the configuration authority or distribution count.
+
+| ID | Additional 0.5.0 criterion |
+| --- | --- |
+| WP-1 | New model-policy is off by default in source/native/packed schemas, migration and runtime; explicit enable survives. Existing four modules retain behavior. Existing 0.4 journal upgrades preserve source/backup/operation provenance while adding the fresh disabled module. |
+| WP-2 | Real native Agent/LLM calls verify two workspaces, root/all depths, spawn/fork seed, resident wake, accepted live updates, cold resume and durable manual choice. Never route a captured step via deprecated hooks. |
+| SC-1 | Both standalone distributions execute full native compaction reasoning without the other package; separately bundled copies share one persistent canonical revision, exact workspace overrides and deterministic single executor with safe disable/HMR/foreign-owner handling. |
+| SC-2 | Legacy policy import/recovery is recorded and CAS-safe; both settings routes use native owner/Host/Origin admission, bounded semantic validation and read-only refusal. In-flight requests retain captured canonical policy/effort; native automatic/manual/tool/overflow/model-switch gates stay mandatory. |
+| UI-2 | Emitted and actual packed settings support module/responsibility collapse, expand-all, keyboard/focus, Chinese/English and light/dark/narrow layout without remount/write/draft loss; hidden drafts receive conflicts and accurate dirty/error summaries. |
+| UI-3 | Two shared-policy entry surfaces edit the same accepted authority and handle revision conflicts without rebase, preserve explicit empty rules and workspace reset/inheritance, retain drafts on collapse and reject scope changes with unsaved changes. |
+| RET-1 | True native deepseek/pi provider registrations receive revision-fenced path mutations only; normal5 dispatches at most six attempts, always includes permanent failures with explicit risk notice, fixed/exponential settings and native cancellation hold, secrets/other fields survive. |
+| DIST-3 | Six synchronized packed consumers, strict public declarations/selected code and peers; actual disposable native host/browser install, upgrade and settings persistence. Published download checksums match tested archives. No Actions/npm publish. |
+| REC-1 | Stock-host recovery is truthfully unavailable. Adapted-host action requires host-proven terminal budget exhaustion, exact failed request resume, no synthetic messages/completed-tool replay, native current admission, stale/busy/duplicate fencing, finite re-exhaustion and restart behavior evidence. |
+| INSTALL-1 | Only after isolated and remote gates, explicit user-authorized local install uses discovered current profile, restricted backup, native manager and rollback instructions; report installed vs pending restart vs observed active separately. |
+
 For 0.4.0 additionally execute RC-1 through RC-6 from the [exact rc.1 compatibility contract](DSH_RC1_040.md), retaining every earlier baseline/REASON/PAR/CLI gate.
 
 For 0.3.1 additionally execute CLI-1 through CLI-7 from the [standalone migration entry contract](MIGRATION_CLI_031.md). Test the packed absent-peer/plain-Node seam before provisioning host links, and retain all existing gates.

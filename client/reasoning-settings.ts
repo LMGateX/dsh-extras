@@ -74,7 +74,8 @@ export function createReasoningSettingsView(React: any, catalog?: ReasoningCatal
     }
     React.useEffect(() => editor.start(), [editor]);
     const draft = React.useSyncExternalStore(editor.subscribe, editor.getSnapshot, editor.getSnapshot);
-    (React.useLayoutEffect??React.useEffect)(()=>{onDirtyChange?.(draft.dirty);},[draft.dirty,onDirtyChange]);
+    const syncDirty=typeof window==='undefined'?React.useEffect:(React.useLayoutEffect??React.useEffect);
+    syncDirty(()=>{onDirtyChange?.(draft.dirty);},[draft.dirty,onDirtyChange]);
     const disabled = !writableGate || draft.status !== 'ready' || !draft.writable || draft.revision === undefined || draft.saving;
     const notices: Record<MetadataNotice, string> = {
       '': '',

@@ -2,35 +2,36 @@
 
 One install, independent enhancements. **一体安装，功能独立开关。**
 
-Compact-context, native retry classification, browser session chimes and goal waiting behind one plugin card. Four genuinely independent single-feature packages are built from the same source, not maintained as forks.
+Workspace-aware model defaults, shared compaction reasoning, native retry management, browser session chimes and goal waiting behind one plugin card. Five genuinely independent single-feature packages are built from the same source, not maintained as forks.
 
-**Target (Extras 0.4.0):** exact DSH `0.2.2-rc.1`, Node `>=24.9.0`. No unverified broad compatibility claim. Alpha.3 users should retain Extras 0.3.1. Not published to npm: install a GitHub Release tarball.
+**Target (Extras 0.5.0):** exact DSH `0.2.2-rc.1`, Node `>=24.9.0`. No unverified broad compatibility claim. Alpha.3 users should retain Extras 0.3.1. Not published to npm: install a GitHub Release tarball.
 
 ## Distributions
 
 | Package | Capabilities |
 | --- | --- |
-| dsh-extras | All four, independently selectable |
+| dsh-extras | All five, independently selectable; the new model-policy module defaults off |
+| dsh-extras-model-policy | Workspace defaults for root/all descendant model routes and reasoning, plus standalone shared compaction reasoning |
 | dsh-extras-compact-context | Native-policy compaction tools, independent request reasoning policy, optional status/guidance/pressure and PTC timeouts |
-| dsh-extras-retry | Stream-error and empty-response classification; official DSH retry owns execution |
+| dsh-extras-retry | Stream/empty-response classification and native provider retry settings; official DSH retry owns execution |
 | dsh-extras-chime | Completion/blocked/question/error sounds, quiet hours, rest mode, sidebar and banners |
 | dsh-extras-goal-wait | Four goal-continuation strategies: activation gate, pinned background-aware replacement, native, or off |
 
-Choose the combined package **or** any subset of distinct splits. Two distributions claiming the same capability produce a fail-closed ownership conflict, not duplicate hooks/audio. Splits do not require the combined package and omit unrelated feature implementation and audio.
+Choose the combined package **or** any subset of distinct splits. Two distributions claiming the same module produce a fail-closed ownership conflict, not duplicate hooks/audio. The intentional shared compaction capability in compact-context and model-policy is different: either split works alone, both may participate, but one deterministic executor runs (compact-context first) and both editors use one persisted policy. Splits do not require the combined package and omit unrelated feature implementation and audio.
 
 ## Install
 
 Choose the intended profile explicitly. Example for an existing web profile:
 
 ```sh
-dsh plugin --profile web add https://github.com/LMGateX/dsh-extras/releases/download/v0.4.0/dsh-extras-0.4.0.tgz
+dsh plugin --profile web add https://github.com/LMGateX/dsh-extras/releases/download/v0.5.0/dsh-extras-0.5.0.tgz
 ```
 
-For one capability replace the asset name, e.g. `dsh-extras-retry-0.4.0.tgz`. Verify downloads against release SHA256SUMS. The matching DSH runtime must already exist; packages do not install a second host runtime.
+For one capability replace the asset name, e.g. `dsh-extras-retry-0.5.0.tgz`. Verify downloads against release SHA256SUMS. The matching DSH runtime must already exist; packages do not install a second host runtime.
 
-Open **Plugins → DSH Extras → Configure**. All module settings, including the compaction reasoning editor, follow the native Chinese/English language preference and theme. With no locale service, settings use Chinese, matching the preserved Chime editor. Switching language keeps unsaved drafts; technical configuration keys, native route/model/effort IDs, and raw migration diagnostics are not translated. Combined settings have compact-context, retry, chime and goalWait sections. Each module and every original option is independently editable. Status distinguishes active, disabled, missing dependency, migration-pending, conflict and failed. Enable/disable joins feature disposal before reactivation. Policy-only changes use validated live snapshots without remounting in-flight retry classifiers or releasing goal holds.
+Open **Plugins → DSH Extras → Configure**. All module settings, including the compaction reasoning editor, follow the native Chinese/English language preference and theme. With no locale service, settings use Chinese, matching the preserved Chime editor. Switching language keeps unsaved drafts; technical configuration keys, native route/model/effort IDs, and raw migration diagnostics are not translated. Combined settings have compact-context, model-policy, retry, chime and goalWait sections, with module/responsibility folding and expand/collapse-all. Folding hides mounted editors rather than discarding drafts; headers retain enable/runtime/dirty/error summaries. Each module and every original option is independently editable. Status distinguishes active, disabled, missing dependency, migration-pending, conflict and failed. Enable/disable joins feature disposal before reactivation. Policy-only changes use validated live snapshots without remounting in-flight retry classifiers or releasing goal holds.
 
-Fresh installs use preserved source defaults. When any legacy plugin is discovered, absent capabilities begin disabled and can be explicitly enabled later. Explicit Extras values win over imports. Missing optional services affect only the corresponding module. In native web presets, compact-context operations follow the selected agent’s isolated native compaction backend and policy; Extras does not enable a second global engine or rewrite presets. A preset without a backend returns an explicit unavailable result for that agent.
+Fresh installs preserve the original four module defaults; the new model-policy module and new automatic policy effects start off. When any legacy plugin is discovered, absent capabilities begin disabled and can be explicitly enabled later. Explicit Extras values win over imports. Missing optional services affect only the corresponding module. In native web presets, compact-context operations follow the selected agent’s isolated native compaction backend and policy; Extras does not enable a second global engine or rewrite presets. A preset without a backend returns an explicit unavailable result for that agent.
 
 ## Automatic legacy migration / 自动迁移
 
@@ -61,6 +62,13 @@ The canonical module id is `compact-context`. The development-only `context` id 
 
 ```yaml
 modules:
+  model-policy:
+    enabled: false
+    root: null
+    descendants: null
+    workspaceOverrides: []
+    compactionReasoning:
+      enabled: false # local participation; shared rules are edited in the canonical editor
   compact-context:
     enabled: true
     compactTool: true
@@ -96,6 +104,22 @@ Retry codes, provider routes and empty-response classification share one staged 
 
 重试、压缩超时和 Goal-wait 策略采用分组草稿：保存时整组原子提交；放弃只清除本地修改；“恢复继承值”先暂存字段移除，再点保存，不会把当前默认值写成永久覆盖。界面的超时单位为秒，存储仍为毫秒，显式 0 与空列表/映射保留原有含义。水位阈值 notifyAtRatio / pressureStep 也可直接编辑，下一次相应提示/状态读取使用新值。请求推理策略仍有独立编辑器，不会因启用工具而自动启用。
 
+## Workspace model defaults / 工作区模型默认策略
+
+Enable Model policy explicitly, select profile defaults or an exact native workspace ID, and configure root and all descendant provider/model/effort choices separately. Workspace overrides omit a role to inherit the profile default; explicit null retains native selection. Provider/model/effort IDs are exact, not display labels or a universal low/medium/high scale. Working-directory or worktree changes do not change delegation workspace policy.
+
+This is **default selection, not forced every-step routing**. New spawn/fork agents receive the role default, replacing inherited fork seed selection where needed; explicit accepted policy changes can update already-live agents for future safe steps. Subsequent native human/tool choices remain possible. Cold resume conservatively preserves an existing durable session choice. Disabling stops future policy selection and does not silently restore a previous choice or erase the durable choice already selected. Unknown workspace/backend is reported, never guessed from a mutable cwd.
+
+## Native retry management / 原生重试设置
+
+The retry module keeps its stream-error classifier and adds a separate provider-owned policy editor. Choose the actual provider target: these settings affect that registered provider, not just the current chat or workspace. Native normal mode defaults to **five additional retries** (up to six total requests), not five total attempts. Always mode is unbounded and can retry permanent authentication/configuration failures; the UI requires explicit risk acknowledgement. It does not mean transient-only recovery.
+
+Backoff uses native initial/max delays and jitter with multiplier 2. Fixed delay maps initial=max and jitter=0. Native cancellation, Retry-After handling and durable retry events remain authoritative. Leaf settings mutations retain secrets, unknown fields, sibling providers and existing retryable-code lists; revisions prevent overwriting concurrent edits. The compact tool extra retry setting is independent and is not silently made unlimited.
+
+### Message-free retry / 无消息重试
+
+Stock DSH rc.1 has no safe terminal request recovery operation: Extras reports `native-terminal-recovery-unavailable`, not a fake working button. The independently approved [native recovery extension](docs/NATIVE_RECOVERY_050.md) must prove a genuinely terminated budget-exhausted checkpoint, native admission and exactly-once recovery before an adapted host can expose the button. It must not send hidden continue/empty messages or replay completed tools. An unofficial companion patch is not an official DSH release; availability and production activation require separate verified evidence.
+
 ## Goal continuation strategies / Goal 续跑策略
 
 Durable goal phase (active/paused/complete/blocked), process-local armed/disarmed activation, gate-owned holds and native progressing-descendant joins are different concepts. Waiting must not masquerade as changing durable goal phase.
@@ -119,11 +143,11 @@ The supported package entries are the Cordis root (name/inject/Config/apply), th
 
 ## Compaction request reasoning / 压缩请求推理强度
 
-In **Compact-context** settings, agent-facing tools and the request reasoning policy have separate controls. The policy is **off by default**, including legacy imports. Enabling it does not require `compactTool`; keeping `compactTool: false` still allows the policy to cover native pressure, `/compact`, overflow and model-switch summaries. Agent tool/range summaries use the same request boundary. Pruner-only/no-op operations have no LLM request to modify. Disabling the module withdraws both capabilities.
+In **Compact-context** settings, agent-facing tools and the request reasoning policy have separate controls. The policy is **off by default**, including legacy imports. Enabling it does not require `compactTool`; keeping `compactTool: false` still allows the policy to cover native pressure, `/compact`, overflow and model-switch summaries. Agent tool/range summaries use the same request boundary. Pruner-only/no-op operations have no LLM request to modify. Disabling compact-context withdraws its tools and its compaction-policy participation; model-policy can continue providing the shared capability if enabled. Both local participants off removes the shared modifier. The shared policy master switch can disable effects without uninstalling either module.
 
 Rules match the **actual outgoing summary provider/model**, not the conversation model. The fixed priority is `provider-model > provider > all`; duplicate targets are invalid. `inherit` reads the exact request session latest durable reasoning effort; a missing value leaves the original request/default untouched and does not try a broader rule. `fixed` supplies an exact adapter-owned effort id and may replace an existing effort. An explicit `rules: []` matches nothing. Identifiers are case-sensitive; no wildcard, alias, effort remapping or silent fallback. `off` is not a universal disable-thinking switch. Native exact-model validation rejects unsupported efforts without an extra retry.
 
-The editor uses advertised effort choices for an exact model when available, with explicit native-id entry when discovery is unavailable. Save/discard/reset and revision conflicts follow native configuration forms. Runtime policy availability is reported independently from tool availability: saved or enabled does not mean active.
+Both Compact-context and Model policy editors use one profile-scoped native-storage policy/revision authority with optional exact-workspace overrides; they do not synchronize two independent rule lists. The original module compactionReasoning rules are retained as a recoverable legacy seed, not a second live settings authority after canonical initialization. Local participation and the shared policy master switch are separate. Existing accepted canonical rules win over later local seed values; conflicting initial seeds report a diagnostic. Switching executor does not change policy. The editor uses advertised effort choices for an exact model when available, with explicit native-id entry when discovery is unavailable. Save/discard/reset and revision conflicts follow native configuration forms. Runtime policy availability is reported independently from tool availability: saved or enabled does not mean active.
 
 **Experimental compatibility boundary:** clone-first wrapping of the native public LLM stream, audited in Extras 0.4.0 for DSH LLM `0.2.2-rc.1` / Cordis `4.1.0`; not an official request-transform hook. Unsupported versions/runtime shapes withdraw this policy and preserve original compaction. Audited native provision, isolation, replacement and HMR are included; arbitrary third-party engines or silent service replacement/cached-method paths bypassing native stream access are not a compatibility guarantee. Ordinary conversation/title calls, native retention/routing and cancellation are unchanged. Matching effort can remove one upstream cache-namespace mismatch; it does not guarantee cache hits or lower latency/cost.
 
@@ -147,6 +171,6 @@ Tests resolve the local baseline DSH dev dependency. `DSH_RUNTIME_ROOT` can expl
 - Do not delete running journals or copy them into another profile.
 - Audio obeys normal browser gesture/autoplay rules; unlock it in settings. Chime is browser-only.
 - Native management concurrency is not advertised as universally atomic: conflicts fail boundedly and require inspection/retry.
-- This development/release task does **not** install Extras into the author's active local profile.
+- Development/tests never target an active local profile. Local installation requires explicit user authorization and follows isolated acceptance, published-artifact verification, restricted backups and native plugin management; saved/installed is not proof of running activation.
 
 MIT. Selected source notices are included in each distribution; chime includes unchanged CC0 sounds and third-party attribution.
