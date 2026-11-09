@@ -7,13 +7,13 @@ import { join, resolve, dirname, basename } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { Distribution, FeaturePlugin } from '../../src/types.ts';
 import { createRuntime, runTurn, llm } from '../modules/retry/runtime.ts';
-import { loadHost, loaderFixture } from '../integration/loader-harness.ts';
+import { loadHost, loaderFixture, response, until } from '../integration/loader-harness.ts';
 
 const root = resolve(import.meta.dirname, '../..');
 const version = JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).version;
 const unpack = promisify(execFile);
 
-for (const [packageName, mode, expected] of [['dsh-extras', 'fixed', 'high'], ['dsh-extras-compact-context', 'inherit', 'low']] as const)
+for (const [packageName, mode, expected] of [['dsh-extras', 'fixed', 'high'], ['dsh-extras-compact-context', 'inherit', 'low'], ['dsh-extras-model-policy', 'fixed', 'high']] as const)
 test('packed ' + packageName + ' policy changes native summary effort with agent tools disabled', { timeout: 20000 }, async t => {
   const temp = await mkdtemp(join(root, '.sandbox-packed-reasoning-'));
   t.after(async () => {
@@ -24,6 +24,9 @@ test('packed ' + packageName + ' policy changes native summary effort with agent
   const entry = await import(pathToFileURL(join(temp, 'package/lib/index.js')).href) as FeaturePlugin;
   const runtime = await createRuntime({ product: false, retry: false }); t.after(() => runtime.dispose());
   const ctx = runtime.ctx;
+  await ctx.plugin((await loadHost('dsh-storage')).default).await();
+  await ctx.plugin(await loadHost('dsh-storage-json'), {root:join(temp,'canonical-policy')}).await();
+  await ctx.plugin(await loadHost('dsh-storage-domain'), {backend:'json'}).await();
   const calls: any[] = [];
   const summaryEnvelopes: any[] = [];
   ctx.on('llm/stream', (options: any, next: () => unknown) => {
@@ -46,12 +49,26 @@ test('packed ' + packageName + ' policy changes native summary effort with agent
   ctx.llm.registerAdapter(['packed-policy-route'], new PackedAdapter());
   await ctx.plugin((await loadHost('dsh-token-meter')).default).await();
   await ctx.plugin((await loadHost('dsh-compaction-basic')).default, { auto: false, retainTokens: 0, headroomTokens: 0, maxTokens: 100 }).await();
-  const d: Distribution = { name: packageName, moduleIds: ['compact-context'], modulePlugins: {} };
+  const moduleId = packageName === 'dsh-extras-model-policy' ? 'model-policy' : 'compact-context';
+  const policy = {enabled:true,rules:[mode === 'fixed' ? {scope:'all',mode,effort:'high'} : {scope:'all',mode}]};
+  const d: Distribution = { name: packageName, moduleIds: [moduleId], modulePlugins: {} };
   const f = await loaderFixture(t, d, { modules: {
-    'compact-context': { enabled: true, compactTool: false, compactionReasoning: { enabled: true, rules: [mode === 'fixed' ? { scope: 'all', mode, effort: 'high' } : { scope: 'all', mode }] } },
+    ...(moduleId === 'compact-context' ? {'compact-context':{enabled:true,compactTool:false,compactionReasoning:policy},'model-policy':{enabled:false}} : {'model-policy':{enabled:true,compactionReasoning:policy}}),
     retry: { enabled: false }, chime: { enabled: false }, goalWait: { enabled: false },
   }, migration: { auto: false } }, ctx, [], entry);
   await f.ready();
+  await until(() => f.status(), value => value.modules[moduleId]?.capabilities?.compactionReasoning?.phase === 'active','initial packed participation admission');
+  const route = f.routes.get('/extras/' + packageName + '/shared-compaction');
+  assert.ok(route, 'actual packed selected module mounts canonical management even before effects');
+  const beforePolicy = response();
+  await route.handler({method:'GET',headers:{host:f.host,cookie:f.ownerCookie}},beforePolicy);
+  assert.equal(beforePolicy.code,200);
+  const snapshot = JSON.parse(beforePolicy.body);
+  const savedPolicy = response();
+  const req = {method:'PUT',headers:{host:f.host,cookie:f.ownerCookie},async *[Symbol.asyncIterator](){yield JSON.stringify({expectedRevision:snapshot.revision,defaults:policy,workspaceOverrides:{}});}};
+  await route.handler(req,savedPolicy);
+  assert.equal(savedPolicy.code,200);
+  await until(() => f.status(), value => value.modules[moduleId]?.capabilities?.compactionReasoning?.phase === 'active','packed canonical compaction executor');
   const handle = await ctx.agents.create({ sessionId: 'packed-synthetic-session', agentOptions: { provider: 'packed-policy-route', model: 'packed-model', reasoningEffort: 'low' } });
   t.after(() => handle.dispose());
   assert.equal(ctx.tools.get('compact_context', handle.agent), undefined);

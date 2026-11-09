@@ -9,6 +9,7 @@ const configTypes = {
   retry: ['index', 'Config'],
   chime: ['config', 'ResolvedRowConfig'],
   goalWait: ['config', 'ResolvedConfig'],
+  'model-policy': ['policy', 'ResolvedConfig'],
 };
 
 export async function writeDeclarations(root, out, {name, modules}) {
@@ -24,14 +25,15 @@ export async function writeDeclarations(root, out, {name, modules}) {
     ...imports,
     'type PlainField<T> = T extends { get(): infer V } ? V : T;',
     'type FeatureValues<T> = { [K in keyof T]-?: PlainField<T[K]> };',
+    ...(modules.includes('model-policy') ? ['type NativeNullableValues<T> = { [K in keyof T]-?: K extends "root" | "descendants" ? PlainField<T[K]> | undefined : PlainField<T[K]> };'] : []),
     'interface ModuleValues {',
-    ...modules.map((id, index) => JSON.stringify(id) + ': FeatureValues<Feature' + index + '> & { enabled: boolean };'),
+    ...modules.map((id, index) => JSON.stringify(id) + ': ' + (id === 'model-policy' ? 'NativeNullableValues' : 'FeatureValues') + '<Feature' + index + '> & { enabled: boolean };'),
     '}',
     // Only the policy object itself has nested defaults. Keep rule elements intact.
-    ...(modules.includes('compact-context') ? ['type DefaultedObjectInput<T, K extends keyof T> = Omit<Partial<T>, K> & { [P in K]?: Partial<T[P]> };'] : []),
+    ...(modules.some(id => id === 'compact-context' || id === 'model-policy') ? ['type DefaultedObjectInput<T, K extends keyof T> = Omit<Partial<T>, K> & { [P in K]?: Partial<T[P]> };'] : []),
     'interface ModuleInputs {',
-    ...modules.map(id => JSON.stringify(id) + ': ' + (id === 'compact-context'
-      ? 'DefaultedObjectInput<ModuleValues["compact-context"], "compactionReasoning">'
+    ...modules.map(id => JSON.stringify(id) + ': ' + (id === 'compact-context' || id === 'model-policy'
+      ? 'DefaultedObjectInput<ModuleValues[' + JSON.stringify(id) + '], "compactionReasoning">'
       : 'Partial<ModuleValues[' + JSON.stringify(id) + ']>') + ';'),
     '}',
     'export interface ConfigInput { modules?: Partial<ModuleInputs>; migration?: { auto?: boolean } }',
@@ -107,9 +109,13 @@ export async function writeDeclarations(root, out, {name, modules}) {
     }
     visit(parsed);
     for (const spec of references) pending.push(join(dirname(key), spec).replace(/\.(?:ts|js)$/, '.d.ts'));
-    const output = key === 'extras-public-entry.d.ts' ? join(out, 'lib/index.d.ts') : join(out, 'lib/types', key);
+    // Model-only declarations share the pure reasoning policy, not a compact feature subtree.
+    const payloadKey = !modules.includes('compact-context') && key === 'src/modules/compact-context/reasoning-policy.d.ts'
+      ? 'src/shared-compaction/reasoning-policy.d.ts' : key;
+    const output = key === 'extras-public-entry.d.ts' ? join(out, 'lib/index.d.ts') : join(out, 'lib/types', payloadKey);
     let rewritten = text.replace(/(["'])(\.[^"']*)\.ts\1/g, '$1$2.js$1');
     if (key === 'extras-public-entry.d.ts') rewritten = rewritten.replaceAll('./src/', './types/src/');
+    if (!modules.includes('compact-context')) rewritten = rewritten.replaceAll('../compact-context/reasoning-policy.js', '../../shared-compaction/reasoning-policy.js');
     await mkdir(dirname(output), {recursive: true});
     await writeFile(output, rewritten);
   }

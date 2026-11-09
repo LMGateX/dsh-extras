@@ -148,7 +148,7 @@ test('native pnpm peer-auto-install-disabled profile launches standalone install
     assert.match(succeeds(run(temp,command,args),'native installed standalone help'),/--install-anchor/);
   }
   const plan=JSON.parse(succeeds(run(temp,process.execPath,[join(packageDir,'lib','migrate.js'),'inspect','--profile-dir',profile,'--dsh-home',environment(temp).DSH_HOME,'--install-anchor',anchor]),'native profile standalone inspect'));
-  assert.equal(typeof plan.profileId,'string');assert.equal(plan.decisions.length,4);
+  assert.equal(typeof plan.profileId,'string');assert.equal(plan.decisions.length,5);assert.equal(plan.decisions.find(d=>d.moduleId==='model-policy').enabled,false);
   assert.deepEqual({manifest:await readFile(join(profile,'package.json'),'utf8'),patch:await readFile(join(profile,'cordis.patch.yml'),'utf8')},before);
   assert.equal((await readdir(profile)).includes('.dsh-extras'),false);
 });

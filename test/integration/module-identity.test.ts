@@ -16,7 +16,7 @@ type NoOldId = Assert<'context' extends ModuleId | MigrationId | ClientId ? fals
 type NewIdEverywhere = Assert<'compact-context' extends ModuleId & MigrationId & ClientId ? true : false>;
 
 test('combined native schema and public ids expose compact-context without a context alias', () => {
-  assert.deepEqual(MODULE_IDS, ['compact-context', 'retry', 'chime', 'goalWait']);
+  assert.deepEqual(MODULE_IDS, ['compact-context', 'retry', 'chime', 'goalWait', 'model-policy']);
   assert.deepEqual(migrationIds, MODULE_IDS);
   assert.equal(compactContext.name, 'extras-compact-context');
   assert.deepEqual(Object.keys((Config as any).dict.modules.dict), [...MODULE_IDS]);

@@ -58,7 +58,32 @@ const duration = number(0, 21_600_000, true, true);
 const sounds = ['chime-soft', 'bell-bright', 'marimba', 'alert-low', 'alert-sharp', 'blip'];
 const identifier = string(200, 1, /^[^:\s"'\x60\u0000-\u001f\u007f](?:[^:"'\x60\u0000-\u001f\u007f]*[^:\s"'\x60\u0000-\u001f\u007f])?$/u);
 const clock = string(Infinity, 0, /^(?:|(?:[01]\d|2[0-3]):[0-5]\d)$/);
+const nativeId = string(200, 1, /^[^\u0000-\u001f\u007f-\u009f]+$/u);
+const selection: Rule = (value, field) => {
+  if (value === null) return;
+  plain(value, field);
+  const fields: Record<string, Rule> = {provider:nativeId,model:nativeId,reasoningEffort:(value, field) => { if (value !== null) nativeId(value, field); }};
+  for (const [key, child] of entries(value, field)) {
+    if (!Object.hasOwn(fields, key)) reject(field, 'unknown selection field');
+    fields[key]!(child, field + '.' + key);
+  }
+  if (!Object.hasOwn(value, 'provider') || !Object.hasOwn(value, 'model')) reject(field, 'exact provider/model required');
+};
+const workspaceOverrides: Rule = (value, field) => {
+  const seen = new Set<string>();
+  list((override, childField) => {
+    plain(override, childField);
+    for (const [key, child] of entries(override, childField)) {
+      if (key === 'workspaceId') nativeId(child, childField);
+      else if (key === 'root' || key === 'descendants') selection(child, childField);
+      else reject(childField, 'unknown workspace override field');
+    }
+    if (typeof override.workspaceId !== 'string' || seen.has(override.workspaceId)) reject(childField, 'unique workspace identity required');
+    seen.add(override.workspaceId);
+  })(value, field);
+};
 const rules: Record<ModuleId, Record<string, Rule>> = {
+  'model-policy': { enabled: boolean, root:selection, descendants:selection, workspaceOverrides, compactionReasoning:value => { resolveCompactionReasoning(value); } },
   'compact-context': {
     enabled: boolean, compactTool: boolean, statusTool: boolean, guidance: boolean,
     compactionReasoning: value => { resolveCompactionReasoning(value); },

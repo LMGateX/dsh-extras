@@ -7,6 +7,7 @@ import type { NativeDiscoveryFacade } from './discovery.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { isMap, isSeq, parseDocument } from 'yaml';
 import { inspectMigration } from './discovery.ts';
+import { resolveCompactionReasoning } from '../modules/compact-context/reasoning-policy.ts';
 import { containsExpression, isRecord, planMigration, validateKnownConfig } from './planner.ts';
 import { digest, profilePaths, readOptional, withProfileLock, writePrivate } from './storage.ts';
 import type { Decision, Discovery, Distribution, MigrationPlan, MigrationReport, ModuleId, NativeMigrationHost, Values } from './types.ts';
@@ -142,7 +143,14 @@ function runningModuleConfig(host: NativeMigrationHost, target: Distribution, id
 }
 export function moduleConfigAdopted(host: NativeMigrationHost, target: Distribution, id: ModuleId, desired: Values): boolean {
   const actual = runningModuleConfig(host, target, id);
-  return !!actual && Object.entries(desired).every(([key, value]) => isDeepStrictEqual(actual[key], value));
+  return !!actual && Object.entries(desired).every(([key, value]) => {
+    // This policy has documented nested defaults. Compare its resolved values, not
+    // a partial ConfigInput with a native ConfigOutput; arrays still replace exactly.
+    if (key === 'compactionReasoning') {
+      try { return isDeepStrictEqual(resolveCompactionReasoning(actual[key]), resolveCompactionReasoning(value)); } catch { return false; }
+    }
+    return isDeepStrictEqual(actual[key], value);
+  });
 }
 function runningConfigMatches(host: NativeMigrationHost, journal: Journal, decision: Decision, current?: Discovery): boolean {
   const row = current?.rows.find(value => value.id === journal.targetRowId);
@@ -186,9 +194,9 @@ function hasLiveOwners(journal: Journal, id: ModuleId): boolean {
   return (journal.owners?.[id] ?? []).some(owner => !originExited(owner));
 }
 /** Observe actual native ownership; persisted values are never proof of live application. */
-export function reportJournal(host: NativeMigrationHost, journal: Journal, current?: Discovery): MigrationReport {
+export function reportJournal(host: NativeMigrationHost, journal: Journal, current?: Discovery, additions: Decision[] = []): MigrationReport {
   const modules: MigrationReport['modules'] = {};
-  for (const decision of journal.plan.decisions) {
+  for (const decision of [...journal.plan.decisions, ...additions]) {
     const id = decision.moduleId;
     if (journal.recoveryWrites) { modules[id] = { phase: 'prepared', ready: false, enabled: false, reason: 'recovery write replay requires explicit retry' }; continue; }
     if (journal.rollback?.[id]?.conflict) { modules[id] = { phase: 'conflict', enabled: false, ready: false, reason: journal.rollback[id]!.conflict }; continue; }
@@ -223,6 +231,19 @@ export async function runMigration(host: NativeMigrationHost, target: Distributi
     let journal = await loadJournal(host, target);
     if (journal && journal.profileId !== input.profileId) throw new Error('journal belongs to another profile');
     if (journal?.phase === 'saved') {
+      // Completed older releases retain their exact import/recovery provenance. New
+      // capabilities have no legacy owner: append only a safely validated fresh gate,
+      // never replace the old operation, backup, input evidence or target identity.
+      const completed = journal;
+      const missing = target.moduleIds.filter(id => id === 'model-policy' && !completed.plan.decisions.some(d => d.moduleId === id));
+      const additions = missing.length ? planMigration({...input,target:{...target,moduleIds:missing}}).decisions : [];
+      const admitted = additions.filter(d => d.phase === 'fresh' && !d.source && !completed.recoveryWrites && completed.ownershipVersion === 1);
+      if (admitted.length) {
+        journal.plan.decisions.push(...admitted);
+        await writePrivate(paths.journal, JSON.stringify(journal) + '\n');
+      }
+      const pending = additions.filter(d => !admitted.includes(d)).map(d => completed.ownershipVersion !== 1
+        ? {...d,phase:'conflict' as const,enabled:false,reason:'journal has no complete target owner registry; additive admission refused'} : d);
       await observeOwners(host, journal, input);
       // Finalize the page fence only on a genuinely fresh host, never a page opened during the old handover.
       if (journal.browserReloadAfter && !journal.browserFenceFinalized && performance.timeOrigin >= journal.browserReloadAfter && [...host.loader.entries()].some(entry => entry.options.id === target.rowId && !!entry.fiber) && (!journal.runtimeObserved || originExited(journal.origin))) {
@@ -230,7 +251,7 @@ export async function runMigration(host: NativeMigrationHost, target: Distributi
         journal.browserFenceFinalized = true;
         await writePrivate(paths.journal, JSON.stringify(journal) + '\n');
       }
-      return reportJournal(host, journal, input);
+      return reportJournal(host, journal, input, pending);
     }
     if (journal && !options.retry) return reportJournal(host, journal, input);
     if (!journal) {
@@ -278,7 +299,8 @@ export async function runMigration(host: NativeMigrationHost, target: Distributi
 }
 
 const PEER_MODULES: Record<string, readonly ModuleId[]> = {
-  'dsh-extras': ['compact-context', 'retry', 'chime', 'goalWait'],
+  'dsh-extras': ['compact-context', 'retry', 'chime', 'goalWait', 'model-policy'],
+  'dsh-extras-model-policy': ['model-policy'],
   'dsh-extras-compact-context': ['compact-context'], 'dsh-extras-retry': ['retry'],
   'dsh-extras-chime': ['chime'], 'dsh-extras-goal-wait': ['goalWait'],
 };

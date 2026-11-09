@@ -13,9 +13,9 @@ import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { Script } from 'node:vm';
-import type { ModuleId, Values } from '../../src/migration/types.ts';
+import type { LegacyModuleId, Values } from '../../src/migration/types.ts';
 
-type Cases = { id: ModuleId; field: string; accept: unknown[]; reject: unknown[] };
+type Cases = { id: LegacyModuleId; field: string; accept: unknown[]; reject: unknown[] };
 const invalidScalar = [null, undefined, '0', false, {}, []];
 const invalidNumber = [...invalidScalar, NaN, Infinity, -Infinity];
 const cases: Cases[] = [
@@ -82,7 +82,7 @@ test('prototype-bearing keys, symbols, and non-enumerable fields cannot hide fro
   for (const config of [JSON.parse('{"__proto__":{}}'), { constructor: true }, { prototype: true }, { [Symbol('secret')]: true }, Object.defineProperty({}, 'enabled', { value: true })]) {
     assert.throws(() => validateModuleConfig('compact-context', config));
   }
-  assert.throws(() => validateModuleConfig('unknown' as ModuleId, {}));
+  assert.throws(() => validateModuleConfig('unknown' as LegacyModuleId, {}));
   assert.doesNotThrow(() => validateModuleConfig('compact-context', Object.assign(Object.create(null), { enabled: false })));
 });
 
@@ -100,14 +100,14 @@ if (process.env.DSH_TEST_LEGACY_ROOT) test('audited standalone rules match origi
   const schemaPath = createRequire(join(retryRoot, 'package.json')).resolve('@deepseek-ai/schemastery');
   const Schema = (await import(pathToFileURL(schemaPath).href)).default;
   const retrySchema = new Script(declarations + schema.replace('export const Config', 'const Config') + '\nConfig;').runInNewContext({ Schema });
-  const oracles: Record<ModuleId, (config: Values) => unknown> = {
+  const oracles: Record<LegacyModuleId, (config: Values) => unknown> = {
     'compact-context': config => context.validateConfig(context.resolveConfig(config)),
     retry: config => retrySchema(config), chime: config => chime.resolveRowConfig(config), goalWait: config => goal.resolveConfig(config),
   };
   assertOracleParity(oracles);
 });
 
-function assertOracleParity(oracles: Record<ModuleId, (config: Values) => unknown>) {
+function assertOracleParity(oracles: Record<LegacyModuleId, (config: Values) => unknown>) {
   let checked = 0;
   for (const item of cases) {
     if (item.field === 'enabled' && item.id !== 'chime') continue; // Extras envelope, not a legacy field.

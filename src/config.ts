@@ -1,5 +1,5 @@
 import Schema from '@deepseek-ai/schemastery';
-import type { Distribution, ModuleId } from './types.ts';
+import { moduleDefaultEnabled, type Distribution, type ModuleId } from './types.ts';
 
 /** Read and detach native volatile references without losing false, zero, or empty lists. */
 export function plain<T = unknown>(value: unknown): T {
@@ -21,7 +21,7 @@ export function createConfig(distribution: Distribution): Schemastery<any> {
       const cloned = Schema(field.toJSON());
       fields[key] = cloned.meta.volatile ? cloned : cloned.volatile();
     }
-    fields.enabled = Schema.boolean().default(true).description('Enable this module; disabled modules register no feature effects.').volatile();
+    fields.enabled = Schema.boolean().default(moduleDefaultEnabled(id)).description('Enable this module; disabled modules register no feature effects.').volatile();
     modules[id] = Schema.object(fields).default({});
   }
   return Schema.object({

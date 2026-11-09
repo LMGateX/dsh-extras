@@ -3,8 +3,9 @@ import { readFile, realpath } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import type { Discovery, Distribution, ModuleId, NativeMigrationHost, Source, Values } from './types.ts';
+import type { Discovery, Distribution, ModuleId, LegacyModuleId, NativeMigrationHost, Source, Values } from './types.ts';
 import { LEGACY_VERSIONS } from './planner.ts';
+import { moduleDefaultEnabled } from '../types.ts';
 import { inspectNativeGoalOwner } from './native-owner.ts';
 
 /** Only these read-only native operations are admitted. Never load legacy plugin code. */
@@ -14,16 +15,17 @@ export interface NativeDiscoveryFacade {
   composeEntries(layers: unknown[][], warn?: (message: string) => void): Values[];
 }
 
-const LEGACY: Record<ModuleId, string> = {
+const LEGACY: Record<LegacyModuleId, string> = {
   'compact-context': 'dsh-tool-compact-context', retry: 'dsh-stream-retry',
   chime: 'dsh-session-chime', goalWait: 'dsh-goal-wait-gate',
 };
-const OLD_ROWS: Record<ModuleId, string[]> = {
+const OLD_ROWS: Record<LegacyModuleId, string[]> = {
   'compact-context': ['dsh-tool-compact-context'], retry: ['stream-retry'],
   chime: ['dsh-session-chime', 'session-chime'], goalWait: ['goal-wait-gate'],
 };
 const DISTRIBUTIONS: Record<string, readonly ModuleId[]> = {
-  'dsh-extras': ['compact-context', 'retry', 'chime', 'goalWait'],
+  'dsh-extras': ['compact-context', 'retry', 'chime', 'goalWait', 'model-policy'],
+  'dsh-extras-model-policy': ['model-policy'],
   'dsh-extras-compact-context': ['compact-context'], 'dsh-extras-retry': ['retry'],
   'dsh-extras-chime': ['chime'], 'dsh-extras-goal-wait': ['goalWait'],
 };
@@ -146,7 +148,7 @@ export async function inspectMigration(host: NativeMigrationHost, target: Distri
   for (const name of bundles) {
     const info = await metadata(name);
     if (!info) {
-      const id = (Object.keys(LEGACY) as ModuleId[]).find(id => LEGACY[id] === name);
+      const id = (Object.keys(LEGACY) as LegacyModuleId[]).find(id => LEGACY[id] === name);
       if (id) addProblem([id], 'cannot inspect selected legacy bundle: ' + name);
       else problems.push('cannot inspect selected bundle: ' + name);
       continue;
@@ -160,7 +162,7 @@ export async function inspectMigration(host: NativeMigrationHost, target: Distri
       for (const path of paths as string[]) patches.push(...await layer(join(info.dir, path)));
       bundleLayers.push(patches); namedLayers.set(name, patches);
     } catch {
-      const id = (Object.keys(LEGACY) as ModuleId[]).find(id => LEGACY[id] === info.manifest.name);
+      const id = (Object.keys(LEGACY) as LegacyModuleId[]).find(id => LEGACY[id] === info.manifest.name);
       if (id) addProblem([id], 'cannot inspect legacy bundle patches: ' + name);
       else problems.push('cannot inspect selected bundle patches: ' + name);
     }
@@ -193,7 +195,7 @@ export async function inspectMigration(host: NativeMigrationHost, target: Distri
     if (typeof name !== 'string' || row.value.group === true || name === 'cordis:group') continue;
     const info = await metadata(name);
     const identity = info?.manifest.name;
-    const moduleId = (Object.keys(LEGACY) as ModuleId[]).find(id => LEGACY[id] === identity || !info && LEGACY[id] === name);
+    const moduleId = (Object.keys(LEGACY) as LegacyModuleId[]).find(id => LEGACY[id] === identity || !info && LEGACY[id] === name);
     const rowId = typeof row.value.id === 'string' ? row.value.id : undefined;
     const ids = new Set([...row.ancestors, rowId ?? '']);
     if (moduleId) {
@@ -231,7 +233,8 @@ export async function inspectMigration(host: NativeMigrationHost, target: Distri
       const modules = record(row.value.config) && record(row.value.config.modules) ? row.value.config.modules : {};
       for (const id of distribution) {
         const config = modules[id];
-        if ((!row.disabled && !(record(config) && config.enabled === false)) || active(rowId, name) || row.dynamic) {
+        const enabled = record(config) && config.enabled !== undefined ? config.enabled !== false : moduleDefaultEnabled(id);
+        if ((!row.disabled && enabled) || active(rowId, name) || row.dynamic) {
           (peers[id] ??= []).push(rowId ?? name);
         }
       }
@@ -258,7 +261,7 @@ export async function inspectMigration(host: NativeMigrationHost, target: Distri
   const dependencies = Object.assign({}, record(manifest.dependencies) ? manifest.dependencies : {}, record(manifest.optionalDependencies) ? manifest.optionalDependencies : {});
   for (const name of new Set([...Object.keys(dependencies), ...bundles])) {
     const info = await metadata(name);
-    const moduleId = (Object.keys(LEGACY) as ModuleId[]).find(id => info?.manifest.name === LEGACY[id] || !info && name === LEGACY[id]);
+    const moduleId = (Object.keys(LEGACY) as LegacyModuleId[]).find(id => info?.manifest.name === LEGACY[id] || !info && name === LEGACY[id]);
     if (!moduleId || sources.some(source => source.moduleId === moduleId)) continue;
     const possibleIds = OLD_ROWS[moduleId];
     const configs = possibleIds.map(rowId => ({ rowId, value: overrideConfig([...profilePatches, ...higher], rowId) })).filter(item => item.value !== undefined);
@@ -272,7 +275,7 @@ export async function inspectMigration(host: NativeMigrationHost, target: Distri
       raw: record(config?.value) ? structuredClone(config.value) : {}, effective: record(config?.value) ? structuredClone(config.value) : {},
       disabled: true, active: false, bundleSelected: bundles.includes(name), ...(reasons.length ? { problem: reasons.join('; ') } : {}) });
   }
-  for (const id of Object.keys(LEGACY) as ModuleId[]) {
+  for (const id of Object.keys(LEGACY) as LegacyModuleId[]) {
     const matches = sources.filter(source => source.moduleId === id);
     if (matches.length > 1) for (const source of matches) source.problem = [source.problem, 'multiple legacy instances require explicit recovery'].filter(Boolean).join('; ');
   }

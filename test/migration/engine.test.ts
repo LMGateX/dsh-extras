@@ -34,6 +34,52 @@ async function fixture(work: (f: {host: NativeMigrationHost; dir:string; root:st
   const host:NativeMigrationHost={profileContext:{dir,patchPath:join(dir,'cordis.patch.yml'),installAnchor:anchor,home},loader:{entries:()=>entries},get:()=>({}),handoverAcknowledged:()=>true};
   try {await work({host,dir,root,entries});} finally {process.env.HOME=oldHome;process.env.DSH_HOME=oldDsh;await rm(root,{recursive:true,force:true});}
 }
+test('saved four-module journal upgrades additive model policy without losing legacy recovery evidence',async()=>fixture(async({host,dir,entries})=>{
+  const first = await runMigration(host,target);
+  const paths = await profilePaths(host,target.rowId);
+  const old = JSON.parse(await readFile(paths.journal,'utf8'));
+  const patch = await readFile(host.profileContext.patchPath,'utf8');
+  const backup = await readFile(old.backup,'utf8');
+  const upgraded: Distribution = {...target,moduleIds:[...target.moduleIds,'model-policy']};
+  const current = await inspectMigration(host,upgraded);
+  const config = current.rows.find(row=>row.id===target.rowId)!.config as any;
+  entries.push({id:'include:dsh-extras',options:{id:target.rowId,name:target.rowId},fiber:{state:2,effectiveConfig:{...config,modules:{...config.modules,'model-policy':{enabled:false}}}}});
+  const report = await runMigration(host,upgraded);
+  assert.deepEqual(report.modules['model-policy'],{phase:'fresh',ready:true,enabled:false});
+  assert.equal(report.operationId,first.operationId);
+  assert.equal(await readFile(host.profileContext.patchPath,'utf8'),patch,'additive opt-in does not rewrite prior feature settings');
+  const saved = JSON.parse(await readFile(paths.journal,'utf8'));
+  assert.deepEqual(saved.plan.decisions.filter((d:any)=>d.moduleId!=='model-policy'),old.plan.decisions);
+  for (const key of ['operationId','backup','steps','previous','rollbackEvidence','environment','origin']) assert.deepEqual(saved[key],old[key],key+' preserved');
+  assert.equal(await readFile(old.backup,'utf8'),backup);
+  host.moduleConfig = id => id === 'model-policy' ? {enabled:true} : config.modules[id];
+  const doc = parse(patch);doc.push({id:target.rowId,name:target.rowId,config:{...config,modules:{...config.modules,'model-policy':{enabled:true}}}});
+  await writeFile(host.profileContext.patchPath,JSON.stringify(doc));
+  const enabled = await runMigration(host,upgraded);
+  assert.equal(enabled.modules['model-policy']?.enabled,true);
+  assert.equal(enabled.modules['model-policy']?.ready,true);
+  assert.equal(enabled.operationId,first.operationId);
+  const recovered=await rollbackMigration(host,upgraded,{operationId:first.operationId,modules:['retry']});
+  assert.equal(recovered.modules.retry?.phase,'restart-required','original recovery remains available and owner-fenced');
+}));
+
+test('additive journal admission retries a cleared peer conflict without replacing the old operation',async()=>fixture(async({host,entries})=>{
+  const first=await runMigration(host,target);
+  const upgraded:Distribution={...target,moduleIds:[...target.moduleIds,'model-policy']};
+  const input=await inspectMigration(host,upgraded);const config=input.rows.find(row=>row.id===target.rowId)!.config as any;
+  entries.push({id:target.rowId,options:{id:target.rowId,name:target.rowId},fiber:{state:2,effectiveConfig:{...config,modules:{...config.modules,'model-policy':{enabled:false}}}}});
+  const patch=await readFile(host.profileContext.patchPath,'utf8');
+  const docs=parse(patch);docs.push({insert:[{id:'model-peer',name:'dsh-extras-model-policy',config:{modules:{'model-policy':{enabled:true}}}}]});
+  await writeFile(host.profileContext.patchPath,JSON.stringify(docs));
+  const conflicted=await runMigration(host,upgraded);
+  assert.equal(conflicted.modules['model-policy']?.phase,'conflict');
+  assert.equal(conflicted.modules['model-policy']?.ready,false);
+  await writeFile(host.profileContext.patchPath,patch);
+  const cleared=await runMigration(host,upgraded);
+  assert.equal(cleared.modules['model-policy']?.phase,'fresh');assert.equal(cleared.modules['model-policy']?.ready,true);
+  assert.equal(cleared.operationId,first.operationId);
+}));
+
 test('pure discovery/dry-run leaves complete profile untouched',async()=>fixture(async({host,dir})=>{
   const before=await readFile(join(dir,'cordis.patch.yml'),'utf8');
   const plan=await dryRunMigration(host,target);

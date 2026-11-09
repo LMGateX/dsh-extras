@@ -12,6 +12,8 @@ import {distributions} from '../../scripts/distributions.mjs';
 const root = resolve(import.meta.dirname, '../..');
 const version = JSON.parse(await readFile(join(root,'package.json'),'utf8')).version;
 const artifactDir = join(root,'artifacts');
+assert.equal(distributions.length, 6, '0.5.0 delivers combined plus five independent splits');
+assert.equal(version, '0.5.0');
 const checksums = new Map((await readFile(join(artifactDir,'SHA256SUMS'),'utf8')).trim().split('\n').map(line => line.split('  ').reverse()));
 const hostRequire = createRequire(createRequire(join(root,'package.json')).resolve('@deepseek-ai/dsh/package.json'));
 for(const {name,modules} of distributions) test('packed installable distribution: '+name,{timeout:120000},async t=>{
@@ -33,7 +35,7 @@ for(const {name,modules} of distributions) test('packed installable distribution
   const server=await readFile(join(packageDir,'lib/index.js'),'utf8');
   const browser=await readFile(join(packageDir,'lib/client.js'),'utf8');
   assert.ok(browser.includes(name));assert.ok(browser.includes('__ModuleLoader__'));
-  for(const id of ['compact-context','retry','chime','goalWait']) {
+  for(const id of ['compact-context','retry','chime','goalWait','model-policy']) {
     const notice=listing.some(file=>file==='package/notices/'+id+'.txt');
     assert.equal(notice,modules.includes(id),'selected feature notice '+id);
   }
@@ -86,7 +88,36 @@ for(const {name,modules} of distributions) test('packed installable distribution
     assert.equal(resolved.modules['compact-context'].retryAttempts.get(), 0);
     assert.deepEqual(entry.Config({}).modules['compact-context'].compactionReasoning.get(), {enabled:false,rules:[{scope:'all',mode:'inherit'}]}, 'packed defaults keep request reasoning disabled and tool-independent');
   }
+  if (modules.includes('model-policy')) {
+    const defaults = entry.Config({}).modules['model-policy'];
+    assert.equal(defaults.enabled.get(), false, 'new capability never auto-enables');
+    assert.ok(defaults.root.get() == null, 'native omitted nullable default retains inherit');
+    assert.ok(defaults.descendants.get() == null, 'native omitted nullable default retains inherit');
+    const explicitNull = entry.Config({modules:{'model-policy':{root:null,descendants:null}}}).modules['model-policy'];
+    assert.equal(explicitNull.root.get(),null);
+    assert.equal(explicitNull.descendants.get(),null);
+    assert.deepEqual(defaults.workspaceOverrides.get(), []);
+    assert.equal(entry.Config({modules:{'model-policy':{enabled:true}}}).modules['model-policy'].enabled.get(), true);
+  }
+  for (const bundle of ['index.js','migration.js','migrate.js']) {
+    const map = JSON.parse(await readFile(join(packageDir, 'lib', bundle + '.map'), 'utf8'));
+    for (const [id,directory] of Object.entries({'compact-context':'compact-context',retry:'retry',chime:'chime',goalWait:'goal-wait','model-policy':'model-policy'})) {
+      if (!modules.includes(id)) assert.ok(!map.sources.some(source => source.includes('/modules/' + directory + '/') && !source.endsWith('/reasoning-policy.ts')), name + '/' + bundle + ' excludes ' + id);
+    }
+  }
   const migration=await import(pathToFileURL(join(packageDir,'lib/migration.js')).href);
+  assert.deepEqual(migration.MODULE_IDS, ['compact-context','retry','chime','goalWait','model-policy']);
+  assert.deepEqual(migration.LEGACY_MODULE_IDS, ['compact-context','retry','chime','goalWait']);
+  assert.equal(Object.hasOwn(migration.LEGACY_DEFAULTS,'model-policy'), false);
+  if (modules.includes('model-policy')) {
+    const input = {profileId:'packed-fixture',profile:{dir:temp,patchPath:join(temp,'profile.patch.yml'),home:temp,installAnchor:join(temp,'package.json')},revision:'one',manifest:{},patchText:'[]',manifestText:'{}',rows:[],sources:[],target:{rowId:name,moduleIds:['model-policy']},explicit:{},peers:{},problems:[],legacyMode:false};
+    assert.deepEqual(migration.planMigration(input).decisions.map(({phase,enabled,config}) => ({phase,enabled,config})), [{phase:'fresh',enabled:false,config:{enabled:false}}]);
+    input.explicit['model-policy']={enabled:true,root:null,workspaceOverrides:[]};
+    assert.equal(migration.planMigration(input).decisions[0].enabled,true);
+  }
+  const reasoningSelected = modules.includes('compact-context') || modules.includes('model-policy');
+  assert.equal(Boolean(pkg.peerDependencies['@deepseek-ai/dsh-storage-domain']), reasoningSelected, 'new shared storage peer follows selected shared implementation');
+  if (modules.includes('retry') || modules.includes('model-policy')) assert.ok(pkg.dsh.client.inject.includes('@deepseek-ai/dsh-api-remotes'));
   assert.equal(typeof migration.startAutomaticMigration,'function');
   const help=execFileSync(process.execPath,[join(packageDir,'lib/migrate.js'),'--help'],{encoding:'utf8',env:{...process.env,HOME:temp,DSH_HOME:join(temp,'dsh-home')}});
   assert.ok(help.includes('profile')&&help.includes('inspect'));

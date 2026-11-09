@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { cp, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { execFile, spawn } from 'node:child_process';
-import { chromium } from '@playwright/test';
+import { chromium, expect } from '@playwright/test';
 import { promisify } from 'node:util';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
@@ -72,11 +72,14 @@ test('native CLI installs packed combined distribution into isolated web profile
   await page.getByRole('button',{name:'View dsh-extras',exact:true}).click();
   await page.getByRole('button',{name:'Configure dsh-extras',exact:true}).click();
   await page.locator('[data-package="dsh-extras"]').waitFor();
-  assert.equal(await page.locator('[data-module]').count(),4);
+  assert.equal(await page.locator('[data-module]').count(),5);
   const moduleStatus=await page.evaluate(async()=>{const response=await fetch('/extras/dsh-extras/status',{credentials:'same-origin',cache:'no-store'});return {code:response.status,body:await response.json()};});
   assert.equal(moduleStatus.code,200);assert.equal(moduleStatus.body.modules.chime.ready,true);
   assert.equal(moduleStatus.body.modules['compact-context'].phase,'active','context adapter activates without a global engine in stock web presets');
-  assert.deepEqual(Object.keys(moduleStatus.body.modules).sort(),['chime','compact-context','goalWait','retry']);
+  assert.deepEqual(Object.keys(moduleStatus.body.modules).sort(),['chime','compact-context','goalWait','model-policy','retry']);
+  assert.equal(moduleStatus.body.modules['model-policy'].enabled,false);
+  assert.equal(moduleStatus.body.modules['model-policy'].phase,'disabled');
+  await page.getByRole('button',{name:'Expand all',exact:true}).click();
   console.log('Native module phases:',Object.fromEntries(Object.entries(moduleStatus.body.modules).map(([id,value])=>[id,(value as any).phase])));
   const patchFile=join(environment(temp).DSH_HOME!,'profiles',profile,'cordis.patch.yml');
   const readModules=async()=>parse(await readFile(patchFile,'utf8')).find((row:any)=>row.id==='dsh-extras')?.config?.modules ?? {};
@@ -135,16 +138,25 @@ test('native CLI installs packed combined distribution into isolated web profile
     assert.deepEqual(await nativeRows(),nativeBefore,'temporary driver suppression never persists native-row overrides');
   }
   const toolGroup=page.getByRole('group',{name:'Agent-facing compaction tools',exact:true});
-  const reasoning=page.getByRole('group',{name:'Compaction-request reasoning',exact:true});
+  const compactSection=page.locator('[data-module="compact-context"]');
+  const reasoning=compactSection.getByRole('group',{name:'Compaction-request reasoning',exact:true});
+  const readPolicy=async()=>page.evaluate(async()=>{const response=await fetch('/extras/dsh-extras/shared-compaction',{credentials:'same-origin',cache:'no-store'});if(!response.ok)throw new Error('Canonical compaction policy unavailable: '+response.status);return response.json();});
+  const originalShared=await readPolicy();
+  assert.equal(originalShared.defaults.enabled,false);
   assert.equal(await reasoning.getByRole('checkbox',{name:'Enable compaction-request reasoning',exact:true}).isChecked(),false);
   await toolGroup.getByRole('checkbox',{name:'Expose compact_context',exact:true}).click();
   await toolGroup.getByRole('status').filter({hasText:'Tools runtime: disabled'}).waitFor().catch(async error=>{
     const runtime=await page.evaluate(async()=> (await (await fetch('/extras/dsh-extras/status',{credentials:'same-origin',cache:'no-store'})).json()).modules['compact-context']);
     throw new Error('Compaction tool disable was not confirmed: '+JSON.stringify({saved:(await readModules())['compact-context'],runtime,ui:await toolGroup.getByRole('status').allTextContents(),alerts:await page.getByRole('alert').allTextContents(),browserErrors:errors}),{cause:error});
   });
+  await compactSection.getByRole('checkbox',{name:'Provide compaction reasoning from this module',exact:true}).click();
+  await waitSaved(modules=>modules['compact-context']?.compactionReasoning?.enabled===true,'local compaction participation');
   await reasoning.getByRole('checkbox',{name:'Enable compaction-request reasoning',exact:true}).check();
   await reasoning.getByRole('button',{name:'Save policy',exact:true}).click();
-  await reasoning.getByRole('status').filter({hasText:'Reasoning runtime: active'}).waitFor();
+  await reasoning.getByRole('status').filter({hasText:'Reasoning runtime: active'}).waitFor().catch(async error=>{
+    const runtime=await page.evaluate(async()=> (await (await fetch('/extras/dsh-extras/status',{credentials:'same-origin',cache:'no-store'})).json()).modules['compact-context']);
+    throw new Error('Canonical reasoning not active: '+JSON.stringify({runtime,canonical:await readPolicy(),saved:(await readModules())['compact-context']?.compactionReasoning,ui:await reasoning.getByRole('status').allTextContents(),alerts:await compactSection.getByRole('alert').allTextContents(),browserErrors:errors}),{cause:error});
+  });
   const rule=reasoning.getByRole('group',{name:'Rule 1',exact:true});
   await rule.getByRole('combobox',{name:'Match scope',exact:true}).selectOption('provider-model');
   await rule.getByRole('textbox',{name:'Provider route ID',exact:true}).fill('Synthetic/Exact-Route');
@@ -152,11 +164,10 @@ test('native CLI installs packed combined distribution into isolated web profile
   await rule.getByRole('combobox',{name:'Action',exact:true}).selectOption('fixed');
   await rule.getByRole('textbox',{name:'Native effort ID',exact:true}).fill('Opaque:Effort/Case');
   await reasoning.getByRole('button',{name:'Save policy',exact:true}).click();
-  // Native ConfigEditor persistence, not an optimistic checkbox or a fake form, is the oracle.
-  const readPolicy=async()=>parse(await readFile(join(environment(temp).DSH_HOME!,'profiles',profile,'cordis.patch.yml'),'utf8')).find((row:any)=>row.id==='dsh-extras')?.config?.modules?.['compact-context'];
+  // Canonical native storage authority, not a duplicated module profile field, is the oracle.
   await assert.doesNotReject(async()=>{
     const deadline=Date.now()+5000;
-    while((await readPolicy())?.compactionReasoning?.rules?.[0]?.effort!=='Opaque:Effort/Case'){
+    while((await readPolicy())?.defaults?.rules?.[0]?.effort!=='Opaque:Effort/Case'){
       if(Date.now()>deadline)throw new Error('Native policy was not persisted');
       await new Promise(resolve=>setTimeout(resolve,25));
     }
@@ -177,10 +188,11 @@ test('native CLI installs packed combined distribution into isolated web profile
   await page.getByRole('button',{name:'View dsh-extras',exact:true}).click();
   await page.getByRole('button',{name:'Configure dsh-extras',exact:true}).click();
   await page.locator('[data-package="dsh-extras"]').waitFor();
+  await page.getByRole('button',{name:'Expand all',exact:true}).click();
   assert.equal(await page.locator('[data-module="compact-context"] [data-field="retryDelayMs"] input').inputValue(),'3.5');
   assert.equal(await page.getByRole('checkbox',{name:'Enable Stream and empty-response retry',exact:true}).isChecked(),false);
   assert.equal(await toolGroup.getByRole('checkbox',{name:'Expose compact_context',exact:true}).isChecked(),false);
-  assert.equal(await reasoning.getByRole('checkbox',{name:'Enable compaction-request reasoning',exact:true}).isChecked(),true);
+  await expect(reasoning.getByRole('checkbox',{name:'Enable compaction-request reasoning',exact:true})).toBeChecked();
   assert.equal(await rule.getByRole('textbox',{name:'Provider route ID',exact:true}).inputValue(),'Synthetic/Exact-Route');
   assert.equal(await rule.getByRole('textbox',{name:'Model ID',exact:true}).inputValue(),'Synthetic/Exact-Model');
   assert.equal(await rule.getByRole('textbox',{name:'Native effort ID',exact:true}).inputValue(),'Opaque:Effort/Case');
@@ -188,7 +200,7 @@ test('native CLI installs packed combined distribution into isolated web profile
   await chimeSection.locator('#dsh-session-chime-enabled').uncheck();
   await chimeSection.getByRole('button',{name:'Save',exact:true}).click();
   await page.getByRole('button',{name:'🌙 休息中',exact:true}).waitFor({state:'hidden'});
-  assert.equal(await page.locator('[data-module]').count(),4,'disabled chime keeps sibling configuration available');
+  assert.equal(await page.locator('[data-module]').count(),5,'disabled chime keeps sibling configuration available');
   assert.deepEqual(await chimeSection.getByRole('alert').allTextContents(),[]);
   const persisted=await readFile(join(environment(temp).DSH_HOME!,'profiles',profile,'cordis.patch.yml'),'utf8');
   const accepted=parse(persisted).find((row:any)=>row.id==='dsh-extras').config.modules;
@@ -198,18 +210,22 @@ test('native CLI installs packed combined distribution into isolated web profile
   assert.equal(accepted.goalWait.strategy,'activation');
   assert.ok(['errorCodes','providers','retryEmptyResponse'].every(key=>!Object.hasOwn(accepted.retry,key)),'group Reset removed explicit retry overrides');
   assert.equal(accepted['compact-context'].compactTool,false);
-  assert.deepEqual(accepted['compact-context'].compactionReasoning,{enabled:true,rules:[{scope:'provider-model',provider:'Synthetic/Exact-Route',model:'Synthetic/Exact-Model',mode:'fixed',effort:'Opaque:Effort/Case'}]});
+  assert.equal(accepted['compact-context'].compactionReasoning.enabled,true,'local participation remains independent');
+  const canonical=await readPolicy();
+  assert.ok(canonical.revision>originalShared.revision);
+  assert.deepEqual(canonical.defaults,{enabled:true,rules:[{scope:'provider-model',provider:'Synthetic/Exact-Route',model:'Synthetic/Exact-Model',mode:'fixed',effort:'Opaque:Effort/Case'}]});
+  assert.notEqual(accepted['model-policy']?.enabled,true,'editing shared compaction never enables new model policy');
   assert.equal(accepted.retry.enabled,false);assert.equal(accepted.chime.restMode,true);assert.equal(accepted.chime.enabled,false);
   assert.deepEqual(errors,[]);
   console.log('Native startup log:',clean(log).slice(-3000));
 });
 
-test('all five packed manifests compose through native CLI; distinct split peers coexist', {timeout:180000}, async t=>{
+test('all six packed manifests compose through native CLI; distinct split peers coexist', {timeout:180000}, async t=>{
   const temp=await mkdtemp(join(root,'.sandbox-native-'));
   t.after(async()=>{assert.ok(temp.startsWith(join(root,'.sandbox-native-')));await rm(temp,{recursive:true,force:true});});
   const seed=process.env.DSH_EXTRAS_NATIVE_SEED;
   if(seed){assert.ok(resolve(seed).startsWith(join(root,'.sandbox-native-')));await cp(join(seed,'cache'),join(temp,'cache'),{recursive:true});await cp(join(seed,'data'),join(temp,'data'),{recursive:true});}
-  const names=['dsh-extras','dsh-extras-compact-context','dsh-extras-retry','dsh-extras-chime','dsh-extras-goal-wait'];
+  const names=['dsh-extras','dsh-extras-compact-context','dsh-extras-retry','dsh-extras-chime','dsh-extras-goal-wait','dsh-extras-model-policy'];
   const flatten=(value:any):any[]=>Array.isArray(value)?value.flatMap(flatten):value&&typeof value==='object'?[...(typeof value.id==='string'?[value]:[]),...Object.values(value).flatMap(flatten)]:[];
   for(const [index,name] of names.entries()){
     const profile='compose-'+index;

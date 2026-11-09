@@ -1,7 +1,8 @@
 import type { Context } from '@deepseek-ai/cordis';
 /** Public migration seam. Native lifecycle is observed, never entered recursively. */
-export const MODULE_IDS = ['compact-context', 'retry', 'chime', 'goalWait'] as const;
-export type ModuleId = typeof MODULE_IDS[number];
+export { MODULE_IDS, LEGACY_MODULE_IDS } from '../types.ts';
+import type { ModuleId, LegacyModuleId } from '../types.ts';
+export type { ModuleId, LegacyModuleId } from '../types.ts';
 export type Values = Record<string, unknown>;
 export interface Distribution { rowId: string; packageName?: string; moduleIds: readonly ModuleId[]; validateModule?: (id: ModuleId, value: Values) => void }
 export interface ProfileFacts { dir: string; patchPath: string; installAnchor: string; home: string; overlays?: readonly unknown[]; name?: string }
@@ -24,7 +25,7 @@ export interface NativeMigrationHost {
   continuationContext?: Context;
 }
 export interface NativeDriverDelta { rowId: string; moduleName: string; restored: Values }
-export interface Source { nativeDriverDelta?: NativeDriverDelta; moduleId: ModuleId; packageName: string; moduleName?: string; bundleName?: string; version?: string; rowId?: string; raw: Values; effective: Values; disabled: boolean; active: boolean; bundleSelected: boolean; problem?: string }
+export interface Source { nativeDriverDelta?: NativeDriverDelta; moduleId: LegacyModuleId; packageName: string; moduleName?: string; bundleName?: string; version?: string; rowId?: string; raw: Values; effective: Values; disabled: boolean; active: boolean; bundleSelected: boolean; problem?: string }
 export interface Discovery {
   goalOwner?: { verified: boolean; stockActive: boolean; reason?: string };
   profileId: string; profile: ProfileFacts; revision: string; manifest: Values; patchText: string; manifestText: string;

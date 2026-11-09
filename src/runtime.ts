@@ -3,7 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createConfig, plain, validateModule } from './config.ts';
 import { startAutomaticMigration } from './migration/index.ts';
 import type { MigrationController, NativeMigrationHost } from './migration/types.ts';
-import type { Distribution, ModuleId, ModuleState } from './types.ts';
+import { moduleDefaultEnabled, type Distribution, type ModuleId, type ModuleState } from './types.ts';
 
 interface RunningModule { fiber: Fiber; fingerprint: string; values: Record<string, unknown> }
 
@@ -32,6 +32,12 @@ export function createExtrasPlugin(distribution: Distribution) {
       let unsubscribe = () => {};
       const root = ctx as unknown as Record<string, any>;
       const moduleConfig = (id: ModuleId) => plain<Record<string, unknown>>(config.modules?.[id] ?? {});
+      for (const id of distribution.moduleIds) distribution.modulePlugins[id]?.mountSettings?.(ctx, distribution.name, () => {
+        if (closed) return false;
+        const enabled = moduleConfig(id).enabled;
+        return (enabled === undefined ? moduleDefaultEnabled(id) : enabled === true)
+          && controller?.state().modules[id]?.ready === true && statuses[id]?.phase === 'active';
+      });
       const get = (name: string) => ctx.get(name);
       const migrationHost = {
         profileContext: root.profileContext,
@@ -61,7 +67,7 @@ export function createExtrasPlugin(distribution: Distribution) {
           const values = moduleConfig(id);
           // A previous sibling may have awaited asynchronous disposal. Never reuse its admission snapshot.
           const handover = controller.state().modules[id];
-          const enabled = values.enabled !== false;
+          const enabled = values.enabled === undefined ? moduleDefaultEnabled(id) : values.enabled === true;
           const allowed = handover?.ready === true && enabled;
           const current = scopes.get(id);
           const fingerprint = JSON.stringify(values);
@@ -167,7 +173,7 @@ export function createExtrasPlugin(distribution: Distribution) {
             ...diagnostics(id),
             ...state.modules[id], ...statuses[id],
             ready: state.modules[id]?.ready === true && statuses[id]?.phase === 'active',
-            enabled: moduleConfig(id).enabled !== false,
+            enabled: moduleConfig(id).enabled === undefined ? moduleDefaultEnabled(id) : moduleConfig(id).enabled === true,
           }])),
           report: state.report,
           browserReloadAfter: state.report?.browserReloadAfter,

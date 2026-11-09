@@ -17,11 +17,12 @@ export async function verifyPublicTypes(temp, name, modules) {
       + 'const plain' + modules.indexOf(id) + ': boolean = ' + expression + '.enabled;';
   }).join('\n');
   const featureChecks = [
+    modules.includes('model-policy') ? 'const rootSelection: Readonly<{provider:string;model:string;reasoningEffort?:string|null}>|null|undefined = output.modules["model-policy"].root.get();\n// @ts-expect-error native null defaults may remain omitted\nconst requiredRoot: {provider:string;model:string}|null = output.modules["model-policy"].root.get();\nConfig({modules:{"model-policy":{enabled:true,root:{provider:"exact",model:"exact",reasoningEffort:null},descendants:null,workspaceOverrides:[{workspaceId:"native-id",root:null}],compactionReasoning:{enabled:true}}}});\n// @ts-expect-error exact model required\nConfig({modules:{"model-policy":{root:{provider:"exact"}}}});\n// @ts-expect-error workspace ID required\nConfig({modules:{"model-policy":{workspaceOverrides:[{root:null}]}}});' : '',
     modules.includes('retry') ? 'const codes: readonly string[] = output.modules.retry.errorCodes.get();\nConfig({modules:{retry:{providers:[],errorCodes:[],retryEmptyResponse:false}}});\n// @ts-expect-error wrong retry value\nConfig({modules:{retry:{retryEmptyResponse:"yes"}}});' : '',
     modules.includes('compact-context') ? 'const attempts: number = output.modules["compact-context"].retryAttempts.get();\nconst rules = output.modules["compact-context"].compactionReasoning.get().rules;\nConfig({modules:{"compact-context":{retryAttempts:0,ptcModelTimeouts:{},compactionReasoning:{enabled:true,rules:[{scope:"all",mode:"fixed",effort:"opaque"}]}}}});\n// @ts-expect-error wrong compaction value\nConfig({modules:{"compact-context":{notifyAtRatio:"high"}}});' : '',
     modules.includes('chime') ? 'const volume: number = output.modules.chime.volume.get();\nConfig({modules:{chime:{soundDone:"chime-soft",restMode:false}}});\n// @ts-expect-error unknown sound\nConfig({modules:{chime:{soundDone:"imaginary"}}});' : '',
     modules.includes('goalWait') ? 'const hold: number = output.modules.goalWait.maxHoldMs.get();\nConfig({modules:{goalWait:{maxHoldMs:0,waitForJobs:false}}});\n// @ts-expect-error wrong goal value\nConfig({modules:{goalWait:{maxHoldMs:"forever"}}});' : '',
-    ...['compact-context','retry','chime','goalWait'].filter(id=>!modules.includes(id)).map(id => '// @ts-expect-error non-selected module\nConfig({modules:{' + JSON.stringify(id) + ':{enabled:true}}});'),
+    ...['compact-context','retry','chime','goalWait','model-policy'].filter(id=>!modules.includes(id)).map(id => '// @ts-expect-error non-selected module\nConfig({modules:{' + JSON.stringify(id) + ':{enabled:true}}});'),
   ].join('\n');
   const reasoningChecks = modules.includes('compact-context') ? [
     'const enabledOnly = Config({modules:{"compact-context":{compactionReasoning:{enabled:true}}}});',
@@ -89,7 +90,7 @@ export async function verifyPublicTypes(temp, name, modules) {
     'const recovered: Promise<MigrationReport> = migration.rollbackMigration(host,target,{operationId:"test",modules:target.moduleIds});',
     'const controller: MigrationController = migration.startAutomaticMigration(host,{...target,auto:false,onReport(report:MigrationReport){}});',
     'controller.subscribe(state=>state.report); controller.inspect(); controller.retry(); controller.rollback({operationId:"test",modules:target.moduleIds}); controller.dispose();',
-    'const ids: readonly ("compact-context"|"retry"|"chime"|"goalWait")[] = migration.MODULE_IDS;',
+    'const ids: readonly ("compact-context"|"retry"|"chime"|"goalWait"|"model-policy")[] = migration.MODULE_IDS;',
     'const defaults: Record<string, Record<string, unknown>> = migration.LEGACY_DEFAULTS;',
     'const packages: Record<string, string> = migration.LEGACY_PACKAGES;',
     '// @ts-expect-error invalid migration target id\nmigration.inspectMigration(host,{rowId:identity,moduleIds:["unknown"]});',

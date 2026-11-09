@@ -19,21 +19,31 @@ for (const { name, modules } of distributions) {
   const imports = modules.map((id, index) => 'import * as ' + aliases[index] + ' from "./src/modules/' + sourceDirectories[id] + '/index.ts";').join('\n');
   const modulePlugins = modules.map((id, index) => JSON.stringify(id) + ':' + aliases[index]).join(',');
   const server = imports + '\nimport {createExtrasPlugin} from "./src/runtime.ts";\nconst p=createExtrasPlugin({name:' + JSON.stringify(name) + ',moduleIds:' + JSON.stringify(modules) + ',modulePlugins:{' + modulePlugins + '}});\nexport const name=p.name,inject=p.inject,Config=p.Config,apply=p.apply;';
-  await build({stdin: {contents: server, resolveDir: root, sourcefile: 'extras-server-entry.ts', loader: 'ts'}, outfile: join(out, 'lib/index.js'), bundle: true, platform: 'node', format: 'esm', target: 'node24', external: ['@deepseek-ai/*', 'yaml'], sourcemap: true, legalComments: 'linked'});
+  const serverBuild = await build({metafile:true, stdin: {contents: server, resolveDir: root, sourcefile: 'extras-server-entry.ts', loader: 'ts'}, outfile: join(out, 'lib/index.js'), bundle: true, platform: 'node', format: 'esm', target: 'node24', external: ['@deepseek-ai/*', 'yaml'], sourcemap: true, legalComments: 'linked'});
   await build({entryPoints: [join(root, 'src/migration/index.ts')], outfile: join(out, 'lib/migration.js'), bundle: true, platform: 'node', format: 'esm', target: 'node24', external: ['@deepseek-ai/*', 'yaml'], sourcemap: true, legalComments: 'linked'});
   await build({entryPoints: [join(root, 'src/migration/cli.ts')], outfile: join(out, 'lib/migrate.js'), bundle: true, platform: 'node', format: 'esm', target: 'node24', external: ['@deepseek-ai/*', 'yaml'], sourcemap: true, legalComments: 'linked'});
   const hasChime = modules.includes('chime');
-  const hasReasoning = modules.includes('compact-context');
+  const hasReasoning = modules.includes('compact-context') || modules.includes('model-policy');
+  const hasModelPolicy = modules.includes('model-policy');
+  const hasRetry = modules.includes('retry');
   const client = 'import {createExtrasClient} from "./client/composition.ts";\n'
     + (hasChime ? 'import {createChimeAdapter} from "./client/chime.ts";\n' : '')
     + (hasReasoning ? 'import {createReasoningAdapter} from "./client/reasoning-settings.ts";\n' : '')
+    + (hasModelPolicy ? 'import {createModelPolicyAdapter} from "./client/model-policy-settings.ts";\n' : '')
+    + (hasRetry ? 'import {createRetrySettingsAdapter} from "./client/retry-settings.ts";\n' : '')
     + 'window.__ModuleLoader__.load({id:' + JSON.stringify(name) + ',factory(require){return createExtrasClient('
     + JSON.stringify({rowId:name,packageName:name,moduleIds:modules}) + ',require("react"),'
-    + (hasChime ? 'createChimeAdapter' : 'undefined') + ',' + (hasReasoning ? 'createReasoningAdapter' : 'undefined') + ');}});';
+    + (hasChime ? 'createChimeAdapter' : 'undefined') + ','
+    + (hasReasoning ? '(React)=>createReasoningAdapter(React,' + JSON.stringify(name) + ')' : 'undefined') + ','
+    + (hasModelPolicy ? 'createModelPolicyAdapter' : 'undefined') + ','
+    + (hasRetry ? 'createRetrySettingsAdapter' : 'undefined') + ');}});';
   await build({stdin: {contents: client, resolveDir: root, sourcefile: 'extras-client-entry.ts', loader: 'ts'}, outfile: join(out, 'lib/client.js'), bundle: true, platform: 'browser', format: 'iife', target: 'es2022', sourcemap: true, legalComments: 'linked'});
   await writeFile(join(out, 'cordis.patch.yml'), '# Generated from the same feature source as every Extras distribution.\n- insert:\n    - id: ' + name + '\n      name: ' + name + '\n      config: {}\n');
   // Driver ownership detection resolves these dynamically from the installed DSH anchor.
-  const selectedHostPackages = [...hostPackages, ...(modules.includes('goalWait') ? ['dsh', 'dsh-goal-round-driver'] : [])];
+  const actualHostPackages = Object.values(serverBuild.metafile.outputs).flatMap(output => output.imports)
+    .filter(item => item.external && item.path.startsWith('@deepseek-ai/'))
+    .map(item => item.path.split('/')[1]);
+  const selectedHostPackages = [...new Set([...hostPackages, ...actualHostPackages, ...(modules.includes('goalWait') ? ['dsh-goal-round-driver'] : []), ...(modules.includes('goalWait') || modules.includes('retry') ? ['dsh'] : [])])].sort();
   const peers = Object.fromEntries(await Promise.all(selectedHostPackages.map(async pkg => {
     const fullName = '@deepseek-ai/' + pkg;
     const manifest = JSON.parse(await readFile(hostRequire.resolve(fullName + '/package.json'), 'utf8'));

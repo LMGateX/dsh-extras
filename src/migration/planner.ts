@@ -1,16 +1,17 @@
-import type { Decision, Discovery, MigrationPlan, ModuleId, Values } from './types.ts';
+import type { Decision, Discovery, MigrationPlan, ModuleId, LegacyModuleId, Values } from './types.ts';
+import { moduleDefaultEnabled } from '../types.ts';
 import { validateModuleConfig } from './validation.ts';
 
-export const LEGACY_PACKAGES: Record<ModuleId, string> = {
+export const LEGACY_PACKAGES: Record<LegacyModuleId, string> = {
   'compact-context': 'dsh-tool-compact-context', retry: 'dsh-stream-retry', chime: 'dsh-session-chime', goalWait: 'dsh-goal-wait-gate',
 };
-export const LEGACY_DEFAULTS: Record<ModuleId, Values> = {
+export const LEGACY_DEFAULTS: Record<LegacyModuleId, Values> = {
   'compact-context': { compactTool: true, statusTool: false, guidance: false, guidanceText: '', pressureContext: false, notifyAtRatio: 0.25, pressureStep: 10, retryAttempts: 2, retryDelayMs: 1000, ptcTimeoutMs: 0, ptcModelTimeouts: {} },
   retry: { errorCodes: ['upstream_stream_read_error', 'stream_timeout', 'stream error'], providers: [], retryEmptyResponse: true },
   chime: { enabled: true, soundDone: 'chime-soft', soundBlocked: 'alert-low', soundQuestion: 'bell-bright', soundError: 'alert-sharp', chimeQuestion: true, chimeError: true, volume: 0.8, durationMs: 0, debounceMs: 1500, quietStyle: 'short', quietShortMs: 600, dndStart: '', dndEnd: '', restMode: false, minRingMs: 3000, banner: true, bannerPlacement: 'bottom-center' },
   goalWait: { strategy: 'activation', waitForJobs: true, waitForSubagents: true, maxHoldMs: 0 },
 };
-export const LEGACY_VERSIONS: Record<ModuleId, readonly string[]> = { 'compact-context': ['0.4.7'], retry: ['0.1.9'], chime: ['0.6.0'], goalWait: ['0.3.0', '0.4.23'] };
+export const LEGACY_VERSIONS: Record<LegacyModuleId, readonly string[]> = { 'compact-context': ['0.4.7'], retry: ['0.1.9'], chime: ['0.6.0'], goalWait: ['0.3.0', '0.4.23'] };
 /** Detached deep merge: arrays replace; prototype-bearing keys are never admitted. */
 export function mergeValues(...layers: Values[]): Values {
   const out: Values = {};
@@ -41,13 +42,13 @@ export function planMigration(input: Discovery): MigrationPlan {
     try { validateKnownConfig(moduleId, explicit); if (source) { validateKnownConfig(moduleId, source.raw); validateKnownConfig(moduleId, source.effective); } } catch { return conflict('target or legacy schema validation failed'); }
     if (containsExpression(explicit) || source && (containsExpression(source.raw) || containsExpression(source.effective))) return conflict('dynamic configuration is not imported');
     if (!source) {
-      const enabled = Object.hasOwn(explicit, 'enabled') ? explicit.enabled === true : !input.legacyMode;
+      const enabled = Object.hasOwn(explicit, 'enabled') ? explicit.enabled === true : !input.legacyMode && moduleDefaultEnabled(moduleId);
       const config = mergeValues({ enabled }, explicit);
       try { validateKnownConfig(moduleId, config); input.target.validateModule?.(moduleId, config); } catch { return conflict('target schema validation failed'); }
       return { moduleId, phase: 'fresh', enabled, config };
     }
-    if (!source.version || !LEGACY_VERSIONS[moduleId].includes(source.version)) return conflict('unsupported legacy version: ' + (source.version ?? 'unknown'));
-    const defaults = LEGACY_DEFAULTS[moduleId];
+    if (!source.version || !LEGACY_VERSIONS[source.moduleId].includes(source.version)) return conflict('unsupported legacy version: ' + (source.version ?? 'unknown'));
+    const defaults = LEGACY_DEFAULTS[source.moduleId];
     // The historical activation gate had no strategy field. Normalize its target
     // default, but do not admit later configuration under an older version identity.
     const fields = moduleId === 'goalWait' && source.version === '0.3.0' ? ['waitForJobs', 'waitForSubagents', 'maxHoldMs'] : Object.keys(defaults);

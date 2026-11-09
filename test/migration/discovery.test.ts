@@ -77,6 +77,16 @@ async function fixture(t: TestContext) {
   await patch([{ insert: [targetRow] }]);
   return { root, home, dshHome, dir, host, manifest, save, patch, pkg };
 }
+test('new model-policy peer is off by omission and explicit enable creates a conflict', async t => {
+  const f = await fixture(t);
+  const modelTarget: Distribution = {rowId:'dsh-extras-model-policy',packageName:'dsh-extras-model-policy',moduleIds:['model-policy']};
+  const rows = (enabled?: boolean) => [{id:modelTarget.rowId,name:modelTarget.rowId,config:{}},{id:'combined-upgrade',name:'dsh-extras',config:{modules:enabled === undefined ? {} : {'model-policy':{enabled}}}}];
+  await f.patch([{insert:rows()}]);
+  assert.equal((await inspectMigration(f.host,modelTarget)).peers['model-policy'], undefined);
+  await f.patch([{insert:rows(true)}]);
+  assert.deepEqual((await inspectMigration(f.host,modelTarget)).peers['model-policy'], ['combined-upgrade']);
+});
+
 async function snapshot(root: string): Promise<Record<string, string>> {
   const values: Record<string, string> = {};
   for (const entry of await readdir(root, { withFileTypes: true })) {

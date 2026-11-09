@@ -1,5 +1,6 @@
 /** Root schema/preflight tests; feature schemas are the single policy source. */
 import test from 'node:test';
+import Schema from '@deepseek-ai/schemastery';
 import assert from 'node:assert/strict';
 import { createConfig, plain, validateModule } from '../../src/config.ts';
 import * as context from '../../src/modules/compact-context/index.ts';
@@ -7,6 +8,13 @@ import * as retry from '../../src/modules/retry/index.ts';
 import * as chime from '../../src/modules/chime/index.ts';
 import * as goalWait from '../../src/modules/goal-wait/index.ts';
 import type { Distribution } from '../../src/types.ts';
+
+test('a new model-policy root schema requires opt-in and preserves explicit enablement', () => {
+  const distribution: Distribution = {name:'dsh-extras-model-policy',moduleIds:['model-policy'],modulePlugins:{'model-policy':{name:'fixture',Config:Schema.object({enabled:Schema.boolean().default(false)}),apply(){}}}};
+  const Config = createConfig(distribution);
+  assert.equal(plain<any>(Config({})).modules['model-policy'].enabled, false);
+  assert.equal(plain<any>(Config({modules:{'model-policy':{enabled:true}}})).modules['model-policy'].enabled, true);
+});
 
 const combined: Distribution = { name: 'dsh-extras', moduleIds: ['compact-context', 'retry', 'chime', 'goalWait'], modulePlugins: { 'compact-context': context, retry, chime, goalWait } };
 
