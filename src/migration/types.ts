@@ -1,7 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis';
 /** Public migration seam. Native lifecycle is observed, never entered recursively. */
 export { MODULE_IDS, LEGACY_MODULE_IDS } from '../types.ts';
-import type { ModuleId, LegacyModuleId } from '../types.ts';
+import type { ModuleId, LegacyModuleId, LegacyAdoptionReceipt } from '../types.ts';
 export type { ModuleId, LegacyModuleId } from '../types.ts';
 export type Values = Record<string, unknown>;
 export interface Distribution { rowId: string; packageName?: string; moduleIds: readonly ModuleId[]; validateModule?: (id: ModuleId, value: Values) => void }
@@ -17,6 +17,8 @@ export interface NativeMigrationHost {
   handoverAcknowledged?(id: ModuleId, source: Source): boolean;
   /** Optional direct view of the running root module configuration (volatile refs unwrapped). */
   moduleConfig?(id: ModuleId): Values | undefined;
+  /** Internal journal-backed handoff, outside the profile writer lock; never part of status JSON. */
+  onLegacyAdopted?(id: ModuleId, acceptedModuleConfig: Values, receipt: LegacyAdoptionReceipt): unknown;
   appReady?: { onReady(listener: () => void): () => void };
   logger?: { warn(...args: unknown[]): void; debug?(...args: unknown[]): void };
   /** Fail closed if a nonstandard startup owner cannot be excluded. */

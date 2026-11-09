@@ -3,7 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createConfig, plain, validateModule } from './config.ts';
 import { startAutomaticMigration } from './migration/index.ts';
 import type { MigrationController, NativeMigrationHost } from './migration/types.ts';
-import { moduleDefaultEnabled, type Distribution, type ModuleId, type ModuleState } from './types.ts';
+import { moduleDefaultEnabled, type Distribution, type ModuleId, type ModuleState, type LegacyAdoptionReceipt } from './types.ts';
 
 interface RunningModule { fiber: Fiber; fingerprint: string; values: Record<string, unknown> }
 
@@ -39,6 +39,7 @@ export function createExtrasPlugin(distribution: Distribution) {
           && controller?.state().modules[id]?.ready === true && statuses[id]?.phase === 'active';
       }, () => moduleConfig(id));
       const get = (name: string) => ctx.get(name);
+      const legacyAdoptions = new Map<string, Promise<void>>();
       const migrationHost = {
         profileContext: root.profileContext,
         continuationContext: ctx,
@@ -48,6 +49,18 @@ export function createExtrasPlugin(distribution: Distribution) {
         on: (event: string, listener: (...args: any[]) => void) => (ctx.on as any)(event, listener),
         logger: log,
         moduleConfig,
+        onLegacyAdopted: async (id: ModuleId, accepted: Record<string, unknown>, receipt: LegacyAdoptionReceipt) => {
+          const plugin = distribution.modulePlugins[id];
+          if (closed || !distribution.moduleIds.includes(id) || !plugin?.onLegacyAdopted) return;
+          const key = receipt.operationId + ':' + id;
+          const pending = legacyAdoptions.get(key);
+          if (pending) return pending;
+          const task = Promise.resolve().then(async () => {
+            if (!closed) await plugin.onLegacyAdopted!(ctx, structuredClone(accepted), receipt);
+          });
+          legacyAdoptions.set(key, task);
+          try { await task; } catch (error) { legacyAdoptions.delete(key); throw error; }
+        },
       } as NativeMigrationHost;
 
       const setFiberState = (id: ModuleId, fiber: Fiber) => {

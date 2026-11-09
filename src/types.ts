@@ -9,6 +9,8 @@ export interface CapabilityStatus {
   phase: 'disabled' | 'active' | 'standby' | 'handover' | 'unavailable';
   reason?: string;
 }
+/** A real journal import, never inferred from current setting bytes. */
+export interface LegacyAdoptionReceipt { readonly operationId: string; readonly sourceModuleId: LegacyModuleId }
 export interface FeaturePlugin {
   readonly name: string;
   readonly inject?: readonly string[] | Record<string, unknown>;
@@ -16,6 +18,8 @@ export interface FeaturePlugin {
   apply(ctx: any, config?: any): unknown;
   /** Selected distribution settings remain accessible when feature participation is disabled. */
   mountSettings?(ctx: any, distributionName: string, isActive?: () => boolean, getConfig?: () => Record<string, unknown>): unknown;
+  /** Same root settings owner; called only after a verifiable imported journal is adopted. */
+  onLegacyAdopted?(ctx: any, acceptedModuleConfig: Record<string, unknown>, receipt: LegacyAdoptionReceipt): unknown;
   /** Side-effect-free, non-secret capability state for this exact mounted fiber. */
   runtimeStatus?(ctx: any): { capabilities: Record<string, CapabilityStatus>; details?: Record<string, unknown> };
 }

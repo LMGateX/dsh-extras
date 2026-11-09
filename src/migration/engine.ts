@@ -8,9 +8,10 @@ import { isDeepStrictEqual } from 'node:util';
 import { isMap, isSeq, parseDocument } from 'yaml';
 import { inspectMigration } from './discovery.ts';
 import { resolveCompactionReasoning } from '../modules/compact-context/reasoning-policy.ts';
-import { containsExpression, isRecord, planMigration, validateKnownConfig } from './planner.ts';
+import { containsExpression, isRecord, planMigration, validateKnownConfig, LEGACY_PACKAGES, LEGACY_VERSIONS } from './planner.ts';
 import { digest, profilePaths, readOptional, withProfileLock, writePrivate } from './storage.ts';
 import type { Decision, Discovery, Distribution, MigrationPlan, MigrationReport, ModuleId, NativeMigrationHost, Values } from './types.ts';
+import type { LegacyAdoptionReceipt } from '../types.ts';
 
 interface Step { kind: 'target' | 'disable' | 'bundles'; before: string; after: string; done: boolean }
 interface JournalEnvironment { identity: string; files: { path: string; hash: string | null }[]; paths: string[] }
@@ -225,7 +226,29 @@ export function reportJournal(host: NativeMigrationHost, journal: Journal, curre
 export async function dryRunMigration(host: NativeMigrationHost, target: Distribution): Promise<MigrationPlan> { return planMigration(await inspectMigration(host, target)); }
 /** Persistence only. The host's existing file watcher owns all Loader/HMR reconciliation. */
 export async function runMigration(host: NativeMigrationHost, target: Distribution, options: ExecutionOptions = {}): Promise<MigrationReport> {
-  return withProfileLock(host, async () => {
+  const adoptions: {id: ModuleId; config: Values; receipt: LegacyAdoptionReceipt}[] = [];
+  const adoptedReport = async (journal: Journal, report: MigrationReport): Promise<MigrationReport> => {
+    if (!host.onLegacyAdopted || journal.phase !== 'saved' || journal.recoveryWrites || journal.ownershipVersion !== 1 || !journal.environment || !/^[0-9a-f-]{36}$/i.test(journal.operationId) || journal.steps.length !== 3 || journal.steps.some((step,i) => !step.done || step.kind !== ['target','disable','bundles'][i])) return report;
+    const imported = journal.plan.decisions.filter(d => d.phase === 'prepared' && d.source && d.config && report.modules[d.moduleId]?.phase === 'applied' && report.modules[d.moduleId]?.ready);
+    if (!imported.length) return report;
+    try {
+      const current = await validateJournalInputs(host, journal.plan.target, journal);
+      const paths = await profilePaths(host, journal.targetRowId);
+      if (journal.backup !== join(paths.root,journal.operationId+'.backup.json')) return report;
+      const backup = JSON.parse(await readOptional(journal.backup) ?? 'null');
+      if (backup?.schemaVersion !== 1 || backup.profileId !== journal.profileId || backup.patch !== journal.steps[0]!.before || backup.manifest !== journal.steps[2]!.before) return report;
+      const doc = document(current.patchText);
+      for (const decision of imported) {
+        const source = decision.source!;
+        if (source.moduleId !== decision.moduleId || source.packageName !== LEGACY_PACKAGES[source.moduleId] || !source.version || !LEGACY_VERSIONS[source.moduleId].includes(source.version) || !source.rowId) continue;
+        const marked = doc.contents.items.some((row,i) => isMap(row) && row.items.length === 3 && row.commentBefore === ownedMarker(journal,decision.moduleId) && doc.getIn([i,'id']) === source.rowId && doc.getIn([i,'name']) === (source.moduleName ?? source.packageName) && doc.getIn([i,'disabled']) === true);
+        if (!marked || !runningConfigMatches(host,journal,decision,current)) continue;
+        adoptions.push({id:decision.moduleId,config:structuredClone(decision.config!),receipt:Object.freeze({operationId:journal.operationId,sourceModuleId:source.moduleId})});
+      }
+    } catch { host.logger?.warn('Legacy adoption receipt withheld: immutable migration provenance could not be verified'); }
+    return report;
+  };
+  const report = await withProfileLock(host, async () => {
     const paths = await profilePaths(host, target.rowId);
     const input = await inspectMigration(host, target);
     let journal = await loadJournal(host, target);
@@ -251,7 +274,7 @@ export async function runMigration(host: NativeMigrationHost, target: Distributi
         journal.browserFenceFinalized = true;
         await writePrivate(paths.journal, JSON.stringify(journal) + '\n');
       }
-      return reportJournal(host, journal, input, pending);
+      return adoptedReport(journal, reportJournal(host, journal, input, pending));
     }
     if (journal && !options.retry) return reportJournal(host, journal, input);
     if (!journal) {
@@ -294,8 +317,11 @@ export async function runMigration(host: NativeMigrationHost, target: Distributi
     await observeOwners(host, journal, current);
     const report = reportJournal(host, journal, current);
     await writePrivate(join(paths.root, target.rowId + '.report.json'), JSON.stringify(report, null, 2) + '\n');
-    return report;
+    return adoptedReport(journal, report);
   });
+  // Feature storage must never run inside native profile/HMR's writer lock.
+  for (const adoption of adoptions) if (moduleConfigAdopted(host,target,adoption.id,adoption.config)) await host.onLegacyAdopted?.(adoption.id,adoption.config,adoption.receipt);
+  return report;
 }
 
 const PEER_MODULES: Record<string, readonly ModuleId[]> = {

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
-import { parse } from 'yaml';
+import { parse, parseDocument } from 'yaml';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { inspectMigration, dryRunMigration, runMigration, rollbackMigration, startAutomaticMigration } from '../../src/migration/index.ts';
 import { profilePaths, withProfileLock } from '../../src/migration/storage.ts';
@@ -78,6 +78,34 @@ test('additive journal admission retries a cleared peer conflict without replaci
   const cleared=await runMigration(host,upgraded);
   assert.equal(cleared.modules['model-policy']?.phase,'fresh');assert.equal(cleared.modules['model-policy']?.ready,true);
   assert.equal(cleared.operationId,first.operationId);
+}));
+
+test('legacy adoption receipt is emitted only after saved imported config is actually adopted',async()=>fixture(async({host,entries})=>{
+  const receipts:any[]=[];host.onLegacyAdopted=async(id,config,receipt)=>{await withProfileLock(host,async()=>{receipts.push({id,config:structuredClone(config),receipt});config.retryEmptyResponse=true;});};
+  const first=await runMigration(host,target);assert.equal(receipts.length,0,'persisted-only import is not live adoption');
+  const input=await inspectMigration(host,target);const config=input.rows.find(row=>row.id===target.rowId)!.config as any;
+  entries.push({id:target.rowId,options:{id:target.rowId,name:target.rowId},fiber:{state:2,effectiveConfig:config}});host.moduleConfig=id=>config.modules[id];
+  const applied=await runMigration(host,target);assert.equal(applied.modules.retry?.phase,'applied');
+  assert.equal(receipts.length,1);assert.deepEqual(receipts[0],{id:'retry',config:config.modules.retry,receipt:{operationId:first.operationId,sourceModuleId:'retry'}});
+  assert.equal(config.modules.retry.retryEmptyResponse,false,'hook gets a detached journal value, not live config');
+  assert.equal(receipts.some(value=>value.id==='compact-context'),false,'fresh source-free decision cannot create a receipt');
+}));
+
+test('partial and blocked imports cannot hand off a legacy adoption receipt',async()=>fixture(async({host})=>{
+  const receipts:any[]=[];host.onLegacyAdopted=(...args)=>{receipts.push(args);};
+  await assert.rejects(runMigration(host,target,{checkpoint:stage=>{if(stage==='after-target')throw Error('interrupted');}}),/interrupted/);
+  const current=await inspectMigration(host,target);const config=current.rows.find(row=>row.id===target.rowId)!.config as any;host.moduleConfig=id=>config.modules[id];
+  assert.equal((await runMigration(host,target)).modules.retry?.phase,'prepared');assert.equal(receipts.length,0);
+  host.handoverAcknowledged=()=>false;assert.equal((await runMigration(host,target,{retry:true})).modules.retry?.ready,false);assert.equal(receipts.length,0);
+  host.handoverAcknowledged=()=>true;assert.equal((await runMigration(host,target)).modules.retry?.phase,'applied');assert.equal(receipts.length,1);
+}));
+for(const missing of ['backup','owned source marker'])test('applied status alone cannot invent legacy provenance without '+missing,async()=>fixture(async({host})=>{
+  let receipts=0;host.onLegacyAdopted=()=>{receipts++;};await runMigration(host,target);
+  const current=await inspectMigration(host,target);const config=current.rows.find(row=>row.id===target.rowId)!.config as any;host.moduleConfig=id=>config.modules[id];
+  const paths=await profilePaths(host,target.rowId);const journal=JSON.parse(await readFile(paths.journal,'utf8'));
+  if(missing==='backup'){const backup=JSON.parse(await readFile(journal.backup,'utf8'));backup.patch='not the original before image';await writeFile(journal.backup,JSON.stringify(backup));}
+  else{const doc=parseDocument(await readFile(host.profileContext.patchPath,'utf8'));for(const row of (doc.contents as any).items)if(row.commentBefore?.includes('dsh-extras-migration:'))row.commentBefore=undefined;await writeFile(host.profileContext.patchPath,String(doc));}
+  assert.equal((await runMigration(host,target)).modules.retry?.phase,'applied');assert.equal(receipts,0,'only independently matching durable provenance can issue a receipt');
 }));
 
 test('pure discovery/dry-run leaves complete profile untouched',async()=>fixture(async({host,dir})=>{
