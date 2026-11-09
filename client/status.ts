@@ -1,5 +1,5 @@
 /** Read-only host status. Failure closes browser capability, never settings access. */
-export interface CapabilityStatus { phase: 'disabled' | 'active' | 'unavailable'; reason?: string; }
+export interface CapabilityStatus { phase: 'disabled' | 'active' | 'standby' | 'handover' | 'unavailable'; reason?: string; executor?: 'compact-context'|'model-policy'; revision?: number; }
 export interface GoalWaitStatus {
   requested: string;
   mounted: 'replacement-port' | 'host-driver+gate' | 'host-driver' | 'none';

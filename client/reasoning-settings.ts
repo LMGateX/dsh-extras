@@ -1,4 +1,5 @@
 import { bindSection, type ConfigForm } from './forms.ts';
+import {browserSharedCompactionSource,type SharedCompactionSource} from './shared-compaction.ts';
 import { createReasoningEditor } from './reasoning.ts';
 import { capabilityText, type SettingsStatus } from './settings-core.ts';
 import { useSettingsText, translateSettingsError, type SettingsLocale } from './settings-ui.ts';
@@ -45,9 +46,9 @@ function translateReasoningError(error: string, t: (en: string, zh: string) => s
 }
 
 /** Selected feature source shared by combined, split, and source consumers. */
-export function createReasoningSettingsView(React: any, catalog?: ReasoningCatalogSource, locale?: SettingsLocale) {
+export function createReasoningSettingsView(React: any, catalog?: ReasoningCatalogSource, locale?: SettingsLocale, shared?: SharedCompactionSource) {
   const h = React.createElement;
-  function ReasoningControl({ form, runtime }: { form: ConfigForm; runtime?: CapabilityStatus }) {
+  function ReasoningControl({ form, runtime, writableGate=true, onDirtyChange }: { form: ConfigForm; runtime?: CapabilityStatus;writableGate?:boolean;onDirtyChange?:(dirty:boolean)=>void }) {
     const t = useSettingsText(React, locale);
     const [editor] = React.useState(() => createReasoningEditor(form));
     const [metadata, setMetadata] = React.useState({ busy: false, notice: '' as MetadataNotice, groups: [] as NativeCatalogGroup[] });
@@ -73,14 +74,15 @@ export function createReasoningSettingsView(React: any, catalog?: ReasoningCatal
     }
     React.useEffect(() => editor.start(), [editor]);
     const draft = React.useSyncExternalStore(editor.subscribe, editor.getSnapshot, editor.getSnapshot);
-    const disabled = draft.status !== 'ready' || !draft.writable || draft.revision === undefined || draft.saving;
+    (React.useLayoutEffect??React.useEffect)(()=>{onDirtyChange?.(draft.dirty);},[draft.dirty,onDirtyChange]);
+    const disabled = !writableGate || draft.status !== 'ready' || !draft.writable || draft.revision === undefined || draft.saving;
     const notices: Record<MetadataNotice, string> = {
       '': '',
       unavailable: t('Native metadata unavailable. Enter exact native IDs manually.', '原生元数据不可用。请手动输入准确的原生 ID。'),
       partial: t('Some native metadata is unavailable. Exact-ID entry remains available.', '部分原生元数据不可用。仍可输入准确的 ID。'),
       loaded: t('Native metadata loaded. Choices apply only to an exact provider and model.', '原生元数据已加载。选项仅适用于完全匹配的供应商和模型。'),
     };
-    return h('fieldset', { 'aria-label': t('Compaction-request reasoning', '压缩请求推理'), className: 'extras-group' },
+    return h('fieldset', { 'aria-label': t('Compaction-request reasoning', '压缩请求推理'), className: 'extras-group', 'data-extras-dirty':draft.dirty },
       h('legend', null, t('Compaction-request reasoning', '压缩请求推理')),
       h('p', {role:'status'}, capabilityText(t('Reasoning', '推理'), runtime && { ...runtime, reason: translateReasoningError(runtime.reason ?? '', t) }, t) + t('. Saved configuration does not confirm runtime activation.', '。保存配置不代表运行时已激活。')),
       h('label', null, h('input', {type: 'checkbox', checked: draft.value.enabled, disabled,
@@ -129,7 +131,39 @@ export function createReasoningSettingsView(React: any, catalog?: ReasoningCatal
         h('button', {type:'button',disabled:disabled || draft.conflict,onClick:()=>{void editor.reset();}}, t('Reset policy to inherited', '将策略重置为继承'))));
   }
 
-  return function ReasoningSection({ form, runtime }: { form: ConfigForm; runtime?: NonNullable<SettingsStatus['modules']>['compact-context'] }) {
+  function SharedReasoningSection({form,runtime,rowId}:{form:ConfigForm;runtime?:NonNullable<SettingsStatus['modules']>['compact-context'];rowId:string}) {
+    const t=useSettingsText(React,locale);
+    const [workspace,setWorkspace]=React.useState('');
+    const [workspaceDraft,setWorkspaceDraft]=React.useState('');
+    const [error,setError]=React.useState('');
+    const [saving,setSaving]=React.useState(false);
+    const [dirty,setDirty]=React.useState(false);
+    React.useEffect(()=>shared!.start(rowId),[rowId]);
+    const local=React.useSyncExternalStore(form.subscribe,form.getSnapshot,form.getSnapshot);
+    const policyForm=React.useMemo(()=>shared!.form(workspace||undefined),[workspace]);
+    const policy=React.useSyncExternalStore(policyForm.subscribe,policyForm.getSnapshot,policyForm.getSnapshot);
+    const value=local.value as any;
+    const localEnabled=value?.compactionReasoning?.enabled===true;
+    const capability=runtime?.capabilities?.compactionReasoning as any;
+    const executor=capability?.executor??(runtime as any)?.details?.compactionReasoning?.executor;
+    return h('div',{'data-shared-compaction':'','data-workspace':workspace},
+      h('label',null,h('input',{type:'checkbox',checked:localEnabled,disabled:saving||!local.writable||local.status!=='ready',onChange:async(event:any)=>{
+        const next=Boolean(event.target.checked);const current=form.getSnapshot();if(current.revision!==local.revision)return;setSaving(true);setError('');
+        try{if(!await form.mutate([{op:'set',path:['compactionReasoning','enabled'],value:next}],local.revision))setError(t('Local participation changed; reload before saving.','本模块参与状态已更改，请重新读取后保存。'));}
+        catch{setError(t('Could not save local participation.','无法保存本模块参与状态。'));}finally{setSaving(false);}
+      }}),t(' Provide compaction reasoning from this module',' 由本模块提供压缩推理能力')),
+      h('p',null,t('Both modules edit one policy. Closing this participant does not close the other module.','两个模块编辑同一份策略；关闭本模块参与，不会关闭另一模块。')),
+      h('p',{role:'status'},t('Actual executor: ','实际执行者：')+(executor??t('not reported','尚未报告'))),
+      h('div',{className:'extras-actions'},h('button',{type:'button',onClick:()=>{void shared!.refresh(rowId);}},t('Refresh shared policy','刷新共享策略'))),
+      h('label',null,t('Workspace ID (blank: profile defaults)','工作区 ID（留空：全局默认）'),h('input',{type:'text',value:workspaceDraft,maxLength:200,onChange:(event:any)=>setWorkspaceDraft(event.target.value),'aria-label':t('Compaction workspace ID','压缩策略工作区 ID')})),
+      h('button',{type:'button',disabled:dirty||saving||policy.writable===false&&policy.status==='ready',onClick:()=>{try{shared!.form(workspaceDraft||undefined);setWorkspace(workspaceDraft);setError('');}catch{setError(t('Invalid workspace identity.','工作区标识无效。'));}}},t('Select policy scope','选择策略范围')),
+      h('small',null,t('Use the exact native workspace ID. Reset removes only this workspace override; blank edits profile defaults.','请使用准确的原生工作区 ID。重置仅移除该工作区覆盖；留空编辑全局默认。')),
+      error&&h('p',{role:'alert'},error),
+      policy.status!=='ready'&&h('p',{role:'status'},t('Shared policy unavailable or loading; native policy is not changed.','共享策略尚未就绪或不可用；不会修改原生策略。')),
+      h(ReasoningControl,{key:workspace,form:policyForm,runtime:capability,onDirtyChange:setDirty,writableGate:local.status==='ready'&&local.writable}));
+  }
+  return function ReasoningSection({ form, runtime, rowId }: { form: ConfigForm; runtime?: NonNullable<SettingsStatus['modules']>['compact-context'];rowId?:string }) {
+    if(shared&&rowId)return h(SharedReasoningSection,{form,runtime,rowId});
     return h(ReasoningControl, {
       form: bindSection(form, ['compactionReasoning']), runtime: runtime?.capabilities?.compactionReasoning,
     });
@@ -137,7 +171,7 @@ export function createReasoningSettingsView(React: any, catalog?: ReasoningCatal
 }
 
 /** Optional remote lifetime belongs only to selected reasoning distributions. */
-export function createReasoningAdapter(React: any) {
+export function createReasoningAdapter(React: any, rowId?: string) {
   return {
     createView(ctx: any) {
       let catalogRemote: any;
@@ -147,7 +181,8 @@ export function createReasoningAdapter(React: any) {
         catalogRemote = scope.get('remote');
         return () => { catalogRemote = undefined; };
       });
-      return createReasoningSettingsView(React, { load: () => catalogRemote?.session?.modelCatalog() }, locale);
+      const View=createReasoningSettingsView(React,{load:()=>catalogRemote?.session?.modelCatalog()},locale,rowId?browserSharedCompactionSource():undefined);
+      return rowId?function SharedEntry(props:any){return React.createElement(View,{...props,rowId});}:View;
     },
   };
 }

@@ -12,7 +12,7 @@ export type ExtrasClientDescriptor = SettingsDescriptor;
 export type SettingsAdapterFactory = (React: any) => { createView(ctx: any): unknown };
 
 /** Public build seam: generated entry supplies selected imports and platform React. */
-export function createExtrasClient(descriptor: ExtrasClientDescriptor, React: any, makeChime?: ChimeAdapterFactory, makeReasoning?: SettingsAdapterFactory) {
+export function createExtrasClient(descriptor: ExtrasClientDescriptor, React: any, makeChime?: ChimeAdapterFactory, makeReasoning?: SettingsAdapterFactory, makeModelPolicy?: SettingsAdapterFactory, makeRetry?: SettingsAdapterFactory) {
   if (!descriptor.rowId || !descriptor.packageName) throw new TypeError('Distribution identities are required');
   const inject = ['slots', 'configForms'];
   const pageServedAt = capturePageProof(descriptor.rowId);
@@ -23,10 +23,12 @@ export function createExtrasClient(descriptor: ExtrasClientDescriptor, React: an
     const status = createStatusStore(descriptor.rowId, { pageServedAt, legacyAtBoot });
     owned.ctx.effect(() => status.start(), 'extras: host status');
     const chime = descriptor.moduleIds.includes('chime') ? makeChime?.(React) : undefined;
-    const reasoning = descriptor.moduleIds.includes('compact-context') ? makeReasoning?.(React) : undefined;
+    const reasoning = descriptor.moduleIds.some(id=>id==='compact-context'||id==='model-policy') ? makeReasoning?.(React) : undefined;
+    const modelPolicy=descriptor.moduleIds.includes('model-policy')?makeModelPolicy?.(React):undefined;
+    const retry=descriptor.moduleIds.includes('retry')?makeRetry?.(React):undefined;
     // Read the exact served namespace's accepted store; page.mutate remains the only page write endpoint.
     const accepted = { getSnapshot: () => root.getSnapshot(), subscribe: (listener: () => void) => root.subscribe(listener) };
-    const View = createSettingsView(React, descriptor, chime?.createView(owned.ctx), status, reasoning?.createView(owned.ctx), accepted, owned.ctx.get('locale'));
+    const View = createSettingsView(React, descriptor, chime?.createView(owned.ctx), status, reasoning?.createView(owned.ctx), accepted, owned.ctx.get('locale'), modelPolicy?.createView(owned.ctx), retry?.createView(owned.ctx));
     owned.ctx.effect(() => ctx.configForms.whileServed([descriptor.rowId], () => {
       const offRow = ctx.slots.inject('plugins.row.config', () => ctx.slots.register({
         name: 'plugins.row.config', key: descriptor.packageName + '#' + descriptor.rowId,
