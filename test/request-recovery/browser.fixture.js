@@ -10,8 +10,9 @@ let locale = "en";
 const listeners = /* @__PURE__ */ new Set();
 const localeListeners = /* @__PURE__ */ new Set();
 const sessionListeners = /* @__PURE__ */ new Set();
-let snapshot = { sessionId, running: false };
-const session = { getSnapshot: () => snapshot, subscribe: (fn) => {
+let snapshot = { sessionId, running: false, openState: "open", removed: false };
+const outline = [{turn:1,seq:1,prompt:"",response:""},{turn:2,seq:6,prompt:"",response:""}];
+const session = { projections: {faceOf: () => ({getSnapshot: () => outline, subscribe: () => () => {}})}, getSnapshot: () => snapshot, subscribe: (fn) => {
   sessionListeners.add(fn);
   return () => sessionListeners.delete(fn);
 } };
@@ -47,7 +48,7 @@ const ctx = {
   } }
 };
 function render() {
-  root.render(React.createElement("main", null, ...[1, 2].map((turn) => React.createElement("section", { key: sessionId + turn, "data-turn": turn }, Component ? React.createElement(Component, { ...registration.inject(sessionId), turn: { turn, status: "closed", end: { seq: turn === 2 ? 10 : 5, data: { reason: { kind: "error" } } } }, seq: 0 }) : null))));
+  root.render(React.createElement("main", null, ...[1, 2].map((turn) => React.createElement("section", { key: sessionId + turn, "data-turn": turn }, Component ? React.createElement(Component, { ...registration.inject(sessionId), turn: { turn, status: "closed", start: {type:"turn/start",seq:turn===2?6:1,data:{turn}}, end: { type:"turn/end",seq: turn === 2 ? 10 : 5, data: {turn, reason: { kind: "error" } } } }, seq: 0 }) : null))));
 }
 const stop = createRequestRecoveryAdapter(React).mount(ctx, { rowId: "recovery-fixture", enabled: () => enabled, subscribe(fn) {
   listeners.add(fn);
@@ -58,7 +59,7 @@ window.recoveryHarness = { setEnabled(v) {
   for (const fn of listeners) fn();
 }, select(id) {
   sessionId = id;
-  snapshot = { sessionId, running: false };
+  snapshot = { sessionId, running: false, openState: "open", removed: false };
   render();
 }, pulse() {
   snapshot = { ...snapshot };

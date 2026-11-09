@@ -11,7 +11,7 @@ test('emitted session-scoped chat action uses only proven checkpoints and fences
  await page.evaluate(()=> (window as any).recoveryHarness.select('other-session'));await page.getByText('Recovery unavailable: native-recovery-unavailable',{exact:true}).first().waitFor();assert.equal(await button.count(),0);
  await page.evaluate(()=> (window as any).recoveryHarness.select('session-a'));await button.waitFor();
  let release!:()=>void;const original=f.nativeLike.retry;f.nativeLike.retry=async command=>{await new Promise<void>(r=>release=r);return original(command);};
- await button.click();assert.equal(await button.isDisabled(),true);await button.evaluate((node:HTMLButtonElement)=>node.click());release();
+ await button.click();const pendingButton=page.getByRole('button',{name:'Retrying…',exact:true});assert.equal(await pendingButton.isDisabled(),true);await pendingButton.evaluate((node:HTMLButtonElement)=>node.click());release();
  await page.getByText('Recovery accepted; native execution started (not completed).',{exact:true}).waitFor();assert.equal(f.commands.length,1);assert.equal(f.calls(),1);assert.deepEqual(Object.keys(f.commands[0]).sort(),['checkpointId','expectedRevision','operationId','sessionId']);
  // A different native checkpoint is a new capability. Browser budget/provider fields never exist.
  f.setState({protocol:'dsh.request-recovery.v1',lifetime:'process-local',status:'available',checkpoint:{...checkpoint,checkpointId:'checkpoint-new',revision:4}});
