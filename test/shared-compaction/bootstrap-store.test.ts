@@ -127,15 +127,20 @@ test('a settings source admitted during pending bootstrap is included before the
     await ctx.plugin({ name: 'initial-compact-settings', apply(scope: Context) {
         mountLegacyCompactionSeed(scope, 'compact-context', 'initial-compact', () => ({ enabled: false, compactionReasoning: inherit() }));
     } }).await();
+    const preparation = prepareLegacyCompactionSeeds(ctx);
     await backing;
     await ctx.plugin({ name: 'later-model-settings', apply(scope: Context) {
         mountLegacyCompactionSeed(scope, 'model-policy', 'later-model', () => ({ enabled: false, compactionReasoning: inherit() }));
     } }).await();
-    const preparation = prepareLegacyCompactionSeeds(ctx);
     release(); await preparation;
-    const accepted = (await openSharedCompactionStore(ctx)).read();
-    assert.equal(accepted.revision, 1, 'a changed source generation must not silently cancel all bootstrap work');
+    const store = await openSharedCompactionStore(ctx);
+    const accepted = store.read();
+    assert.equal(accepted.revision, 1, 'the original preparation waiter must join the changed source generation');
     assert.deepEqual(accepted.defaults, inherit());
+    // No follow-up GET/preparation repairs this state. Both exact originals must
+    // already be durable when the first caller's original promise resolves.
+    assert.deepEqual((await store.recoverLegacy('compact-context', 1)).defaults, inherit());
+    assert.deepEqual((await store.recoverLegacy('model-policy', 2)).defaults, inherit());
 });
 
 test('a paused native receipt backup cannot seed after admission expires and remains retryable rather than consumed', async t => {
