@@ -1,5 +1,8 @@
-/** Native profile authority. No path discovery, private backend access or profile-file IO. */
+/** Native profile authority. Only supplied launcher identity and native domain IO. */
 import { createRequire } from 'node:module';
+import { createHash } from 'node:crypto';
+import { realpath, stat } from 'node:fs/promises';
+import { basename, dirname, isAbsolute } from 'node:path';
 import type { Context } from '@deepseek-ai/cordis';
 import { defineDomain, type DomainFacility } from '@deepseek-ai/dsh-storage-domain';
 import { resolveCompactionReasoning, validateCompactionReasoning, type CompactionReasoningPolicy } from '../modules/compact-context/reasoning-policy.ts';
@@ -75,7 +78,7 @@ const seedSchema = (bootstrap: boolean) => z.custom((value: unknown) => { try { 
 function seedKey(source: string): void {
     if (!source || source.length > 2000 || /[\u0000-\u001f\u007f-\u009f]/u.test(source)) throw new TypeError('invalid legacy source');
 }
-const spec = defineDomain({ name: 'dsh_extras_compaction', version: 1, global: { schema, initial }, tables: {
+const spec = (profileKey: string) => defineDomain({ name: 'dsh_extras_compaction_' + profileKey, version: 1, global: { schema, initial }, tables: {
     legacy: { valueSchema: legacySchema },
     bootstrap: { valueSchema: seedSchema(true) },
     adoptions: { valueSchema: seedSchema(false) },
@@ -106,9 +109,45 @@ export interface SharedCompactionStore {
     adoptLegacyReceipt(source: string, module: 'compact-context' | 'model-policy', policy: CompactionReasoningPolicy, admitted: () => boolean, apply?: boolean, onCommit?: LegacyCommitObserver): Promise<'imported' | 'preserved' | 'conflict' | 'cancelled'>;
     recoverLegacyAdoption(source: string, expectedRevision: number): Promise<SharedCompactionSnapshot>;
 }
+const PROFILE_FIELDS = ['dir', 'patchPath', 'home', 'installAnchor'] as const;
+type NativeProfile = Record<typeof PROFILE_FIELDS[number], string>;
+function nativeProfile(ctx: Context): NativeProfile {
+    try {
+        const value = ctx.get('profileContext') as Partial<NativeProfile> | undefined;
+        if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error();
+        const snapshot = {} as NativeProfile;
+        for (const field of PROFILE_FIELDS) {
+            const path = value[field];
+            if (typeof path !== 'string' || !path || !isAbsolute(path) || path.includes('\0')) throw new Error();
+            snapshot[field] = path;
+        }
+        return snapshot;
+    } catch { throw new Error('native profile authority unavailable'); }
+}
+function assertProfile(ctx: Context, expected: NativeProfile): void {
+    const current = nativeProfile(ctx);
+    if (PROFILE_FIELDS.some(field => current[field] !== expected[field])) throw new Error('profile authority changed');
+}
+async function nativeProfileKey(ctx: Context, profile: NativeProfile): Promise<string> {
+    let directory: string;
+    try {
+        const [dir, patchDirectory, home] = await Promise.all([
+            realpath(profile.dir), realpath(dirname(profile.patchPath)), realpath(profile.home), realpath(profile.installAnchor),
+        ]);
+        const [directoryInfo, homeInfo] = await Promise.all([stat(dir), stat(home)]);
+        if (!directoryInfo.isDirectory() || !homeInfo.isDirectory() || patchDirectory !== dir
+            || basename(profile.patchPath) !== 'cordis.patch.yml') throw new Error();
+        directory = dir;
+    } catch { throw new Error('native profile authority unavailable'); }
+    // Refuse a mutable launcher view changing while native metadata was awaited.
+    // The key itself uses exactly migration's canonical realpath(dir) basis.
+    assertProfile(ctx, profile);
+    return createHash('sha256').update(directory).digest('hex');
+}
 const KEY = Symbol.for('dsh-extras.shared-compaction.store.v1');
 interface StoreSlot {
     facility: DomainFacility;
+    profileKey: Promise<string>;
     promise: Promise<SharedCompactionStore>;
 }
 /** All bundled copies in a service root share the exact same domain and CAS chain. */
@@ -120,15 +159,28 @@ export function openSharedCompactionStore(ctx: Context): Promise<SharedCompactio
     if (!facility)
         return Promise.reject(new Error('native storageDomain unavailable'));
     const previous = root[KEY];
-    if (previous) {
-        if (previous.facility !== facility)
-            return Promise.reject(new Error('profile authority changed'));
+    if (previous && previous.facility !== facility) return Promise.reject(new Error('profile authority changed'));
+    let profile: NativeProfile;
+    try { profile = nativeProfile(ctx); } catch (error) { return Promise.reject(error); }
+    const profileKey = nativeProfileKey(ctx, profile);
+    const assertAuthority = () => {
+        assertProfile(ctx, profile);
+        if (ctx.get('storageDomain') !== facility) throw new Error('profile authority changed');
+    };
+    if (previous) return Promise.all([profileKey, previous.profileKey]).then(([current, accepted]) => {
+        assertAuthority();
+        if (current !== accepted) throw new Error('profile authority changed');
         return previous.promise;
-    }
-    const slot: StoreSlot = { facility, promise: Promise.resolve(undefined as never) };
+    });
+    // Reserve synchronously before realpath resolves, so independently bundled
+    // callers share one native open and one CAS chain even during cold startup.
+    const slot: StoreSlot = { facility, profileKey, promise: Promise.resolve(undefined as never) };
     Object.defineProperty(root, KEY, { value: slot, configurable: true });
     slot.promise = (async () => {
-        const domain = await facility.open(spec);
+        const key = await profileKey;
+        assertAuthority();
+        const domain = await facility.open(spec(key));
+        try { assertAuthority(); } catch (error) { await domain.close(); throw error; }
         let queue: Promise<unknown> = Promise.resolve();
         let closed = false;
         const listeners = new Set<() => void>();
