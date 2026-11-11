@@ -201,12 +201,12 @@ export async function createRuntime({ config = {}, product = true, retry = true,
     }
     try {
       if (subagents && ctx.get('subagents')) {
-        if (typeof ctx.subagents.waitForChildren === 'function') {
-          // 0.2.1-alpha.2 joins (never cancels) each parent's descendants.
-          for (const handle of handles) await settle(() => ctx.subagents.waitForChildren(handle.agent));
-        } else {
-          await settle(() => ctx.subagents.drainContinuableDescendants(handles.map((handle) => handle.agent)));
-        }
+        // rc.2 drains exact live roots, closing admission before cancellation and
+        // cleanup. waitForTreeWork is a progressing-work join, not a teardown:
+        // parked or idle members would otherwise remain resident.
+        const roots = handles.map((handle) => handle.agent).filter((agent) =>
+          ctx.agents.get(agent.id) === agent && ctx.subagents.rootOf(agent) === agent);
+        await settle(() => ctx.subagents.drainDescendants(roots));
       }
       for (const handle of [...handles].reverse()) await settle(() => handle.dispose());
       await settle(() => ctx.fiber.dispose());
@@ -312,9 +312,10 @@ export interface ChildSpec {
 }
 
 /**
- * Start one real in-process child through whichever public subagent API the running
- * DSH ships: `startActivation` (0.2.1-alpha.2 and later), or `start`/`startContinuable`.
- * The returned shape is identical so every caller keeps one assertion set.
+ * Start one real in-process child through the rc.2 public activation API.
+ * rc.2 takes the parent, prompt, and Agent options directly on the activation
+ * spec, not in the earlier nested request. Keep the common result shape so
+ * every consumer retains the same local/result/disposal assertions.
  */
 export async function startChild(ctx: any, spec: ChildSpec, mode: 'one-shot' | 'continuable' = 'one-shot'): Promise<ChildRun> {
   const request = {
@@ -327,7 +328,7 @@ export async function startChild(ctx: any, spec: ChildSpec, mode: 'one-shot' | '
     const remove = ctx.on('subagent/start', (info: any) => { if (info.id === spec.childId) local = info.local === true; });
     try {
       const activation = await ctx.subagents.startActivation({
-        provider: spec.provider, label: spec.label, childId: spec.childId, request, signal: spec.signal, delivery: 'caller',
+        ...request, provider: spec.provider, label: spec.label, childId: spec.childId, signal: spec.signal, delivery: 'caller',
       });
       return {
         childId: activation.childId,
