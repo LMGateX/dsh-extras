@@ -1,7 +1,9 @@
+import { checkSourceHost } from './native-host.mjs';
 import { readdir } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { resolve, join } from 'node:path';
 const root = resolve(import.meta.dirname, '..');
+await checkSourceHost(root);
 const mode = process.argv[2] || 'source';
 const entries = await readdir(join(root, 'test'), {recursive: true});
 const files = entries.filter(name => /[.]test[.](ts|mjs|js)$/.test(name)).filter(name => mode === 'artifacts' ? name.startsWith('artifacts/') : !name.startsWith('artifacts/')).sort().map(name => join(root, 'test', name));
