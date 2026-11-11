@@ -51,9 +51,9 @@ async function nativeProofFixture(t: TestContext, loaderProof?: {version?: strin
   return {root,ctx,stock,host,inspect,fakeAnchor,scope,driverDir,patchPath};
 }
 
-test('public inspection refuses an unknown anchored driver despite an exact live native Loader tuple', async t => {
+for (const version of ['0.2.2-rc.1', '99.0.0']) test('public inspection refuses historical or unknown anchored driver '+version+' despite an exact live native Loader tuple', async t => {
   const f = await nativeProofFixture(t);
-  await writeFile(join(f.driverDir,'package.json'), JSON.stringify({name:'@deepseek-ai/dsh-goal-round-driver',version:'99.0.0',type:'module',exports:{'.':'./index.js','./package.json':'./package.json'}}));
+  await writeFile(join(f.driverDir,'package.json'), JSON.stringify({name:'@deepseek-ai/dsh-goal-round-driver',version,type:'module',exports:{'.':'./index.js','./package.json':'./package.json'}}));
   await writeFile(join(f.driverDir,'index.js'), 'export * from '+JSON.stringify(pathToFileURL(hostRequire.resolve('@deepseek-ai/dsh-goal-round-driver')).href)+';');
   f.host.profileContext.installAnchor = f.fakeAnchor;
   const denied = (await f.inspect()).goalOwner;
@@ -68,7 +68,7 @@ test('public inspection refuses an unknown anchored driver despite an exact live
 
 test('public inspection rejects changed rc driver bytes before evaluating an identity-preserving replacement module', async t => {
   const f = await nativeProofFixture(t);
-  await writeFile(join(f.driverDir,'package.json'), JSON.stringify({name:'@deepseek-ai/dsh-goal-round-driver',version:'0.2.2-rc.1',type:'module',exports:{'.':'./index.js','./package.json':'./package.json'}}));
+  await writeFile(join(f.driverDir,'package.json'), JSON.stringify({name:'@deepseek-ai/dsh-goal-round-driver',version:'0.2.2-rc.2',type:'module',exports:{'.':'./index.js','./package.json':'./package.json'}}));
   const marker = Symbol.for('dsh-extras.test.unverified-driver-evaluated');
   const globals = globalThis as unknown as Record<symbol, unknown>;
   delete globals[marker]; t.after(() => {delete globals[marker];});
@@ -93,7 +93,7 @@ test('public inspection refuses missing, historical or foreign anchored Loader p
 });
 
 test('public inspection accepts the exact rc Cordis root and refuses historical or unknown anchored versions', async t => {
-  assert.equal(hostRequire('@deepseek-ai/dsh/package.json').version, '0.2.2-rc.1');
+  assert.equal(hostRequire('@deepseek-ai/dsh/package.json').version, '0.2.2-rc.2');
   assert.equal(hostRequire('@deepseek-ai/cordis/package.json').version, '4.1.0');
   const root = await mkdtemp(join(tmpdir(), 'ex-owner-rc-'));
   t.after(async () => { assert.ok(root.startsWith(join(tmpdir(), 'ex-owner-rc-'))); await rm(root, {recursive:true,force:true}); });
