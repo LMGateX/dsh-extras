@@ -7,6 +7,7 @@ import {createRuntime, load, llm, runTurn, startChild} from '../modules/retry/ru
 import * as policy from '../../src/modules/model-policy/index.ts';
 import { nativeProfileFixture } from '../native-profile-fixture.ts';
 import { resolveSessionIdentity } from '../../src/shared-compaction/workspace.ts';
+import type { CompactionReasoningPolicy } from '../../src/shared-compaction/index.ts';
 
 async function fixture(t: any, raw: any) {
  const directory = await mkdtemp(join(tmpdir(),'extras-model-policy-'));
@@ -43,7 +44,7 @@ test('awaited native creation chooses workspace root before first provider dispa
 });
 
 for (const kind of ['spawn', 'fork']) test('native '+kind+' and deeper resident descendants follow immutable root workspace, ordinary forks remain roots', {timeout: 10000}, async t => {
- const fixed = (effort: string) => ({enabled: true, rules: [{scope: 'all', mode: 'fixed', effort}]});
+ const fixed = (effort: string): CompactionReasoningPolicy => ({enabled: true, rules: [{scope: 'all', mode: 'fixed', effort}]});
  const f = await fixture(t, (_a: any, b: any) => ({
   enabled: true,
   root: {provider: 'policy', model: 'root'},
