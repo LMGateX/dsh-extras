@@ -63,6 +63,32 @@ test('public link refuses wrong source and foreign Cordis without changing consu
   });
 });
 
+test('explicit native selectors must resolve to the supplied graph before linking or checking',async()=>{
+  await consumer(async({cwd,env,invoke,sandbox})=>{
+    const foreign=join(sandbox,'foreign');
+    await mkdir(join(foreign,'node_modules/@deepseek-ai/dsh'),{recursive:true});
+    await writeFile(join(foreign,'package.json'),JSON.stringify({name:'foreign-host-anchor',private:true}));
+    await writeFile(join(foreign,'node_modules/@deepseek-ai/dsh/package.json'),JSON.stringify({name:'@deepseek-ai/dsh',version:'0.2.2-rc.2',exports:{'./package.json':'./package.json'}}));
+    const saved={DSH_RUNTIME_ROOT:env.DSH_RUNTIME_ROOT,DSH_TEST_INSTALL_ANCHOR:env.DSH_TEST_INSTALL_ANCHOR};
+    delete env.DSH_RUNTIME_ROOT;delete env.DSH_TEST_INSTALL_ANCHOR;
+    const invalid=[['DSH_RUNTIME_ROOT',join(sandbox,'missing')],['DSH_RUNTIME_ROOT',foreign],['DSH_TEST_INSTALL_ANCHOR',join(sandbox,'missing.json')],['DSH_TEST_INSTALL_ANCHOR',join(foreign,'package.json')]];
+    for(const [name,value] of invalid){
+      env[name]=value;const result=invoke('link',source);
+      assert.notEqual(result.status,0,name+' must refuse before mutation');
+      assert.match(result.stderr,new RegExp(name));
+      await assert.rejects(stat(join(cwd,'node_modules')),{code:'ENOENT'});delete env[name];
+    }
+    const linked=invoke('link',source);assert.equal(linked.status,0,linked.stderr);
+    const receipt=join(cwd,'node_modules/.dsh-extras-source-host.json'),before=await stat(receipt);
+    for(const [name,value] of invalid){env[name]=value;const result=invoke('check');assert.notEqual(result.status,0,name);assert.match(result.stderr,new RegExp(name));delete env[name];}
+    for(const base of [join(source,'apps/cli'),cwd,join(cwd,'node_modules'),join(cwd,'node_modules/@deepseek-ai')]){env.DSH_RUNTIME_ROOT=base;const result=invoke('check');assert.equal(result.status,0,result.stderr);}
+    delete env.DSH_RUNTIME_ROOT;env.DSH_TEST_INSTALL_ANCHOR=join(source,'apps/cli/package.json');
+    const same=invoke('check');assert.equal(same.status,0,same.stderr);
+    assert.equal((await stat(receipt)).mtimeMs,before.mtimeMs);
+    for(const [name,value] of Object.entries(saved))if(value===undefined)delete env[name];else env[name]=value;
+  });
+});
+
 test('public check accepts borrowed complete graph without binding consumer cwd',async()=>{
   await consumer(async({cwd,invoke,sandbox})=>{
     const borrowed=join(sandbox,'borrowed');await mkdir(borrowed);

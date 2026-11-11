@@ -44,6 +44,8 @@ The public registry schema package and its transitive cosmokit utility can other
 
 Successful linking verifies every direct consumer and CLI-anchor package identity and writes the ignored node_modules/.dsh-extras-source-host.json receipt containing source commit, build hash and graph identity. An identical rerun does not rewrite the receipt. Machine paths belong only to this ignored local receipt/links and must never enter Git, emitted product code or release assets.
 
+Both link and read-only check compare any explicit DSH_RUNTIME_ROOT and DSH_TEST_INSTALL_ANCHOR selector to the same audited CLI manifest before mutation or test admission. Missing, empty or foreign selectors fail with the selector name; package-root/parent resolution bases and equivalent real aliases are accepted only when they identify that one graph. No native module is evaluated just to compare identities.
+
 Build, test and typecheck validate the receipt and graph before native dependency discovery. A missing/invalid receipt fails with explicit provisioning instructions, even when a host is visible through ancestor resolution. A temporary build fixture can borrow the **whole already provisioned node_modules** via a symlink: the receipt binds to the supplied native graph, not the consumer working directory. The check is read-only; linking refuses a symlinked consumer node_modules so it cannot mutate shared tooling accidentally. Provision an owned real directory first and borrow it afterward.
 
 ## Executed focused evidence and limits

@@ -61,6 +61,30 @@ async function auditSource(input){
   }
   return {source,anchor,packages,identity:{format:1,source,commit:COMMIT,nativeVersion:VERSION,cordisVersion:'4.1.0',driverSha256,packageCount:packages.size}};
 }
+// Explicit native test selectors may not select a second graph after receipt admission.
+async function checkSelectors({anchor}){
+  const expected=await realpath(join(anchor,'package.json'));
+  for(const name of ['DSH_RUNTIME_ROOT','DSH_TEST_INSTALL_ANCHOR']){
+    const value=process.env[name];if(value===undefined)continue;
+    try{
+      if(!value.trim())throw new Error('Empty selector.');
+      let actual;
+      if(name==='DSH_RUNTIME_ROOT'){
+        const base=await realpath(resolve(value));
+        if(!(await lstat(base)).isDirectory())throw new Error('Runtime root must be a directory.');
+        for(const candidate of [base,join(base,'node_modules'),join(base,'node_modules','@deepseek-ai')]){
+          try{actual=await realpath(createRequire(join(candidate,'package.json')).resolve('@deepseek-ai/dsh/package.json'));break;}catch{}
+        }
+      }else{
+        if(!isAbsolute(value))throw new Error('Install anchor must be absolute.');
+        const file=await realpath(value);
+        if(!(await lstat(file)).isFile())throw new Error('Install anchor must be a file.');
+        actual=await realpath(createRequire(file).resolve('@deepseek-ai/dsh/package.json'));
+      }
+      if(actual!==expected)throw new Error('Missing or foreign native graph.');
+    }catch{throw new Error(name+' must resolve to the supplied source host CLI graph.');}
+  }
+}
 async function planLinks(modules,packages,{replaceSchema=false}={}){
   // Never follow a consumer node_modules/scope link and mutate its target.
   for(const path of [modules,join(modules,'@deepseek-ai')]){
@@ -103,12 +127,14 @@ export async function checkSourceHost(root){
   catch{throw new Error('Source host is not provisioned; run npm run host:link -- /absolute/source-checkout after npm ci.');}
   const audited=await auditSource(receipt.source);
   if(JSON.stringify(receipt)!==JSON.stringify(audited.identity))throw new Error('Source host receipt identity mismatch; reprovision explicitly.');
+  await checkSelectors(audited);
   await verifyLinks(modules,audited.packages);
   await verifyLinks(join(audited.anchor,'node_modules'),audited.packages);
   return audited.identity;
 }
 async function linkSourceHost(root,input){
   const audited=await auditSource(input),modules=join(root,'node_modules');
+  await checkSelectors(audited);
   if(inside(audited.source,root)||root===audited.source)throw new Error('Consumer must be outside the supplied source checkout.');
   const receipt=join(modules,RECEIPT),existing=await info(receipt);
   if(existing&&(existing.isSymbolicLink()||JSON.stringify(await json(receipt))!==JSON.stringify(audited.identity)))throw new Error('Foreign source host receipt.');
