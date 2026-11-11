@@ -6,7 +6,7 @@
 
 - Official DSH `0.2.2-rc.2` tag commit: `ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c`.
 - Node `>=24.9.0`; native Cordis `4.1.0`.
-- The unchanged tag was built once using its frozen pnpm lock and canonical artifact graph; all8 host/client/Web gates passed. Every lane used that complete local checkout, not incremental web code-page queries or replacement live hosts.
+- The unchanged tag was built once using its frozen pnpm lock and canonical artifact graph; all8 host/client/Web gates passed. All implementation and final verification lanes read that complete local checkout directly; after the explicit user directive no repeated source acquisition/build or incremental web code-page queries were used, and no live host was replaced.
 - Audited source-built Goal driver SHA256: `8c56696eaac68e61a38b1068ea0f0dff976440e72b49ef4814fbea93c8b48b0c`. Source provenance, emitted lifecycle coordinates, exact Loader/root identity and ownership fences remain required. Unknown/changed driver bytes fail closed.
 - Public exact rc.2 npm metadata was unavailable at verification. Local canonical output is explicitly **source-built evidence, not an observed npm digest**. Development uses a consistent toolchain-only npm lock and an explicit validated source-host linking step; it does not invent missing registry integrity or install rc.1 as a substitute.
 
