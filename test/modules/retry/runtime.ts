@@ -28,8 +28,9 @@ function resolveRuntimeManifest(): ResolvedRuntime {
     bases.push(root, join(root, 'node_modules'), join(root, 'node_modules', '@deepseek-ai'), join(root, 'package.json'));
   }
   const requireFrom = (base: string) => createRequire(base.endsWith('package.json') ? base : join(base, 'package.json'));
-  const lookups = [
-    ...bases.map((base) => () => requireFrom(base).resolve('@deepseek-ai/dsh/package.json')),
+  // An explicit anchor is authoritative. Falling back after a bad override could
+  // silently certify an ancestor checkout's older installed DSH instead of rc.2.
+  const lookups = override ? bases.map((base) => () => requireFrom(base).resolve('@deepseek-ai/dsh/package.json')) : [
     () => requireFrom(join(process.cwd(), 'package.json')).resolve('@deepseek-ai/dsh/package.json'),
     () => requireFrom(new URL('../../../package.json', import.meta.url).pathname).resolve('@deepseek-ai/dsh/package.json'),
   ];

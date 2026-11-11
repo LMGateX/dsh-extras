@@ -1,7 +1,20 @@
 /** Regressions for the shared fixtures against public rc.2 packages, never a service facsimile. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { createRuntime, events, llm, startChild } from '../modules/retry/runtime.ts';
+
+test('an explicit missing runtime anchor never falls through to another installed host', () => {
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e',
+    'await import(' + JSON.stringify(new URL('../modules/retry/runtime.ts', import.meta.url).href) + ')'], {
+    env: { ...process.env, DSH_RUNTIME_ROOT: join(tmpdir(), 'missing-native-anchor') }, encoding: 'utf8',
+  });
+  assert.ifError(result.error);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Cannot locate an installed @deepseek-ai\/dsh/);
+});
 
 test('native batch append publishes every event once in order after the complete surface commit', { timeout: 10000 }, async t => {
   const runtime = await createRuntime({ product: false, retry: false, persistent: true });
