@@ -13,7 +13,7 @@ const BODY_LIMIT=8192;
 const record=(v:any):v is Record<string,any>=>!!v&&typeof v==='object'&&!Array.isArray(v);
 const id=(v:any):v is string=>typeof v==='string'&&v.length>0&&v.length<=512&&!/[\u0000-\u0020\u007f]/u.test(v);
 const integer=(v:any):v is number=>Number.isSafeInteger(v)&&v>=0;
-const reasons=new Set(['agent-detached','agent-busy','exact-snapshot-unavailable','checkpoint-stale','foreign-session','invalid-operation-id','recovery-policy-rejected','recovery-admission-failed']);
+const reasons=new Set(['agent-detached','agent-busy','exact-snapshot-unavailable','checkpoint-stale','foreign-session','invalid-operation-id','recovery-policy-rejected','recovery-admission-failed','native-recovery-incompatible','module-disabled']);
 const code=(v:any,fallback='native-recovery-unavailable'):string=>typeof v==='string'&&reasons.has(v)?v:fallback;
 const unavailable=(reason:string):RecoveryView=>({protocol:REQUEST_RECOVERY_PROTOCOL,lifetime:'process-local',status:'unavailable',reason});
 /** Detach a bounded public checkpoint; raw model/provider errors never ride this route. */

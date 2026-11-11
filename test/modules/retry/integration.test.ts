@@ -149,6 +149,14 @@ test('native retry cannot opt deterministic unsupported reasoning effort into tr
   });
 });
 
+for (const code of ['ACCOUNT_SIGN_IN_REQUIRED','ACCOUNT_TOKEN_INVALID','CLIENT_UPGRADE_REQUIRED','MODEL_UNSUPPORTED','INVALID_MODEL_CONTEXT','INVALID_REPLAY_STATE','REQUEST_EXTENSION','REQUEST_HEADERS','UNSUPPORTED_OPTION']) {
+  test('rc2 native LlmError keeps permanent code and one dispatch: '+code, async()=>{
+    await faultCase(new llm.LlmError('stream_timeout: permanent native failure',code), {
+      config:{errorCodes:[code,'stream_timeout']},expectRetry:false,expectedCode:code,
+    });
+  });
+}
+
 test('plain thrown ordinary Error remains UNKNOWN without retry', { timeout: 10000 }, async () => {
   await faultCase(new Error('This merely mentions stream_timeout in documentation'), {
     expectRetry: false, expectedCode: 'UNKNOWN',

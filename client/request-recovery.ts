@@ -111,6 +111,10 @@ export function createRequestRecoveryAdapter(React:any,environment?:{fetch?:type
      finally{attempt.pending=undefined;pending.current=false;if(live.current&&!disposed)setBusy(false);}
     }
     if(!closed||!session||sessionState?.running||disposed||!options.enabled())return null;
+    // Stock rc.2 has native normal-followup Continue generating, not this optional
+    // checkpoint protocol. Keep its control untouched and avoid per-turn absence noise.
+    // Incompatible protocols and actual action/transport diagnostics remain visible.
+    if(view?.status==='unavailable'&&view.reason==='native-recovery-unavailable'&&!notice)return null;
     // A historical tail must not acquire a button for another terminal attempt.
     if(cp&&!matches)return null;
     const reason=notice==='accepted'?t('Recovery accepted; native execution started (not completed).','恢复已受理；原生执行已开始（尚未完成）。'):notice==='recovery-transport-unavailable'?t('Recovery transport unavailable; retrying uses the same operation identity.','恢复连接不可用；再次点击将使用相同操作标识。'):notice?t('Recovery rejected: ','恢复被拒绝：')+notice:view?.status==='unavailable'?t('Recovery unavailable: ','恢复不可用：')+(view.reason??'native-recovery-unavailable'):'';

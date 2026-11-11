@@ -90,10 +90,12 @@ for(const distribution of ['dsh-extras-retry','dsh-extras'])test('real native Tu
  state={...state,turnOutline:[]};await refresh();await expect(page.locator('[data-request-recovery]')).toHaveCount(0);
  assert.equal(reads,0,'unknown head and cancelled/historical turns stay silent');
  state={...state,events:[...turn(1,1,'error'),...turn(2,3,'error')],turnOutline:undefined};await refresh();
- await expect(page.locator('[data-request-recovery]')).toHaveCount(1);
- await expect(page.locator('[data-native-tail-turn="2"] [data-request-recovery]')).toContainText('native-recovery-unavailable');
+ await expect.poll(()=>reads).toBe(1);
+ await expect(page.locator('[data-request-recovery]')).toHaveCount(0);
+ recovery={...unavailable,reason:'native-recovery-incompatible'};await refresh();
+ await expect(page.locator('[data-native-tail-turn="2"] [data-request-recovery]')).toContainText('native-recovery-incompatible');
  await expect(page.getByRole('button',{name:'Retry failed request',exact:true})).toHaveCount(0);
- assert.equal(reads,1,'only the current genuine native error reads eligibility');
+ assert.equal(reads,2,'only the current genuine native error reads eligibility; incompatible optional protocols remain diagnostic');
  await expect(page.getByRole('region',{name:'Failed request recovery',exact:true})).toBeVisible();
  await expect(page.getByRole('heading',{name:'Failed request recovery',exact:true})).toBeVisible();
  const presentation=await page.locator('[data-request-recovery]').evaluate(node=>{const s=getComputedStyle(node);return{padding:parseFloat(s.paddingTop),border:s.borderTopStyle,background:s.backgroundColor};});
@@ -133,7 +135,7 @@ for(const distribution of ['dsh-extras-retry','dsh-extras'])test('real native Tu
  for(const patch of [{running:true},{running:false,openState:'loading'},{openState:'open',removed:true},{removed:false,events:[...state.events,event('turn/start',50,{turn:3})]}]){state={...state,...patch};await refresh();await expect(page.locator('[data-request-recovery]')).toHaveCount(0);}
  assert.equal(reads,readsBeforeIneligible,'running/unopened/removed/new-turn states cannot read recovery');
  const exhausted=[...failed.slice(0,3),event('request/failure',33,{turn:2,step:1,attemptSeq:32,attemptId:'native-attempt',checkpointId:'native-checkpoint',disposition:'budget-exhausted',retries:5,maxRetries:5}),event('step/end',34,{turn:2,step:1}),event('turn/end',35,failed.at(-1)!.data)];
- recovery=unavailable;state={...state,events:exhausted};await refresh();await expect(page.locator('[data-request-recovery]')).toHaveCount(1);await expect(retry,'native failure metadata cannot grant a retry action').toHaveCount(0);
+ recovery=unavailable;state={...state,events:exhausted};await refresh();await expect(page.locator('[data-request-recovery]'),'a prior accepted action diagnostic is not absent-protocol noise').toHaveCount(1);await expect(retry,'native failure metadata cannot grant a retry action').toHaveCount(0);
  const readsBeforeBadMetadata=reads;state={...state,events:exhausted.map(e=>e.type==='request/failure'?{...e,data:{...e.data,attemptSeq:31}}:e)};await refresh();await expect(page.locator('[data-request-recovery]')).toHaveCount(0);assert.equal(reads,readsBeforeBadMetadata,'failure metadata must bind the exact attempt');
  recovery=checkpoint(2,4,'checkpoint-two');state={...state,events:turn(3,5,'error')};await refresh();
  await expect(page.locator('[data-request-recovery]'),'a checkpoint for another terminal seq cannot be offered').toHaveCount(0);

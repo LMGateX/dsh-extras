@@ -78,6 +78,14 @@ test('protected permanent failures cannot be opted into retry', async () => {
   }
 });
 
+test('rc2 permanent machine failures and their carrier identifiers retain native authority', async () => {
+  for (const code of ['ACCOUNT_SIGN_IN_REQUIRED','ACCOUNT_TOKEN_INVALID','CLIENT_UPGRADE_REQUIRED','MODEL_UNSUPPORTED','INVALID_MODEL_CONTEXT','INVALID_MODEL_INFO','INVALID_MODEL_MAX_TOKENS','INVALID_MODEL_REASONING','INVALID_REPLAY_STATE','REQUEST_EXTENSION','REQUEST_HEADERS','UNSUPPORTED_OPTION','UNSTORABLE_PROVIDER_ID','NO_CREDENTIAL_STORE','INVALID_ADAPTER','INVALID_CATALOG','INVALID_DIRECTORY','INVALID_DISCOVERY','DUPLICATE_ADAPTER','DUPLICATE_DIRECTORY','DUPLICATE_DISCOVERY','REGISTRATION_DISPOSED','DISCOVERY_UNSUPPORTED','NO_DISCOVERY','MODEL_SWITCH_COMPACTION_FAILED']) {
+    for (const input of [failure(code, 'stream_timeout: unrelated text'), failure('PI_AI_ERROR', code), failure('UNKNOWN', 'Error Code '+code+': permanent')]) {
+      assert.equal((await runStream([input], {errorCodes:[code,'stream_timeout']})).output[0], input, code);
+    }
+  }
+});
+
 test('existing normalized retry codes keep the provider policy classification', async () => {
   for (const code of ['TIMEOUT', 'TRANSPORT', 'RATE_LIMIT', 'SERVER', 'EMPTY_RESPONSE']) {
     const input = failure(code, 'Error Code upstream_stream_read_error: another description');

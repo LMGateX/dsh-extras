@@ -30,7 +30,7 @@ function draft(value: any, resolve: any): RetryPolicyDraft {
 async function nativeContract(anchor: string) {
   const require = createRequire(anchor);
   const manifest = JSON.parse(await readFile(require.resolve('@deepseek-ai/dsh/package.json'),'utf8'));
-  if (manifest.version !== '0.2.2-rc.1') fail(503,'native-retry-settings-unavailable');
+  if (manifest.version !== '0.2.2-rc.2') fail(503,'native-retry-settings-unavailable');
   const llm = await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-llm')).href);
   const schemas = new Map<string,unknown>();
   for (const name of providers) {

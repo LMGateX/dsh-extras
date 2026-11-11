@@ -14,7 +14,8 @@ async function scenario(t:any, policy:any, permanent=false, cancelAt?:number) {
 }
 
 test('native normal five means six requests and terminal error has no structured exhaustion disposition', {timeout:10000},async t=>{
-  const policy=llm.resolveRetryPolicy({mode:'normal',maxRetries:5,backoff:{initialDelayMs:1,maxDelayMs:1,jitterRatio:0}},'offline.policy');
+  const policy=llm.resolveRetryPolicy({mode:'normal',backoff:{initialDelayMs:1,maxDelayMs:1,jitterRatio:0}},'offline.policy');
+  assert.equal(policy.maxRetries,5,'native normal default remains five retries');
   const {agent,state}=await scenario(t,policy);
   assert.equal(state.requests.length,6);assert.equal(events(state,'llm/retry').length,5);
   assert.equal(events(state,'step/start').length,1);assert.equal(events(state,'turn/end').length,1);
