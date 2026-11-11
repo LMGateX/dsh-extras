@@ -6,6 +6,7 @@ import {join} from 'node:path';
 import {createRuntime, load, llm, runTurn, startChild} from '../modules/retry/runtime.ts';
 import * as policy from '../../src/modules/model-policy/index.ts';
 import { nativeProfileFixture } from '../native-profile-fixture.ts';
+import { resolveSessionIdentity } from '../../src/shared-compaction/workspace.ts';
 
 async function fixture(t: any, raw: any) {
  const directory = await mkdtemp(join(tmpdir(),'extras-model-policy-'));
@@ -18,16 +19,17 @@ async function fixture(t: any, raw: any) {
  const a = join(directory,'a'), b = join(directory,'b'); await mkdir(a); await mkdir(b);
  const wa = await runtime.ctx.workspaceRegistry.create(a); const wb = await runtime.ctx.workspaceRegistry.create(b);
  const calls: any[]=[];
+ const controls: { beforeStream?: (options: any) => Promise<void> | undefined } = {};
  class Adapter extends llm.LlmAdapter {
-  async resolveModel(provider:string,model:string){return {provider,id:model,name:model,context:{contextWindow:100000},reasoning:{efforts:[{id:'opaque-hi',name:'High'}]}};}
-  async *stream(options:any){calls.push(options);yield {type:'block-start',index:0,blockType:'text'};yield {type:'text-delta',index:0,text:'offline'};yield {type:'block-end',index:0,block:{type:'text',text:'offline'}};yield {type:'finish',reason:{kind:'stop'}};}
+  async resolveModel(provider:string,model:string){return {provider,id:model,name:model,context:{contextWindow:100000},reasoning:{efforts:[{id:'opaque-hi',name:'High'},{id:'other-hi',name:'Other workspace'}]}};}
+  async *stream(options:any){calls.push(options);await controls.beforeStream?.(options);yield {type:'block-start',index:0,blockType:'text'};yield {type:'text-delta',index:0,text:'offline'};yield {type:'block-end',index:0,block:{type:'text',text:'offline'}};yield {type:'finish',reason:{kind:'stop'}};}
  }
  runtime.ctx.llm.registerAdapter(['native','policy','child','human'],new Adapter());
  const config = typeof raw === 'function' ? raw(wa,wb) : raw;
  const input = Object.fromEntries(['enabled','root','descendants','workspaceOverrides','compactionReasoning'].map(key=>[key,{get:()=>config[key]}]));
  const fiber = runtime.ctx.plugin({name:policy.name,apply:policy.apply},input); await fiber.await();
  const create = async(id:string,cwd:string,extra:any={}) => {const h = await runtime.ctx.agents.create({sessionId:id,meta:{cwd},agentOptions:{provider:'native',model:'base'},...extra});t.after(()=>h.dispose());return {...h,state:{events:[],frames:[],requests:[]}};};
- return {runtime,ctx:runtime.ctx,a,b,wa,wb,calls,config,fiber,create};
+ return {runtime,ctx:runtime.ctx,a,b,wa,wb,calls,config,fiber,create,controls};
 }
 
 test('awaited native creation chooses workspace root before first provider dispatch, later explicit native selection wins',async t=>{
@@ -40,23 +42,104 @@ test('awaited native creation chooses workspace root before first provider dispa
  root.agent.model.select({provider:'human',model:'chosen'}); await runTurn(root,'second'); assert.equal(f.calls.at(-1).provider,'human');
 });
 
-for(const kind of ['spawn','fork']) test('native '+kind+' and deeper resident descendants follow immutable root workspace, ordinary forks remain roots',async t=>{
- const f=await fixture(t,{enabled:true,root:{provider:'policy',model:'root'},descendants:{provider:'child',model:'all-depths',reasoningEffort:'opaque-hi'}});
- const parent=await f.create(kind+'-parent',f.a);await runTurn(parent,'fork seed history');
- const run=await startChild(f.ctx,{provider:kind,label:'offline child',childId:kind+'-child',signal:new AbortController().signal,request:{parent:parent.agent,prompt:[{type:'text',text:'offline delegated prompt'}]}},'continuable');t.after(()=>run.dispose());
- assert.equal((await run.result)?.stopReason,'completed');
- assert.equal(f.calls.at(-1).provider,'child');assert.equal(f.calls.at(-1).model,'all-depths');
- const resumed=await f.ctx.agents.resume({resumeSessionId:run.childId,parentAgent:parent.agent,agentOptions:{provider:'native',model:'base'}});t.after(()=>resumed.dispose());
- const child=resumed.agent;assert.deepEqual(child.model.current(),{provider:'child',model:'all-depths',reasoningEffort:'opaque-hi'});
- // Native mutable cwd moves across workspace boundaries; provenance still belongs to A.
- await f.ctx.workingDirectory.set(child,f.b);
- const deeper=await startChild(f.ctx,{provider:kind,label:'offline grandchild',childId:kind+'-grandchild',signal:new AbortController().signal,request:{parent:child,prompt:[{type:'text',text:'depth two offline prompt'}]}},'continuable');t.after(()=>deeper.dispose());
- assert.equal((await deeper.result)?.stopReason,'completed');assert.equal(f.calls.at(-1).model,'all-depths');
- const deepHeader=(await f.ctx.sessionQuery.readSession(deeper.childId)).session;assert.equal(deepHeader.origin,'subagent');assert.equal(deepHeader.delegationDepth,2);
- child.model.select({provider:'human',model:'resident-choice'});await runTurn({agent:child,state:{}},'resident wake');assert.equal(f.calls.at(-1).model,'resident-choice');
- const seed=parent.agent.session.snapshotEvents();
- const ordinary=await f.create(kind+'-ordinary-fork',f.b,{meta:{cwd:f.b,parentSession:parent.agent.id,isSeeded:true},seed,inheritedEventCount:seed.length});
- assert.equal(ordinary.agent.model.current().provider,'policy');assert.equal(ordinary.agent.model.current().model,'root');
+for (const kind of ['spawn', 'fork']) test('native '+kind+' and deeper resident descendants follow immutable root workspace, ordinary forks remain roots', {timeout: 10000}, async t => {
+ const fixed = (effort: string) => ({enabled: true, rules: [{scope: 'all', mode: 'fixed', effort}]});
+ const f = await fixture(t, (_a: any, b: any) => ({
+  enabled: true,
+  root: {provider: 'policy', model: 'root'},
+  descendants: {provider: 'child', model: 'all-depths', reasoningEffort: 'opaque-hi'},
+  workspaceOverrides: [{workspaceId: b.id, descendants: {provider: 'child', model: 'wrong-workspace'}}],
+  compactionReasoning: fixed('opaque-hi'),
+ }));
+ const {openSharedCompactionStore} = await import('../../src/shared-compaction/index.ts');
+ const store = await openSharedCompactionStore(f.ctx);
+ await store.write({
+  expectedRevision: store.read().revision,
+  defaults: fixed('opaque-hi'),
+  workspaceOverrides: {[f.wb.id]: fixed('other-hi')},
+ });
+ const creationFacts: any[] = [];
+ f.ctx.on('agent/created', async ({agent}: any) => {
+  if (agent.session.header.origin !== 'subagent') return;
+  let rootAtCreation;
+  try { rootAtCreation = f.ctx.subagents.rootOf(agent).id; }
+  catch (error) { rootAtCreation = (error as any).code; }
+  creationFacts.push({id: agent.id, rootAtCreation, identity: await resolveSessionIdentity(f.ctx, agent.id)});
+ });
+ const parent = await f.create(kind+'-parent', f.a);
+ await runTurn(parent, 'fork seed history');
+ const run = await f.ctx.subagents.startActivation({
+  provider: kind, name: 'reviewer', label: 'offline child', childId: kind+'-child',
+  signal: new AbortController().signal, parent: parent.agent,
+  prompt: [{type: 'text', text: 'offline delegated prompt'}], delivery: 'caller',
+ });
+ t.after(() => run.dispose());
+ assert.equal(run.name, 'reviewer');
+ assert.equal((await run.result)?.stopReason, 'completed');
+ assert.equal(f.calls.at(-1).provider, 'child');
+ assert.equal(f.calls.at(-1).model, 'all-depths');
+ const expectedIdentity = {workspaceId: f.wa.id, rootSessionId: parent.agent.id, descendant: true};
+ assert.deepEqual(creationFacts.find(fact => fact.id === run.childId), {
+  id: run.childId, rootAtCreation: 'UNAUTHORIZED', identity: expectedIdentity,
+ });
+
+ // Only native managed continuation can restore runtime membership in rc.2.
+ // Hold the restored child's request while it creates depth-two work, never a stale Agent.
+ let begin!: () => void, release!: () => void;
+ const started = new Promise<void>(resolve => { begin = resolve; });
+ const gate = new Promise<void>(resolve => { release = resolve; });
+ t.after(() => release());
+ f.controls.beforeStream = options => {
+  if (options.sessionId !== run.childId) return undefined;
+  begin(); return gate;
+ };
+ await f.ctx.subagents.sendMessage(parent.agent, run.childId,
+  [{type: 'text', text: 'managed resident wake'}], {signal: new AbortController().signal});
+ await started;
+ const child = f.ctx.agents.get(run.childId);
+ assert.ok(child);
+ assert.equal(f.ctx.subagents.rootOf(child), parent.agent);
+ assert.deepEqual(child.model.current(), {provider: 'child', model: 'all-depths', reasoningEffort: 'opaque-hi'});
+
+ // Native mutable cwd moves across workspace boundaries; creator provenance still belongs to A.
+ await f.ctx.workingDirectory.set(child, f.b);
+ const deeper = await f.ctx.subagents.startActivation({
+  provider: kind, name: 'checker', label: 'offline grandchild', childId: kind+'-grandchild',
+  signal: new AbortController().signal, parent: child,
+  prompt: [{type: 'text', text: 'depth two offline prompt'}], delivery: 'caller',
+ });
+ t.after(() => deeper.dispose());
+ assert.equal(deeper.name, 'reviewer/checker');
+ assert.equal((await deeper.result)?.stopReason, 'completed');
+ assert.equal(f.calls.at(-1).model, 'all-depths');
+ const deepHeader = (await f.ctx.sessionQuery.readSession(deeper.childId)).session;
+ assert.equal(deepHeader.origin, 'subagent');
+ assert.equal(deepHeader.delegationDepth, 2);
+ assert.equal(deepHeader.parentSession, child.id);
+ assert.deepEqual(await resolveSessionIdentity(f.ctx, deeper.childId), expectedIdentity);
+ assert.deepEqual(creationFacts.find(fact => fact.id === deeper.childId)?.identity, expectedIdentity);
+ const beforeSummary = f.calls.length;
+ for await (const _ of f.ctx.llm.stream({
+  provider: 'native', model: 'base', sessionId: deeper.childId, purpose: 'compaction', messages: [],
+ })) {}
+ assert.equal(f.calls.length, beforeSummary+1);
+ assert.equal(f.calls.at(-1).reasoningEffort, 'opaque-hi', 'shared compaction uses immutable creator workspace, not moved cwd B');
+
+ child.model.select({provider: 'human', model: 'resident-choice'});
+ release(); await child.whenIdle(); await f.ctx.subagents.waitForTreeWork(parent.agent);
+ await f.ctx.subagents.sendMessage(parent.agent, run.childId,
+  [{type: 'text', text: 'preserve exact human choice'}], {signal: new AbortController().signal});
+ await f.ctx.subagents.waitForTreeWork(parent.agent);
+ assert.equal(f.calls.at(-1).model, 'resident-choice');
+ const seed = parent.agent.session.snapshotEvents();
+ const ordinary = await f.create(kind+'-ordinary-fork', f.b, {
+  meta: {cwd: f.b, parentSession: parent.agent.id, isSeeded: true}, seed, inheritedEventCount: seed.length,
+ });
+ assert.equal(ordinary.agent.model.current().provider, 'policy');
+ assert.equal(ordinary.agent.model.current().model, 'root');
+ assert.deepEqual(await resolveSessionIdentity(f.ctx, ordinary.agent.id), {
+  workspaceId: f.wb.id, rootSessionId: ordinary.agent.id, descendant: false,
+ });
 });
 
 test('accepted config updates existing live agents; enable after off is not lost; disable never restores a past choice',async t=>{

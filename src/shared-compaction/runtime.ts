@@ -13,7 +13,7 @@ class CompatibilityError extends Error {
 }
 function unsupported(reason: string): never { throw new CompatibilityError(reason); }
 function baseline(ctx: Context): void {
-    if (requireHost('@deepseek-ai/dsh-llm/package.json').version !== '0.2.2-rc.1'
+    if (requireHost('@deepseek-ai/dsh-llm/package.json').version !== '0.2.2-rc.2'
         || requireHost('@deepseek-ai/cordis/package.json').version !== '4.1.0')
         unsupported('unverified host version');
     if (!(ctx instanceof Context) || !ctx.root?.reflect?.store || typeof ctx.on !== 'function')
