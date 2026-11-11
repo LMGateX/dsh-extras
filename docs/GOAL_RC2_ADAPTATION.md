@@ -1,0 +1,14 @@
+# rc.2 Goal adaptation boundary and evidence
+
+Date: 2026-11-11 (Asia/Shanghai). Applies the pre-implementation [rc.2 contract](<DSH_RC2_060.md#L13-L24>) and [primary research](<RESEARCH_DSH_RC2_GOAL_2026-11-11.md>). This lane began as docs-only research; subsequent explicit parent authorization opened the scoped implementation after the frozen contract commits. No production installation, live GUI, push or release is authorized in this lane.
+
+## Scoped implementation decisions
+
+- Exact official tag `ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c`, unchanged source, is built by the integration lane with frozen-lockfile dependency provisioning and canonical `pnpm run build:artifacts`. This is **source-built evidence, not an observed published npm rc.2 artifact**. The locally built Goal driver entry SHA-256 is `8c56696eaac68e61a38b1068ea0f0dff976440e72b49ef4814fbea93c8b48b0c`. Admission remains exact-byte/version fail-closed; unknown published bytes cannot be admitted by version alone.
+- The compiled lifecycle observer coordinates remain immediate `:94:` with caller `:357:` or `:363:` in this exact build. The port preserves this narrow observer, same-value external revocation and source-map refusal, rather than granting authority from a broad transition window.
+- Every admitted profile now has the exact native `waitForTreeWork` join. Ordinary members return false; real roots coordinate progressing whole-tree work and leave healthy parked inboxes resident. Replacement background policy therefore remains **Jobs-only**, including configured `kind=subagent` Jobs. Remove the unreachable historical pre-native-join descendant/epoch fallback and its removed AgentRegistry ownership APIs instead of inventing a new creator-subtree barrier. This is the existing native-join behavior made explicit for the rc.2-only baseline, not removal of the separately preserved conventional activation all-live-descendant policy. Parent explicitly confirmed this scope.
+- Preserve activation/replacement/native/off, defaults, goal phase/revision/authority fences, native cancellation/unload/queue accounting, policy-only live updates and single native Loader owner. Session batch append still publishes each `session/event`; the driver observer remains single-event. Import Session `UserMessage` from its actual owner.
+
+## Validation record
+
+Before adaptation, isolated plugin tests passed 27 cases; the native strategy file failed on its shared rc.1 fixture import of the removed `dsh-llm-retry` package. This is a real fixture incompatibility, not a fabricated Goal red. The shared fixture is owned by the integration lane and must be updated before native execution can establish behavior. Full TypeScript source compilation against the exact rc.2 source-built package set passed after the initial scoped changes. Further focused source/native/packed results will be appended after execution; no result is claimed in advance.
