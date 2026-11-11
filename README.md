@@ -4,7 +4,7 @@ One install, independent enhancements. **一体安装，功能独立开关。**
 
 Workspace-aware model defaults, shared compaction reasoning, native retry management, browser session chimes and goal waiting behind one plugin card. Five genuinely independent single-feature packages are built from the same source, not maintained as forks.
 
-**Target (Extras 0.5.1):** exact DSH `0.2.2-rc.1`, Node `>=24.9.0`. No unverified broad compatibility claim. Alpha.3 users should retain Extras 0.3.1. Not published to npm: install a GitHub Release tarball.
+**Target (Extras 0.6.0):** exact DSH `0.2.2-rc.2`, Node `>=24.9.0`. No unverified broad compatibility claim. rc.1 users should retain Extras 0.5.1; alpha.3 users should retain Extras 0.3.1. Not published to npm: install a GitHub Release tarball.
 
 ## Distributions
 
@@ -24,10 +24,10 @@ Choose the combined package **or** any subset of distinct splits. Two distributi
 Choose the intended profile explicitly. Example for an existing web profile:
 
 ```sh
-dsh plugin --profile web add https://github.com/LMGateX/dsh-extras/releases/download/v0.5.1/dsh-extras-0.5.1.tgz
+dsh plugin --profile web add https://github.com/LMGateX/dsh-extras/releases/download/v0.6.0/dsh-extras-0.6.0.tgz
 ```
 
-For one capability replace the asset name, e.g. `dsh-extras-retry-0.5.1.tgz`. Verify downloads against release SHA256SUMS. The matching DSH runtime must already exist; packages do not install a second host runtime.
+For one capability replace the asset name, e.g. `dsh-extras-retry-0.6.0.tgz`. Verify downloads against release SHA256SUMS. The matching DSH runtime must already exist; packages do not install a second host runtime.
 
 Open **Plugins → DSH Extras → Configure**. All module settings, including the compaction reasoning editor, follow the native Chinese/English language preference and theme. With no locale service, settings use Chinese, matching the preserved Chime editor. Switching language keeps unsaved drafts; technical configuration keys, native route/model/effort IDs, and raw migration diagnostics are not translated. Combined settings have compact-context, model-policy, retry, chime and goalWait sections, with module/responsibility folding and expand/collapse-all. Folding hides mounted editors rather than discarding drafts; headers retain enable/runtime/dirty/error summaries. Each module and every original option is independently editable. Status distinguishes active, disabled, missing dependency, migration-pending, conflict and failed. Enable/disable joins feature disposal before reactivation. Policy-only changes use validated live snapshots without remounting in-flight retry classifiers or releasing goal holds.
 
@@ -118,16 +118,16 @@ Backoff uses native initial/max delays and jitter with multiplier 2. Fixed delay
 
 ### Message-free retry / 无消息重试
 
-The recovery card appears only when the complete native turn outline proves the latest turn ended in a model-request failure; ordinary, running, cancelled, historical, tool-preparation and unknown-origin turns stay silent. It has its own heading, textual state, explanation and separated actions in light/dark and narrow layouts. Stock DSH rc.1 has no safe terminal request recovery operation: Extras reports `native-terminal-recovery-unavailable`, not a fake working button. The independently approved [native recovery extension](docs/NATIVE_RECOVERY_050.md) must prove a genuinely terminated budget-exhausted checkpoint, native admission and exactly-once recovery before an adapted host can expose the button. It must not send hidden continue/empty messages or replay completed tools. An unofficial companion patch is not an official DSH release; availability and production activation require separate verified evidence.
+The recovery card appears only when the complete native turn outline proves the latest turn ended in a model-request failure; ordinary, running, cancelled, historical, tool-preparation and unknown-origin turns stay silent. It has its own heading, textual state, explanation and separated actions in light/dark and narrow layouts. Stock DSH rc.2 provides its own **Continue generating** action for native eligible transient failures. That action admits a normal follow-up with empty content and a durable retry user-message; it is not an immutable failed-request checkpoint. Extras neither intercepts it nor maps it to the optional exact-recovery protocol, and does not add an unavailable recovery card when that optional protocol is absent. Explicit incompatible-protocol diagnostics remain visible. rc.1-only unofficial companion assets must not be installed or relabeled for rc.2. The independently approved [native recovery extension](docs/NATIVE_RECOVERY_050.md) must prove a genuinely terminated budget-exhausted checkpoint, native admission and exactly-once recovery before an adapted host can expose the button. It must not send hidden continue/empty messages or replay completed tools. An unofficial companion patch is not an official DSH release; availability and production activation require separate verified evidence.
 
 ## Goal continuation strategies / Goal 续跑策略
 
-Durable goal phase (active/paused/complete/blocked), process-local armed/disarmed activation, gate-owned holds and native progressing-descendant joins are different concepts. Waiting must not masquerade as changing durable goal phase.
+Durable goal phase (active/paused/complete/blocked), process-local armed/disarmed activation, gate-owned holds and native progressing-tree joins are different concepts. **rc.2 necessity:** native already joins progressing managed work for a tree root (not arbitrary child descendants) and excludes idle/parked resident inboxes. It does not wait for generic owned Jobs. Choose `native` if native coordination is all you need; keep Extras waiting for configured generic Jobs or the deliberately stronger legacy activation hold. No existing strategy is changed automatically. Waiting must not masquerade as changing durable goal phase.
 
 | Strategy | Actual behavior |
 | --- | --- |
 | activation (default) | Keep the official stock driver; the conventional gate disarms while configured jobs or registered descendants remain and releases its owned hold afterward. This deliberately retains the older all-live-descendant policy. |
-| replacement | Temporarily suspend the verified stock driver and run the exact-artifact-pinned native-derived driver. Job eligibility waits without disarming; the audited native join handles progressing descendants without imposing a second hold on idle/parked resident children. |
+| replacement | Temporarily suspend the verified stock driver and run the exact-artifact-pinned native-derived driver. Job eligibility waits without disarming; the audited rc.2 `waitForTreeWork` join handles progressing work for managed tree roots without imposing a second hold on idle/parked resident children; ordinary tree members keep native non-joining semantics. |
 | native | Keep/restore the official driver with no Extras wait gate. |
 | off | Suppress automatic goal continuation while the module is enabled. This is **not** equivalent to disabling the module. |
 
@@ -149,7 +149,7 @@ Rules match the **actual outgoing summary provider/model**, not the conversation
 
 Both Compact-context and Model policy editors switch between global defaults and every discovered native workspace, show inherited versus customized state and display the effective inherited value. A workspace without an override inherits the latest accepted global policy; `false` and empty rules remain explicit Shared compaction values. Both editors use one profile-scoped native-storage policy/revision authority with optional exact-workspace overrides; they do not synchronize two independent rule lists. The original module compactionReasoning rules are retained as a recoverable legacy seed, not a second live settings authority after canonical initialization. Local participation and the shared policy master switch are separate. Existing accepted canonical rules win over later local seed values; conflicting initial seeds report a diagnostic. Switching executor does not change policy. The editor uses advertised effort choices for an exact model when available, with explicit native-id entry when discovery is unavailable. Save/discard/reset and revision conflicts follow native configuration forms. Runtime policy availability is reported independently from tool availability: saved or enabled does not mean active.
 
-**Experimental compatibility boundary:** clone-first wrapping of the native public LLM stream, audited in Extras 0.4.0 for DSH LLM `0.2.2-rc.1` / Cordis `4.1.0`; not an official request-transform hook. Unsupported versions/runtime shapes withdraw this policy and preserve original compaction. Audited native provision, isolation, replacement and HMR are included; arbitrary third-party engines or silent service replacement/cached-method paths bypassing native stream access are not a compatibility guarantee. Ordinary conversation/title calls, native retention/routing and cancellation are unchanged. Matching effort can remove one upstream cache-namespace mismatch; it does not guarantee cache hits or lower latency/cost.
+**Experimental compatibility boundary:** clone-first wrapping of the native public LLM stream, audited for this release against exact DSH LLM `0.2.2-rc.2` / Cordis `4.1.0`; not an official request-transform hook. Unsupported versions/runtime shapes withdraw this policy and preserve original compaction. Audited native provision, isolation, replacement and HMR are included; arbitrary third-party engines or silent service replacement/cached-method paths bypassing native stream access are not a compatibility guarantee. Ordinary conversation/title calls, native retention/routing and cancellation are unchanged. Matching effort can remove one upstream cache-namespace mismatch; it does not guarantee cache hits or lower latency/cost.
 
 See the [fixed contract and synthetic rule examples](<docs/COMPACTION_REASONING.md>) for exact defaults, matching, lifecycle and coverage gates.
 

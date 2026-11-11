@@ -12,8 +12,8 @@ import {distributions} from '../../scripts/distributions.mjs';
 const root = resolve(import.meta.dirname, '../..');
 const version = JSON.parse(await readFile(join(root,'package.json'),'utf8')).version;
 const artifactDir = join(root,'artifacts');
-assert.equal(distributions.length, 6, '0.5.1 delivers combined plus five independent splits');
-assert.equal(version, '0.5.1');
+assert.equal(distributions.length, 6, '0.6.0 delivers combined plus five independent splits');
+assert.equal(version, '0.6.0');
 const checksums = new Map((await readFile(join(artifactDir,'SHA256SUMS'),'utf8')).trim().split('\n').map(line => line.split('  ').reverse()));
 const hostRequire = createRequire(createRequire(join(root,'package.json')).resolve('@deepseek-ai/dsh/package.json'));
 for(const {name,modules} of distributions) test('packed installable distribution: '+name,{timeout:120000},async t=>{
@@ -27,7 +27,7 @@ for(const {name,modules} of distributions) test('packed installable distribution
   const packageDir=join(temp,'node_modules',name);
   const pkg=JSON.parse(await readFile(join(packageDir,'package.json'),'utf8'));
   assert.equal(pkg.version,version);assert.equal(pkg.name,name);assert.equal(pkg.private,undefined);
-  assert.equal(pkg.engines.dsh,'0.2.2-rc.1');assert.equal(pkg.dsh.client.platform,'web');
+  assert.equal(pkg.engines.dsh,'0.2.2-rc.2');assert.equal(pkg.dsh.client.platform,'web');
   assert.equal(pkg.dsh.client.platforms,undefined);assert.equal(pkg.dsh.bundle.patch,'cordis.patch.yml');
   assert.equal(pkg.dsh.client.inject.includes('@deepseek-ai/dsh-api-session-controller'), modules.includes('retry') || modules.includes('chime'), 'selected session-controller dependency does not depend on chime transitively');
   assert.equal(pkg.dsh.client.inject.includes('@deepseek-ai/dsh-api-workspace-controller'), modules.includes('model-policy') || modules.includes('compact-context'), 'native workspace discovery dependency belongs only to workspace settings distributions');

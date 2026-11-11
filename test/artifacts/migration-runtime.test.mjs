@@ -113,7 +113,7 @@ async function consumer() {
       if(kind.startsWith('driver-')) {
         await symlink(dirname(hostRequire.resolve('@deepseek-ai/cordis-plugin-loader/package.json')),join(scope,'cordis-plugin-loader'),'dir');
         const dir=join(scope,'dsh-goal-round-driver');await mkdir(dir);
-        await writeFile(join(dir,'package.json'),JSON.stringify({name:'@deepseek-ai/dsh-goal-round-driver',version:kind==='driver-version'?'99.0.0':'0.2.2-rc.1',type:'module',exports:{'.':'./index.js','./package.json':'./package.json'}}));
+        await writeFile(join(dir,'package.json'),JSON.stringify({name:'@deepseek-ai/dsh-goal-round-driver',version:kind==='driver-version'?'99.0.0':'0.2.2-rc.2',type:'module',exports:{'.':'./index.js','./package.json':'./package.json'}}));
         await writeFile(join(dir,'index.js'),'globalThis[Symbol.for("unverified-packed-driver-evaluated")]=true;export * from '+JSON.stringify(pathToFileURL(hostRequire.resolve('@deepseek-ai/dsh-goal-round-driver')).href)+';');
       } else {
         await symlink(dirname(hostRequire.resolve('@deepseek-ai/dsh-goal-round-driver/package.json')),join(scope,'dsh-goal-round-driver'),'dir');
