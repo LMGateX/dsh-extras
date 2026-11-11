@@ -2,6 +2,8 @@
 
 For 0.5.0 additionally execute the [workspace policy contract](WORKSPACE_POLICY_050.md) and the rows below; the independent [native terminal recovery extension](NATIVE_RECOVERY_050.md) has its own adapted-host gate. Stock rc.1 must report recovery unavailable, not a working button. Earlier gates remain unless the explicit 0.5.0 amendments change the configuration authority or distribution count.
 
+For 0.6.0, additionally execute RC2-1/2/G/M/R/W/P from the [fixed rc.2 contract](DSH_RC2_060.md). Earlier applicable gates remain; no local production installation is authorized for this release. Historical rc.1-only companion gates do not certify rc.2.
+
 For 0.5.1, apply every 0.5.0 row and additionally the [follow-up UI contract](UI_REFINEMENTS_050.md) acceptance items: latest-model-failure-only recovery visibility with positive model-failure origin proof, an independently presented recovery card, and global/multi-workspace model and shared-compaction scope switching with explicit inheritance, draft locks and exact opaque IDs. Six synchronized archives remain the distribution set.
 
 | ID | Additional 0.5.0 criterion |

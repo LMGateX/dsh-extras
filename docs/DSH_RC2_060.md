@@ -1,0 +1,36 @@
+# DSH 0.2.2-rc.2 compatibility contract — Extras 0.6.0
+
+Fixed before implementation, 2026-11-11 (Asia/Shanghai). Direct request: audit/adapt the [official rc.2 release](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-rc.2), explicitly assess Goal-wait necessity, document first, develop/test with isolated worktrees and subagents, then push/release. **Do not install into the local production DSH, restart it, or use its GUI/profile as a fixture.** This supersedes the previous release’s installation exception for this task. No GitHub Actions or npm publication.
+
+## Primary evidence and baseline
+
+The official tag resolves to `ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c`. At initial audit the exact public npm manifest and direct tarball for `@deepseek-ai/dsh@0.2.2-rc.2` return 404; the existing rc.1 package is not rc.2 evidence. Research notes will record exact source comparisons and package hashes when available. The official tag is cloned into a disposable directory for audit/build; no active installation is modified.
+
+The rc.2 native Goal driver calls `subagents.waitForTreeWork(agent)`, not the rc.1 `waitForChildren` seam. Its native progressing-tree join is not a generic Jobs wait, and the release’s PTC repeated-message wake fix is not evidence that generic Goal waiting became native. A version-only guard refresh is insufficient.
+
+## Product and compatibility decisions
+
+1. Release six synchronized Extras 0.6.0 distributions from one source, five modules. Exact audited rc.2 is the new baseline; rc.1 users retain Extras 0.5.1. Preserve native tool names, default-off model/compaction policies, shared canonical storage and one executor, native model selection/retention/retry authority, migration precedence and ownership safety. Do not widen version or source-fingerprint gates speculatively.
+2. Retain Goal-wait rather than remove a still-distinct capability: configured generic Job waiting and the historical activation all-live-descendant policy remain opt-in policy value beyond native progressing-tree coordination. Preserve activation/replacement/native/off and current defaults; no automatic strategy/config migration. Clearly distinguish native coverage from Extras value, recommend native when only native progressing-tree coordination is wanted, and preserve the activation same-value external-disarm limitation.
+3. Port replacement from the exact rc.2 driver behavior, including its tree-root semantics, message/event contracts, queued/claimed cancellation and disposal; do not preserve obsolete joins or add a second all-resident-child hold behind the native join. Driver/Loader/callback proof remains exact-artifact, foreign/unknown owners fail closed, disposal drains before replacement/restoration. Migration proof uses the same audited artifact boundary.
+4. Adapt real changed integration contracts (Session messages/batch append, Agent/LLM/tool failure types, provider retry policy, named/multilevel subagents and browser services) where the source audit shows an effect. Do not duplicate native loops, fabricate failure-origin proof, change provider routing in a deprecated request hook, or acquire another Cordis registry. Record each additional necessary contract amendment before implementing it.
+5. Audit rc.2’s native “Continue generating” independently from the prior unofficial exact-checkpoint recovery companion. A label or message-free operation does not prove captured-request replay, finite retry budget or exactly-once checkpoint semantics. Native controls remain native; do not intercept them or claim equivalence. Do not ship, activate, or relabel the rc.1-only companion as rc.2-compatible. Preserve truthful optional protocol diagnostics unless a separately documented exact new native capability proves the prior recovery contract.
+6. Native menu-positioning changes apply only to actual anchored-overlay consumers; do not rewrite fixed Chime banners without evidence. Test actual packed browser/client integration, locale/theme/narrow settings and chime ownership.
+
+## Provisioning and evidence boundary
+
+All installs/hosts use explicit disposable HOME/DSH_HOME/profile/cache/XDG paths and temporary ports, never the live GUI. Prefer the exact public npm package set once available. A frozen-lockfile build and local pack of the unchanged official tag may provide explicitly labeled source-build evidence while registry publication is absent; retain commit/build commands and generated checksums. It must not be called an official npm artifact, and cannot alone justify a fingerprint claim about unobserved published bytes. Any unavailable native/browser gate stays open and blocks a compatibility release; rc.1 regression evidence cannot waive it. No machine-local paths or source-build archives enter tracked product manifests or release assets.
+
+## Additional acceptance gates
+
+| ID | Required evidence |
+| --- | --- |
+| RC2-1 | Independent cited primary-source integration and Goal necessity reports; exact tag/package versions, artifact hashes and changed public seams. |
+| RC2-2 | Full typecheck/source tests against actual rc.2 native code in disposable environments: tools/PTC, batch Session events, all compaction-reasoning entry paths, provider retry classification/settings and model-policy root/descendant/manual/cold behavior. |
+| RC2-G | Stock native behavior vs Extras for generic Jobs, progressing root-tree work, deep/parked/idle descendants and child callers; four strategies, live update, external revocation/terminal phases, cancellation, unload/remount and fail-closed unknown fingerprint/foreign owner. No busy polling or duplicate goal rounds. |
+| RC2-M | Actual native Goal/Loader proof, legacy handover and selective recovery, packed absent-peer CLI/API, concurrent/interrupted writes and six clean consumers; no second runtime or unrelated feature payloads. |
+| RC2-R | Native Continue generating semantics documented and exercised separately from optional checkpoint protocol; no rc.1 companion presented as an rc.2 asset; permanent/tool/cancel/history cases never falsely advertised as exact checkpoint recovery. |
+| RC2-W | Six final packed artifacts in real disposable native host/browser, settings persistence/toggles, global/workspace scopes and inherited opaque IDs, recovery visibility and chime handover. Browser suite uses its own port and shuts down. |
+| RC2-P | Independent Standards and Spec reviews, all earlier applicable baseline/REASON/PAR/CLI/WP/SC/UI/RET/DIST safety gates, frozen-source test record, scoped commits, clean pushed main, annotated tag, six verified archives plus SHA256SUMS and remote checksum verification. No production installation. |
+
+Earlier criteria remain unless this document explicitly updates an exact host/API boundary; historical rc.1 companion acceptance remains historical, not an assertion that the companion works on rc.2. Implementation and final validation are recorded separately from this pre-implementation freeze.

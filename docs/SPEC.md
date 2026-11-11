@@ -10,6 +10,8 @@ For 0.3.1, additionally apply the [standalone migration entry contract](MIGRATIO
 
 For 0.5.0 additionally apply the approved [workspace policy contract](WORKSPACE_POLICY_050.md): five modules/six synchronized distributions, standalone shared compaction capability with single execution ownership, workspace model defaults, collapsible settings and native retry management. The explicit production-install authorization applies only after isolated and published-artifact verification.
 
+For 0.6.0 additionally apply the [exact rc.2 compatibility and Goal necessity contract](DSH_RC2_060.md). The current direct request forbids local production installation; the prior release’s installation exception does not apply. Six synchronized distributions remain required.
+
 ## Required deliverables
 
 1. One combined installable distribution, dsh-extras, one plugin card and unified settings grouped into four independently enabled modules.
