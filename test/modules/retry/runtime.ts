@@ -306,6 +306,8 @@ export interface ChildRun {
 export interface ChildSpec {
   provider: string;
   label: string;
+  /** Optional rc.2 member name, unique among the parent's children. */
+  name?: string;
   childId: string;
   request: { parent: any; prompt: unknown; agentOptions?: unknown };
   signal: AbortSignal;
@@ -329,6 +331,7 @@ export async function startChild(ctx: any, spec: ChildSpec, mode: 'one-shot' | '
     try {
       const activation = await ctx.subagents.startActivation({
         ...request, provider: spec.provider, label: spec.label, childId: spec.childId, signal: spec.signal, delivery: 'caller',
+        ...(spec.name === undefined ? {} : { name: spec.name }),
       });
       return {
         childId: activation.childId,
