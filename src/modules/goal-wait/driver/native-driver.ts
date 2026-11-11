@@ -1,13 +1,13 @@
-// Derived from the published @deepseek-ai/dsh-goal-round-driver bundles
-// 0.2.0-rc.2, 0.2.1-alpha.1, 0.2.1-alpha.3, 0.2.2-alpha.3 and 0.2.2-rc.1. Copyright (c) 2026 DeepSeek. MIT; see
+// Derived from @deepseek-ai/dsh-goal-round-driver historical published bundles
+// and the exact 0.2.2-rc.2 official-tag source build. Copyright (c) 2026 DeepSeek. MIT; see
 // UPSTREAM-LICENSE.txt and provenance.json.
 import { isDeepStrictEqual } from 'node:util';
 import type { Context } from '@deepseek-ai/cordis';
 import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent';
 import type { GoalMessageSource, GoalRef, GoalView } from '@deepseek-ai/dsh-goal';
 import { createUserMessage } from '@deepseek-ai/dsh-llm';
-import type { ContentBlock, MessageId, MessageSource, UserMessage } from '@deepseek-ai/dsh-llm';
-import type {} from '@deepseek-ai/dsh-session';
+import type { ContentBlock, MessageId, MessageSource } from '@deepseek-ai/dsh-llm';
+import type { UserMessage } from '@deepseek-ai/dsh-session';
 import { renderGoalRoundPrompt } from './prompt.ts';
 
 /**
@@ -33,11 +33,11 @@ export interface DriverBehavior {
 	readonly disarmsOnDisposedAbort: boolean;
 }
 /**
-* The 0.2.1-alpha.3 subagent seam this port joins before reserving a round.
-* Earlier hosts do not publish it, so it is read structurally and never imported.
+* Exact rc.2 root-tree join. Ordinary members return false natively; the port
+* never substitutes an obsolete creator-subtree join or an all-resident hold.
 */
 interface ProgressingDescendants {
-	waitForChildren(parent: Agent): Promise<boolean>;
+	waitForTreeWork(parent: Agent): Promise<boolean>;
 }
 
 interface Attempt extends Pick<GoalMessageSource, 'goalId' | 'revision' | 'round'> {
@@ -165,7 +165,7 @@ export function installNativeDriver(ctx: Context, policy: DriverPolicy | undefin
 		if (behavior.joinsProgressingDescendants) {
 			const subagents = ctx.get("subagents") as unknown as ProgressingDescendants | undefined;
 			if (subagents !== undefined) {
-				await Promise.race([subagents.waitForChildren(agent), unloading.promise]);
+				await Promise.race([subagents.waitForTreeWork(agent), unloading.promise]);
 				if (!readyAfterCheckpoint(state)) return;
 			}
 		}

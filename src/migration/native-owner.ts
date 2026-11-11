@@ -53,9 +53,9 @@ export async function inspectNativeGoalOwner(host: NativeMigrationHost, target: 
   try {
     const anchored = createRequire(host.profileContext.installAnchor);
     const manifest = JSON.parse(await readFile(anchored.resolve('@deepseek-ai/dsh-goal-round-driver/package.json'), 'utf8')) as {name?: unknown; version?: unknown};
-    if (manifest.name !== '@deepseek-ai/dsh-goal-round-driver' || manifest.version !== '0.2.2-rc.1') return {verified:false,stockActive:false,reason:'unsupported anchored native driver version; supported native runtime verification required'};
+    if (manifest.name !== '@deepseek-ai/dsh-goal-round-driver' || manifest.version !== '0.2.2-rc.2') return {verified:false,stockActive:false,reason:'unsupported anchored native driver version; supported native runtime verification required'};
     const path = anchored.resolve('@deepseek-ai/dsh-goal-round-driver');
-    if (createHash('sha256').update(await readFile(path)).digest('hex') !== '1a1cb44cd44363965aca4a288c052df50e6adff0ffdafd0a81fed97b4a7589de') return {verified:false,stockActive:false,reason:'anchored native driver source fingerprint mismatch; supported native runtime verification required'};
+    if (createHash('sha256').update(await readFile(path)).digest('hex') !== '8c56696eaac68e61a38b1068ea0f0dff976440e72b49ef4814fbea93c8b48b0c') return {verified:false,stockActive:false,reason:'anchored native driver source fingerprint mismatch; supported native runtime verification required'};
     originalNative = (await import(pathToFileURL(path).href)).apply;
     if (typeof originalNative !== 'function') throw new Error('native callback unavailable');
   } catch { return {verified:false,stockActive:false,reason:'native continuation callback identity cannot be verified'}; }

@@ -63,8 +63,7 @@ export function createGoalMode(ctx: Context, policy: () => ResolvedConfig) {
     const rawFiber = ctx.plugin({
       name: 'goal-wait-owned-replacement-driver', inject: ['agents', 'goals', 'sessions', 'jobs'],
       apply(scope: Context) {
-        const installed = installNativeDriver(scope, createBackgroundPolicy(scope, policy,
-          { nativeSubagentJoin: host!.driver.joinsProgressingDescendants }), host!.driver,
+        const installed = installNativeDriver(scope, createBackgroundPolicy(scope, policy), host!.driver,
           { disarm(agent, action) { if (authority) authority.owned(agent, action); else action() } })
         stop = installed.stop
       },

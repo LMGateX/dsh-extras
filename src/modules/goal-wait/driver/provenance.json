@@ -65,9 +65,25 @@
       "companion": null,
       "behavior": "Published JavaScript is byte-identical to the audited 0.2.2-alpha.3 driver: queued settlement, progressing-descendant join, disposal-abort disarm and prompt bytes are unchanged. Only rc.1 with Cordis 4.1.0 and Loader 1.1.0 is admitted by this Extras release.",
       "sourceBasis": "Exact rc.1 package artifact compared by SHA-256 with the prior audited artifact; no behavior inferred from a version string."
+    },
+    {
+      "package": "@deepseek-ai/dsh-goal-round-driver",
+      "version": "0.2.2-rc.2",
+      "license": "MIT",
+      "copyright": "Copyright (c) 2026 DeepSeek",
+      "repository": "https://github.com/deepseek-ai/deepseek-harness",
+      "repositoryDirectory": "packages/goal/goal-round-driver",
+      "repositoryCommit": "ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c",
+      "artifact": "lib/index.js",
+      "sha256": "8c56696eaac68e61a38b1068ea0f0dff976440e72b49ef4814fbea93c8b48b0c",
+      "companion": null,
+      "sourceArtifact": "src/index.ts",
+      "sourceSha256": "fd7a5e4c436f951ca5d236df83a7b0dd662c2ebbffffe49a30714fe55ce4bfe7",
+      "behavior": "The exact rc.2 source changes the join to waitForTreeWork: only a shared subagent-tree root joins progressing whole-tree work; ordinary members return false. Queue, cancellation, disposal-abort, prompt and lifecycle frame behavior is preserved. Additive replacement policy observes Jobs only; activation retains its historical registered-descendant gate.",
+      "sourceBasis": "Unchanged official tag, frozen-lockfile dependency provisioning and canonical pnpm run build:artifacts. Locally source-built compiled artifact, NOT an observed published npm rc.2 tarball. Registry exact rc.2 endpoints were 404 during audit; unobserved published bytes are not admitted by version alone."
     }
   ],
-  "selection": "The host profile is matched from the resolved bundle version and SHA-256 together; the same port reproduces the pinned behavior of exactly one published artifact, and an unpinned distribution is refused before any driver is mounted.",
+  "selection": "Match resolved exact version and compiled SHA-256 together against the audited artifact above; source-built and historical npm provenance remain distinct. Unknown or changed bytes are refused before driver mounting.",
   "derivedFiles": [
     "native-driver.ts",
     "prompt.ts"
@@ -89,11 +105,12 @@
     "sourcePackage": "dsh-goal-wait-gate",
     "sourceVersion": "0.4.23",
     "sourceCommit": "cbd86273660893336afaee31794b5fd76487db78",
-    "supportedHost": "0.2.2-rc.1",
+    "supportedHost": "0.2.2-rc.2",
     "adaptations": [
       "Ordinary Config/apply/runtimeStatus interface; stock ownership is managed separately without unconditional bundle suppression.",
       "Only mount/teardown disarm calls carry a consumed-once lifecycle mark for the temporary exact-ref transition authority observer.",
-      "Live volatile settings wake existing eligibility decisions without remounting the port."
+      "Live volatile settings wake existing eligibility decisions without remounting the port.",
+      "Exact rc.2 waitForTreeWork and Session UserMessage import; remove unreachable earlier-host descendant/epoch fallback so only native tree-root progression and additive Jobs eligibility run."
     ]
   }
 }

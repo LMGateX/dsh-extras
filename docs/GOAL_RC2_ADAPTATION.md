@@ -11,4 +11,18 @@ Date: 2026-11-11 (Asia/Shanghai). Applies the pre-implementation [rc.2 contract]
 
 ## Validation record
 
-Before adaptation, isolated plugin tests passed 27 cases; the native strategy file failed on its shared rc.1 fixture import of the removed `dsh-llm-retry` package. This is a real fixture incompatibility, not a fabricated Goal red. The shared fixture is owned by the integration lane and must be updated before native execution can establish behavior. Full TypeScript source compilation against the exact rc.2 source-built package set passed after the initial scoped changes. Further focused source/native/packed results will be appended after execution; no result is claimed in advance.
+Before adaptation, isolated plugin tests passed 27 cases; the native strategy file initially could not resolve `dsh-llm-retry`. Follow-up inspection confirmed that package still exists unchanged: the incomplete disposable workspace links caused the failure, not a removed API or Goal regression. After the integration lane linked the complete exact-tag package set, imports succeeded. The shared native child fixture then needed the real rc.2 flat activation spec and root-filtered drain; direct external activation fixtures were updated likewise. Full TypeScript source compilation and whitespace checks pass against the exact rc.2 source-built package set.
+
+The final scoped source/native run passed **106 tests, 0 failed/skipped/cancelled** (about 6.7 seconds): public module Config/apply/runtimeStatus, actual native Goal/Jobs/Loader ownership, migration owner proof, altered-version/altered-byte refusal, source-map/stack/descriptor revocation, all four strategies and cleanup. Added actual-native cases prove native and replacement root-tree waiting while an ordinary member completes its own goal despite a progressing grandchild; both waitForSubagents flag values permit healthy parked input; subagent-kind Job filtering still holds through stopping with generic Jobs disabled and releases quietly exactly once. No private production method assertions were added.
+
+Command, with explicit disposable HOME/DSH_HOME/XDG/cache/TMPDIR and isolated profile plus exact-tag DSH_RUNTIME_ROOT/DSH_TEST_INSTALL_ANCHOR:
+
+```sh
+node --expose-internals --test --test-concurrency=1 \
+  test/modules/goal-wait/*.test.ts test/integration/goal-strategies.test.ts \
+  test/integration/native-driver-lease.test.ts test/migration/goal-ownership.test.ts
+node node_modules/typescript/bin/tsc --noEmit
+git diff --check
+```
+
+Shared fixture commits 0d86dbc57a73afae01d444b6f28bdda42b773b47 and dc4f7001c96072fe80b7f1259f48dda1d8a80a82 are integrated dependencies, not authored Goal changes. Packed/browser/clean-consumer validation remains with the integration lane and is not implied by these source imports. Exact published npm rc.2 artifact verification remains unavailable at the last registry observation; no production install or live GUI access occurred.

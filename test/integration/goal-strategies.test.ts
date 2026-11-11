@@ -105,8 +105,8 @@ test('unloading replacement restores stock and eligible goal, with no leaked tra
   assert.deepEqual(Object.getOwnPropertyDescriptor(f.ctx.goals, 'disarm'), descriptor)
 })
 
-test('native join waits for a progressing real child but does not double-block its parked pending inbox', { timeout: 15000 }, async t => {
-  const f = await createGoalRuntime(t, { subagents: true, config: { strategy: 'replacement' } })
+for (const waitForSubagents of [true, false]) test(`native join waits for a progressing real child and permits parked input (waitForSubagents=${waitForSubagents})`, { timeout: 15000 }, async t => {
+  const f = await createGoalRuntime(t, { subagents: true, config: { strategy: 'replacement', waitForSubagents } })
   await until(f.status, state => state.capabilities.continuation.phase === 'active', 'replacement with native join')
   const parent = await f.createAgent({ sessionId: 'join-parent', route: 'join-parent-route' })
   const entered = Promise.withResolvers<void>(), release = Promise.withResolvers<void>()
@@ -149,7 +149,7 @@ test('native join tracks an external provider with no local Agent through owned 
   let activation: any
   try {
     activation = await f.ctx.subagents.startActivation({ provider: 'offline-external', signal: new AbortController().signal, delivery: 'caller',
-      request: { parent: parent.agent, prompt: [{ type: 'text', text: 'offline external work' }] } })
+      parent: parent.agent, prompt: [{ type: 'text', text: 'offline external work' }] })
     assert.equal(f.ctx.agents.get(activation.childId), undefined)
     f.ctx.goals.create(parent.agent, { objective: 'external provider cleanup', maxGoalRounds: 1 })
     await f.ctx.sessions.flush(parent.agent.session)
@@ -526,7 +526,7 @@ test('ordinary module replacement uses the pinned port, retains armed authority 
   const { ctx, runtime } = f
   const state = await until(() => goalWait.runtimeStatus(f.fiber.ctx), value => value.capabilities.continuation.phase !== 'unavailable' || !!value.details.goalWait.fallback, 'replacement mount')
   assert.equal(state.details.goalWait.mounted, 'replacement-port', JSON.stringify(state))
-  assert.equal(state.details.goalWait.host?.distribution, '0.2.2-rc.1')
+  assert.equal(state.details.goalWait.host?.distribution, '0.2.2-rc.2')
   const handle = await runtime.createAgent({ sessionId: 'parity-goal-port' })
   let finish!: (value: { status: string }) => void
   const done = new Promise<{ status: string }>(resolve => { finish = resolve })
@@ -544,4 +544,71 @@ test('ordinary module replacement uses the pinned port, retains armed authority 
   await handle.agent.whenIdle()
   assert.equal(ctx.goals.get(handle.agent).roundsStarted, 1)
   assert.equal(handle.state.requests.length, 1)
+})
+
+for (const strategy of ['native', 'replacement']) test(`rc.2 `+strategy+' joins the whole root tree but does not block a member goal on its grandchild', { timeout: 15000 }, async t => {
+  const f = await createGoalRuntime(t, { subagents: true, config: { strategy } })
+  await until(f.status, state => state.capabilities.continuation.phase === 'active', strategy+' tree owner')
+  const root = await f.createAgent({ sessionId: 'tree-root-'+strategy, route: 'tree-root-route-'+strategy })
+  const memberEntered = Promise.withResolvers<any>(), releaseMember = Promise.withResolvers<void>()
+  const leafEntered = Promise.withResolvers<any>(), releaseLeaf = Promise.withResolvers<void>()
+  const memberId = 'tree-member-'+strategy, leafId = 'tree-leaf-'+strategy
+  const off = f.ctx.on('agent/pre-step', async ({ agent }: any, next: () => Promise<any>) => {
+    if (agent.id === memberId && !f.ctx.goals.get(agent)) { memberEntered.resolve(agent); await releaseMember.promise }
+    if (agent.id === leafId) { leafEntered.resolve(agent); await releaseLeaf.promise }
+    return next()
+  })
+  const memberState = f.runtime.registerMock('tree-member-route-'+strategy, { failures: 0 })
+  f.runtime.registerMock('tree-leaf-route-'+strategy, { failures: 0 })
+  let member: Awaited<ReturnType<typeof startChild>> | undefined, leaf: Awaited<ReturnType<typeof startChild>> | undefined
+  try {
+    member = await startChild(f.ctx, { provider: 'spawn', childId: memberId, label: 'member with its own goal', signal: new AbortController().signal,
+      request: { parent: root.agent, prompt: [{ type: 'text', text: 'initial member turn' }], agentOptions: { provider: 'tree-member-route-'+strategy, model: 'integration-model' } } })
+    const memberAgent = await memberEntered.promise
+    leaf = await startChild(f.ctx, { provider: 'spawn', childId: leafId, label: 'progressing grandchild', signal: new AbortController().signal,
+      request: { parent: memberAgent, prompt: [{ type: 'text', text: 'leaf work' }], agentOptions: { provider: 'tree-leaf-route-'+strategy, model: 'integration-model' } } })
+    const leafAgent = await leafEntered.promise
+    assert.equal(f.ctx.subagents.rootOf(memberAgent), root.agent)
+    assert.equal(f.ctx.subagents.rootOf(leafAgent), root.agent)
+    const rootGoal = f.ctx.goals.create(root.agent, { objective: 'join entire progressing tree', maxGoalRounds: 1 })
+    f.ctx.goals.create(memberAgent, { objective: 'member must not acquire an obsolete subtree barrier', maxGoalRounds: 1 })
+    releaseMember.resolve()
+    await until(() => memberState.requests.length, count => count === 2, 'member initial turn plus one goal round while leaf progresses')
+    assert.equal(leafAgent.status, 'running')
+    assert.equal(root.state.requests.length, 0, 'root still joins the progressing grandchild after member completion')
+    assert.equal(f.ctx.goals.get(root.agent).roundsStarted, 0)
+    assert.equal(f.ctx.goals.get(root.agent).revision, rootGoal.revision)
+    assert.equal(f.ctx.goals.get(root.agent).activation, 'armed')
+    releaseLeaf.resolve()
+    await leaf.result
+    await until(() => root.state.requests.length, count => count === 1, 'root proceeds once whole tree settles')
+    await root.agent.whenIdle()
+    assert.equal(f.ctx.goals.get(root.agent).roundsStarted, 1)
+  } finally { releaseMember.resolve(); releaseLeaf.resolve(); off(); await leaf?.dispose(); await member?.dispose() }
+})
+
+test('replacement preserves subagent-kind Job waiting with generic Jobs disabled, including stopping', { timeout: 15000 }, async t => {
+  const f = await createGoalRuntime(t, { config: { strategy: 'replacement', waitForJobs: false, waitForSubagents: true } })
+  await until(f.status, state => state.capabilities.continuation.phase === 'active', 'filtered Job owner')
+  const handle = await f.createAgent({ sessionId: 'filtered-job-owner' })
+  const generic = Promise.withResolvers<{ status: string }>(), child = Promise.withResolvers<{ status: string }>()
+  t.after(() => { generic.resolve({ status: 'killed' }); child.resolve({ status: 'killed' }) })
+  f.ctx.jobs.start({ kind: 'workflow', label: 'ignored generic Job', owner: handle.agent.session.id, run: () => ({ done: generic.promise, cancel: () => generic.resolve({ status: 'killed' }) }) })
+  const childId = f.ctx.jobs.start({ kind: 'subagent', label: 'counted subagent Job', owner: handle.agent.session.id, run: () => ({ done: child.promise, cancel() {} }) })
+  const goal = f.ctx.goals.create(handle.agent, { objective: 'preserve subagent-kind Job filtering', maxGoalRounds: 1 })
+  await f.ctx.sessions.flush(handle.agent.session)
+  await new Promise<void>(resolve => setImmediate(resolve))
+  assert.equal(handle.state.requests.length, 0)
+  f.ctx.jobs.kill(childId, handle.agent.session.id)
+  await new Promise<void>(resolve => setImmediate(resolve))
+  assert.equal(f.ctx.jobs.list(handle.agent.session.id).find((job: any) => job.id === childId).status, 'stopping')
+  assert.equal(handle.state.requests.length, 0, 'stopping remains live until actual settlement')
+  assert.equal(f.ctx.goals.get(handle.agent).activation, 'armed')
+  assert.equal(f.ctx.goals.get(handle.agent).revision, goal.revision)
+  child.resolve({ status: 'killed' })
+  await f.ctx.jobs.wait(childId, 1000, handle.agent.session.id)
+  await until(() => handle.state.requests.length, count => count === 1, 'filtered Job quiet release')
+  await handle.agent.whenIdle()
+  assert.equal(f.ctx.goals.get(handle.agent).roundsStarted, 1)
+  assert.ok(f.ctx.jobs.list(handle.agent.session.id).some((job: any) => job.kind === 'workflow' && job.status === 'running'), 'ignored generic Job is still progressing')
 })
