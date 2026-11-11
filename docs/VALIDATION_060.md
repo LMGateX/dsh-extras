@@ -1,12 +1,12 @@
-# Extras 0.6.0 rc.2 validation record — in progress
+# Extras 0.6.0-rc.1 — source-built preview validation
 
 ## Evidence boundary
 
-This is a work-in-progress record, **not release acceptance**. Apply [the frozen rc.2 contract](DSH_RC2_060.md), [Goal research](RESEARCH_DSH_RC2_GOAL_2026-11-11.md), [integration research](RESEARCH_DSH_RC2_INTEGRATION_2026-11-11.md), and every retained applicable acceptance gate. No production installation is authorized.
+The final local preview gates below are accepted against frozen input `e032fed9551a83563ebd6825d82dab7357712cfd`. This is source-built evidence, not certification of unobserved npm artifacts or a fabricated future network receipt. Apply [the frozen rc.2 contract](DSH_RC2_060.md), [Goal research](RESEARCH_DSH_RC2_GOAL_2026-11-11.md), [integration research](RESEARCH_DSH_RC2_INTEGRATION_2026-11-11.md), and every retained applicable acceptance gate. No production installation is authorized.
 
 The entire official rc.2 tag checkout (21,009 tracked files) was cloned once into disposable local storage, pinned to `ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c`, and its tracked worktree remains clean. All implementation lanes were instructed to inspect this local checkout directly, not fetch individual GitHub code pages or duplicate clone/build work. Exact rc.1 tag comparisons in the research notes are historical source evidence, not rc.2 npm execution.
 
-At 2026-11-11 12:33 UTC the public exact `@deepseek-ai/dsh@0.2.2-rc.2` metadata still returned `E404`; earlier exact DSH/Agent/LLM/Subagent/Goal-driver metadata and direct DSH tarball requests were also404. The official GitHub release had no binary/package assets at inspection. The root rc.2 npm lock refresh and published-byte certification therefore remain open; do not fabricate npm integrity or call an rc.1 install an rc.2 run.
+At 2026-11-11 12:33 UTC the public exact `@deepseek-ai/dsh@0.2.2-rc.2` metadata still returned `E404`; earlier exact DSH/Agent/LLM/Subagent/Goal-driver metadata and direct DSH tarball requests were also404. The official GitHub release had no binary/package assets at inspection. That initially held the npm-dependent candidate. The later user-approved preview amendment below replaces development provisioning with a consistent public toolchain-only lock and explicit source-host flow. Published-byte certification remains unobserved and outside the preview claim; no npm integrity is fabricated and no rc.1 install is called an rc.2 run.
 
 ## Exact-tag source build (executed by parent)
 
@@ -64,6 +64,37 @@ The new public CLI test reproduced the reviewed explicit-selector graph gap, the
 Both independent review axes rechecked the exact corrective commit and red/green logs: Standards0 open hard findings/1 optional low metadata-duplication heuristic; Spec0 open confirmed implementation defects. The P2 graph selector finding is explicitly closed, not hidden or waived. The source-host CLI does not fault-inject dirty/unbuilt cases into the shared canonical checkout; those guards exist, and their unexecuted fault-injection remains an explicit narrow evidence limitation.
 
 At the last exact npm check2026-11-11 12:59:50 UTC, rc.2 metadata was still E404. The approved preview resolves this by an explicit reproducible source-host workflow, not by pretending the missing registry bytes were seen. No broader production-compatibility or npm-artifact claim is made. No local production installation or live GUI use.
+
+## Final frozen-head acceptance
+
+At `e032fed9551a83563ebd6825d82dab7357712cfd`, parent independently reran the complete suites on Linux x64 / Node v24.17.0, against the one audited official-tag source graph:
+
+| Gate | Executed result |
+| --- | --- |
+| Full typecheck | Passed, exit0 |
+| Full source suite | **730/730**,76 files,211.86s;0 failed/skipped/cancelled |
+| Full final packed suite | **54/54**,7 files,467.06s;0 failed/skipped/cancelled |
+| Final preview archive hashes | All six verified after tests; no archive bytes changed |
+| Standards review |0 open hard findings/blockers;1 optional low artifact-fact synchronization heuristic |
+| Spec review |0 open confirmed implementation/spec defects |
+
+The full54 run includes **six actual whole native Web GUIs**: combined plus each standalone split installed through native CLI into its own disposable profile. Every split proves selected-only native boot/client/UI, normalized served-client identity against its installed final archive, visible configuration acceptance, persisted native config, reload and active runtime/capability status with no alerts/browser errors. Compact/model cases additionally prove canonical global policy, exact opaque provider/model/effort/workspace IDs, navigation without a write, separate workspace override, reload and unchanged defaults; Goal proves native strategy/mounted host-driver/active continuation. Capability status is not misrepresented as a new provider request: the retained native semantic suites separately exercise actual compaction/retry behavior.
+
+The original combined whole-GUI assertions remain intact, including settings/toggles, live four-strategy transitions, shared reasoning/native executor state, recovery visibility and Chime handover. Five new standalone cases focused5/5 before integration, then ran again within the parent full54 suite. Both review axes independently checked the test-only closeout and focused execution evidence through `e032fed`; no acceptance criterion was silently narrowed.
+
+Runtime/build/README/manifest inputs are unchanged from `6ea37f4`; the subsequent changes add tests/evidence only. Final distribution digests:
+
+```text
+a5323e56f2a6a5020069ef074a3d7b2d552a77b444a5eaa43b53c7b8359c9a80  dsh-extras-0.6.0-rc.1.tgz
+c0e4961962f25fa053cd35906e2adf672cbc19aebf6ff1d8317b1fcbfffb6ace  dsh-extras-compact-context-0.6.0-rc.1.tgz
+82bbf693a7b20982edc209ae509f179ea89415acecbf32202b8b38f12a0f9e25  dsh-extras-retry-0.6.0-rc.1.tgz
+eaee6395d0569168a8fa59a6d2edb9db7dc8e8e36a30387fc83062119001a9f0  dsh-extras-chime-0.6.0-rc.1.tgz
+c60f6e4d9106254833fd24ea2514c4020fddfe562bc5284865f1c50fd16b1b8d  dsh-extras-goal-wait-0.6.0-rc.1.tgz
+f5052c206ad9286273078dbc17da7659a477a731c7218916ee6befa71b299faf  dsh-extras-model-policy-0.6.0-rc.1.tgz
+4ed605b7bc1960d4ecba679bd2dbd65cb34b911a46d670615c8dfadc53204d92  SHA256SUMS
+```
+
+All browsers and owned native test process groups were closed and per-test sandboxes removed. The seven rc.2 worktrees (parent, both research/implementation lanes, retry, shared harness, source-host development and standalone native-browser closeout) are intentionally **retained for audit**, not falsely reported as deleted. Historical unrelated worktrees and original checkout files remain untouched. The unchanged canonical source build and disposable validation logs remain available for audit. No production installation/restart or live-GUI test occurred; the production profile manifest/patch fingerprints still match their pre-validation values.
 
 ## Publication gate
 

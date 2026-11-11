@@ -30,10 +30,18 @@ Preserve immutable public session origin/parentSession workspace provenance rath
 
 ## Validation and safety
 
-Before prerelease identity/provisioning changes, parent-run final0.6.0 candidates passed725/725 source tests and49/49 packed tests, including disposable native CLI/Loader/migration and stock native browser runs. These are historical candidate results, not a substitute for final prerelease verification. The final prerelease counts and archives are recorded in the validation report after repacking. Both independent Standards/Spec axes are required again for the approved provisioning amendment.
+Final parent-run verification from frozen input `e032fed9551a83563ebd6825d82dab7357712cfd` on Linux x64 / Node v24.17.0:
+
+- Fresh public-only development install, explicit audited source linking, and full typecheck passed. Explicit native test selectors are fenced to that same physical graph before admission or link mutation.
+- **730/730 source tests**,76 files,211.86s,0 failures/skips/cancellations.
+- **54/54 final packed tests**,7 files,467.06s,0 failures/skips/cancellations: six clean consumers, native CLI/Loader/Goal proof and refusal, interrupted/concurrent migration/rollback, declarations, native compaction behavior, and **all six distributions in actual disposable native Web GUIs**.
+- Whole-GUI tests verify served final packed client identity, selected-only UI, native settings acceptance/persistence/reload and active status. Compact/model additionally exercise global/workspace inheritance and exact opaque IDs. Native semantic suites independently prove request behavior; an active capability badge alone is not called a provider execution.
+- Independent Standards and Spec reviews completed, including the provisioning/selector correction and standalone GUI closeout: **0 open confirmed blockers**. One optional low-priority metadata-duplication maintenance heuristic remains; shared-source dirty/unbuilt fault injection was intentionally not performed and is not claimed.
+
+The validation report preserves the earlier725/49 candidate and49-test preview runs as historical evidence, separately from these complete final reruns. Runtime/archive inputs did not change during the added native-browser acceptance coverage.
 
 All installation/host/browser work uses explicit disposable HOME/DSH_HOME/profile/XDG paths and temporary ports. **Not installed into the local production DSH; no live GUI, production restart, npm publication or GitHub Actions.**
 
 ## Assets
 
-Combined package plus five independent splits: `dsh-extras`, `dsh-extras-compact-context`, `dsh-extras-retry`, `dsh-extras-chime`, `dsh-extras-goal-wait`, `dsh-extras-model-policy`; each archive ends in `-0.6.0-rc.1.tgz`. Verify against the accompanying SHA256SUMS. Choose the combined package or distinct splits, never overlapping ownership. No bundled native host, node_modules, personal profile, provisioning receipt, sandbox state or rc.1 companion belongs in these assets.
+Combined package plus five independent splits: `dsh-extras`, `dsh-extras-compact-context`, `dsh-extras-retry`, `dsh-extras-chime`, `dsh-extras-goal-wait`, `dsh-extras-model-policy`; each archive ends in `-0.6.0-rc.1.tgz`. Verify against the accompanying [SHA256SUMS](https://github.com/LMGateX/dsh-extras/releases/download/v0.6.0-rc.1/SHA256SUMS). Choose the combined package or distinct splits, never overlapping ownership. No bundled native host, node_modules, personal profile, provisioning receipt, sandbox state or rc.1 companion belongs in these assets.

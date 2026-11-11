@@ -32,6 +32,10 @@ Both identified/confirmed one **P2 development evidence fence**: receipt preflig
 
 The missing worktree-name restriction was explicitly judged **not a demonstrated defect**: bounded generic clean-consumer cwd support is intentional, and speculative repository-only checks would break the agreed public fixture seam. Dirty/unbuilt-source checks are implemented; shared source fault injection remains intentionally unperformed and honestly documented, not represented as executed coverage.
 
+## Final native-browser closeout review
+
+Both independent axes read through `e032fed9551a83563ebd6825d82dab7357712cfd`, including the complete added standalone native-browser fixture/cases and focused5/5 execution log. They found0 new confirmed Standards/spec/code-test defects. They explicitly recognized actual per-split native CLI installation, whole Web GUI boot/served client identity, selected-only UI, accepted settings/reload and canonical global/workspace opaque-ID roundtrip as closing the missing strict per-split RC2-W lane. Existing combined assertions remain intact; capability status is not substituted for fresh provider execution. Parent then independently completed full730-source and54-packed suites with0 failures/skips/cancellations. Final review remains Standards0 hard blockers/1 optional low heuristic; Spec0 open confirmed implementation defects. Future remote release gates were not pre-certified by either reviewer.
+
 ## Integration follow-up
 
 Parent full source run initially passed722/724 and found two stale rc.1 assertions in the native migration proof fixture, not product failures. Commit `6aa7614` updates the counterfeit module fixture to the supported rc.2 version so it actually reaches the unchanged pre-import fingerprint rejection, updates the observed baseline assertion and explicitly adds historical rc.1 rejection beside unknown-version rejection. The focused native migration file then exited0. Full merged source and six packed-native/browser gates are rerun separately and recorded in validation, not inferred from review.
