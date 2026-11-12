@@ -4,6 +4,10 @@ Changes must cite the observed host/source constraint, explain the trade-off, an
 
 No amendments at the original specification freeze. Later approved amendments follow.
 
+## 2026-11-12 — Recheck actual published rc.2 npm artifacts and release0.6.0
+
+The user reports exact rc.2 npm publication and explicitly requests another check, push and release without installing local DSH. A fresh registry query confirms exact metadata and real tarball/integrity. The [published-artifact contract](<DSH_RC2_NPM_060.md>) fixes before implementation the return to reproducible public native development dependencies/read-only graph preflight, exact published-byte auditing, full source and six whole-native-GUI packed gates, independent reviews and new0.6.0 release/remote checks. The historical source-only0.6.0-rc.1 preview is not relabeled or overwritten. No prior safety criterion is waived and production installation remains forbidden.
+
 ## 2026-11-11 — Explicit source-built preview release after npm unavailability
 
 After parent-run725/725 source and49/49 packed/native/browser gates, exact public rc.2 npm metadata still returned404. The user explicitly selected “按源码构建验证范围发布预览版” over waiting for an official npm package. The [fixed rc.2 contract](DSH_RC2_060.md) now limits **0.6.0-rc.1 GitHub prerelease** to the observed canonical official-tag source build, keeps unknown native bytes fail-closed and requires a consistent toolchain-only development lock plus explicit validated source-host linking. This linking command has no download/build/postinstall/profile side effects and must not touch production installation. Full final prerelease source/native/browser/packed/review/remote gates are rerun; historical final0.6.0 candidates are not relabeled without repack/verification. No invented npm integrity or source-only evidence presented as observed npm bytes is permitted.
