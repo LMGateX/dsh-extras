@@ -12,6 +12,12 @@ Actual installed Goal driver compiled index SHA256 is `8c56696eaac68e61a38b1068e
 
 The prior day’s full-source disposable checkout is no longer present. This run does not pretend to have re-read or rebuilt it: the npm distribution itself includes src files, and the committed earlier hashes/reports are the historical comparison basis. Registry manifests omit gitHead; byte equality and source counterpart attribution are not a claim that registry metadata authenticated a Git revision.
 
+## First full-source run and observed lifecycle race
+
+The first new npm full run executed 748 tests: 747 passed and one native PTC live-model override assertion observed 120000 instead of 420000. This was not suppressed or counted as acceptance. Focused full-file repetition reproduced the same failure (fourth run), and a minimal public-state probe later reproduced it with correct Agent options slow/model while the public module status was `migration-pending`, ready=false, reason "running Extras configuration has not adopted planned settings". The native persistence/Loader completion barrier precedes asynchronous Extras migration admission; model ownership was not the cause.
+
+The existing test now waits for the existing bounded public `ready()` status after each configuration edit before asserting the unchanged exact PTC results (450000, explicit zero returning native120000, model-specific420000). No product runtime, timeout policy or assertion was changed, and no blind delay was added. All diagnostic instrumentation was removed. Twenty-five consecutive complete native PTC-file runs passed after this correction. The full748-test suite is being rerun; only its subsequent complete result can close the source gate.
+
 ## Pending owner gates
 
 - New exact public development lock, read-only physical-graph preflight and public CLI refusal tests; independent fresh npm ci reproduction.

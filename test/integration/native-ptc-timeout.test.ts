@@ -100,7 +100,12 @@ test('native configuration changes replace PTC defaults and explicit zero remove
   const f = await fixture(t, {}, true);
   const { ptc } = await f.mount();
   assert.equal(ptc.resolve(f.request()).timeoutMs, 300000);
-  const update = (fields: Record<string, unknown>) => f.loaded!.update({ modules: { 'compact-context': { enabled: true, compactTool: false, ...fields } }, migration: { auto: false } });
+  const update = async (fields: Record<string, unknown>) => {
+    await f.loaded!.update({ modules: { 'compact-context': { enabled: true, compactTool: false, ...fields } }, migration: { auto: false } });
+    // Native persistence/Loader completion may precede Extras migration admission.
+    // Assert the PTC behavior only after the public module status is ready.
+    await f.loaded!.ready();
+  };
   await update({ ptcTimeoutMs: 450000 });
   assert.equal(ptc.resolve(f.request()).timeoutMs, 450000);
   await update({ ptcTimeoutMs: 0, ptcModelTimeouts: {} });
