@@ -1,159 +1,139 @@
-// Development-only provisioning. Never imported by product/runtime code.
-import {readFile,writeFile,readdir,lstat,realpath,mkdir,symlink,rename,access} from 'node:fs/promises';
-import {join,resolve,dirname,isAbsolute,relative,sep} from 'node:path';
+// Development admission only: read files and resolve public manifests, never load native code.
+import {readFile, readdir, realpath, stat} from 'node:fs/promises';
+import {join, resolve, dirname, relative, isAbsolute, sep} from 'node:path';
 import {pathToFileURL} from 'node:url';
-import {execFileSync} from 'node:child_process';
 import {createRequire} from 'node:module';
 import {createHash} from 'node:crypto';
-const COMMIT='ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c', VERSION='0.2.2-rc.2';
-const DRIVER='8c56696eaac68e61a38b1068ea0f0dff976440e72b49ef4814fbea93c8b48b0c';
-const RECEIPT='.dsh-extras-source-host.json';
-const json=async path=>JSON.parse(await readFile(path,'utf8'));
-async function info(path){try{return await lstat(path);}catch(error){if(error.code==='ENOENT')return null;throw error;}}
-function git(source,...args){return execFileSync('git',['--no-optional-locks','-C',source,...args],{encoding:'utf8',env:{...process.env,GIT_OPTIONAL_LOCKS:'0',GIT_NO_LAZY_FETCH:'1'}}).trim();}
-function inside(root,path){const rel=relative(root,path);return rel!==''&&!rel.startsWith('..'+sep)&&rel!=='..'&&!isAbsolute(rel);}
-async function same(path,target){try{return await realpath(path)===target;}catch(error){if(error.code==='ENOENT')return false;throw error;}}
-async function auditSource(input){
-  if(!input||!isAbsolute(input))throw new Error('Supply an absolute path to the already built official source checkout.');
-  const source=await realpath(input);
-  if(git(source,'rev-parse','--show-toplevel')!==source||git(source,'rev-parse','HEAD')!==COMMIT)throw new Error('Source host revision must be '+COMMIT);
-  if(git(source,'status','--porcelain','--untracked-files=no'))throw new Error('Source host has dirty tracked files.');
-  const files=git(source,'ls-files','-z','--',':(glob)vendor/*/package.json',':(glob)packages/*/*/package.json',':(glob)apps/*/package.json').split(String.fromCharCode(0)).filter(path=>new RegExp('^(?:vendor/[^/]+|packages/[^/]+/[^/]+|apps/[^/]+)/package[.]json$').test(path)).sort();
-  const packages=new Map();
-  for(const file of files){
-    const manifest=await json(join(source,file));
-    if(!manifest.name?.startsWith('@deepseek-ai/'))continue;
-    if(!new RegExp('^@deepseek-ai/[a-z0-9][a-z0-9._-]*$').test(manifest.name)||packages.has(manifest.name))throw new Error('Invalid or duplicate native package name.');
-    const target=await realpath(dirname(join(source,file)));
-    if(!inside(source,target))throw new Error('Native package escaped supplied checkout.');
-    packages.set(manifest.name,{target,manifest});
+
+const VERSION = '0.2.2-rc.2';
+// Independently observed published npm bytes; not an authorization for product owner guards.
+const DRIVER = '8c56696eaac68e61a38b1068ea0f0dff976440e72b49ef4814fbea93c8b48b0c';
+const native = name => name.startsWith('@deepseek-ai/');
+const json = async path => JSON.parse(await readFile(path, 'utf8'));
+const inside = (root, path) => { const rel = relative(root, path); return rel !== '' && rel !== '..' && !rel.startsWith('..' + sep) && !isAbsolute(rel); };
+const fields = value => JSON.stringify(Object.entries(value ?? {}).sort(([a], [b]) => a.localeCompare(b)));
+
+async function emitted(target, entry) {
+  const path = resolve(target, entry);
+  if (!inside(target, path) || !inside(target, await realpath(path)) || !(await stat(path)).isFile()) {
+    throw new Error('Missing or foreign native emitted entrypoint: ' + path);
   }
-  for(const [name,version] of [['@deepseek-ai/dsh',VERSION],['@deepseek-ai/dsh-goal-round-driver',VERSION],['@deepseek-ai/cordis','4.1.0'],['@deepseek-ai/schemastery','3.19.0']]){
-    if(packages.get(name)?.manifest.version!==version)throw new Error('Wrong native version: '+name);
-  }
-  for(const {target,manifest} of packages.values()){
-    for(const entry of [manifest.main,manifest.types].filter(Boolean)){
-      const path=resolve(target,entry);
-      if(!inside(target,path))throw new Error('Invalid native build entrypoint.');
-      try{await access(path);}catch{throw new Error('Unbuilt source host entrypoint: '+path);}
+}
+
+async function checkSelectors(expected) {
+  for (const name of ['DSH_RUNTIME_ROOT', 'DSH_TEST_INSTALL_ANCHOR']) {
+    const value = process.env[name];
+    if (value === undefined) continue;
+    try {
+      if (!value.trim()) throw new Error('Empty selector');
+      let file;
+      if (name === 'DSH_RUNTIME_ROOT') {
+        const base = await realpath(resolve(value));
+        if (!(await stat(base)).isDirectory()) throw new Error('Runtime root must be a directory');
+        // Public harness bases: CLI package root, install parent, node_modules or scope.
+        file = join(base, 'package.json');
+      } else {
+        if (!isAbsolute(value)) throw new Error('Install anchor must be absolute');
+        file = await realpath(value);
+        if (!(await stat(file)).isFile()) throw new Error('Install anchor must be a file');
+      }
+      const actual = await realpath(createRequire(file).resolve('@deepseek-ai/dsh/package.json'));
+      if (actual !== expected) throw new Error('Foreign CLI identity');
+    } catch {
+      throw new Error(name + ' must resolve to the verified physical npm CLI manifest.');
     }
   }
-  const anchor=packages.get('@deepseek-ai/dsh').target;
-  for(const entry of ['lib/bin.js','lib/profile-boot.js','lib/types/profile-boot.d.ts']){
-    try{await access(join(anchor,entry));}catch{throw new Error('Unbuilt source host CLI: '+entry);}
+}
+
+export async function checkNativeHost(root) {
+  let modules;
+  try {
+    // Deliberately no Node ancestor lookup until an explicit local graph exists.
+    modules = await realpath(join(root, 'node_modules'));
+    if (!(await stat(modules)).isDirectory()) throw new Error('Not a directory');
+  } catch {
+    throw new Error('Native npm host is not provisioned in this consumer: run npm ci (no ancestor/live fallback).');
   }
-  const driverSha256=createHash('sha256').update(await readFile(join(packages.get('@deepseek-ai/dsh-goal-round-driver').target,'lib/index.js'))).digest('hex');
-  if(driverSha256!==DRIVER)throw new Error('Unrecognized source host compiled Goal driver hash.');
-  // Declared local runtime/peer edges must lead to the same physical graph.
-  for(const {target,manifest} of packages.values()){
-    const require=createRequire(join(target,'package.json'));
-    for(const name of Object.keys({...manifest.dependencies,...manifest.peerDependencies})){
-      if(!packages.has(name))continue;
+  const owner = dirname(modules);
+  let lock;
+  try { lock = await json(join(owner, 'package-lock.json')); }
+  catch { throw new Error('Physical npm graph owner must have a public package-lock.json: ' + owner); }
+  if (lock.lockfileVersion !== 3 || !lock.packages?.['']) throw new Error('Expected npm lockfileVersion 3.');
+  for (const [path, entry] of Object.entries(lock.packages)) {
+    if (!path) continue;
+    // npm ci authenticates tarballs using these real registry SRI records. This
+    // offline check verifies provenance/shape, not a substitute for npm's SRI check.
+    let url;
+    try { url = new URL(entry.resolved); } catch { /* rejected below */ }
+    if (entry.link || !url || url.origin !== 'https://registry.npmjs.org' || url.username || url.password ||
+        !/^sha512-[A-Za-z0-9+/]{86}==$/.test(entry.integrity ?? '')) {
+      throw new Error('Non-public registry provenance or invalid SRI in lock: ' + path);
+    }
+    if (new RegExp('(?:^|/)node_modules/@deepseek-ai/[^/]+$').test(path) && !new RegExp('^node_modules/@deepseek-ai/[^/]+$').test(path)) {
+      throw new Error('Duplicate/nested native graph in lock: ' + path);
+    }
+  }
+
+  const packages = new Map();
+  for (const short of await readdir(join(modules, '@deepseek-ai'))) {
+    const name = '@deepseek-ai/' + short;
+    const target = join(modules, name);
+    if (await realpath(target) !== target) throw new Error('Foreign native package identity: ' + name);
+    const manifest = await json(join(target, 'package.json'));
+    const entry = lock.packages['node_modules/' + name];
+    const version = short === 'dsh' || short.startsWith('dsh-') ? VERSION :
+      ({cordis: '4.1.0', schemastery: '3.19.0', cosmokit: '1.9.0'})[short];
+    if (!entry || manifest.name !== name || manifest.version !== entry.version || (version && manifest.version !== version)) {
+      throw new Error('Wrong native version or unlocked identity: ' + name);
+    }
+    for (const field of ['dependencies', 'optionalDependencies', 'peerDependencies', 'peerDependenciesMeta']) {
+      if (fields(manifest[field]) !== fields(entry[field])) throw new Error('Native declaration/lock mismatch: ' + name + ' ' + field);
+    }
+    for (const entrypoint of [manifest.main, manifest.module, manifest.types].filter(Boolean)) await emitted(target, entrypoint);
+    packages.set(name, {target, manifest});
+  }
+  for (const name of ['dsh', 'dsh-goal-round-driver', 'dsh-goal', 'dsh-agent', 'dsh-llm', 'cordis', 'cordis-plugin-loader', 'schemastery']) {
+    const required = packages.get('@deepseek-ai/' + name);
+    if (!required) throw new Error('Missing required native package: ' + name);
+    if (name !== 'dsh') {
+      for (const entry of name === 'schemastery' ? ['lib/index.cjs', 'lib/index.mjs'] : ['lib/index.js']) await emitted(required.target, entry);
+      await emitted(required.target, 'lib/types/index.d.ts');
+    }
+  }
+  const anchor = join(packages.get('@deepseek-ai/dsh').target, 'package.json');
+  for (const entry of ['lib/bin.js', 'lib/profile-boot.js', 'lib/types/profile-boot.d.ts']) await emitted(dirname(anchor), entry);
+  for (const [name, {target, manifest}] of packages) {
+    const require = createRequire(join(target, 'package.json'));
+    for (const edge of Object.keys({...manifest.dependencies, ...manifest.optionalDependencies, ...manifest.peerDependencies}).filter(native)) {
+      const optional = manifest.optionalDependencies?.[edge] || (!manifest.dependencies?.[edge] && manifest.peerDependenciesMeta?.[edge]?.optional);
       let actual;
-      try{actual=await realpath(require.resolve(name+'/package.json'));}
-      catch(error){
-        if(target===anchor)continue; // Explicit anchor can be completed below.
-        if(manifest.peerDependenciesMeta?.[name]?.optional)continue;
-        throw new Error('Incomplete source host dependency '+manifest.name+' -> '+name+': '+error.message);
+      try { actual = await realpath(require.resolve(edge + '/package.json')); }
+      catch {
+        if (optional && !packages.has(edge)) continue;
+        throw new Error('Missing native dependency: ' + name + ' -> ' + edge);
       }
-      if(actual!==join(packages.get(name).target,'package.json'))throw new Error('Foreign native graph: '+manifest.name+' -> '+name);
-    }
-  }
-  return {source,anchor,packages,identity:{format:1,source,commit:COMMIT,nativeVersion:VERSION,cordisVersion:'4.1.0',driverSha256,packageCount:packages.size}};
-}
-// Explicit native test selectors may not select a second graph after receipt admission.
-async function checkSelectors({anchor}){
-  const expected=await realpath(join(anchor,'package.json'));
-  for(const name of ['DSH_RUNTIME_ROOT','DSH_TEST_INSTALL_ANCHOR']){
-    const value=process.env[name];if(value===undefined)continue;
-    try{
-      if(!value.trim())throw new Error('Empty selector.');
-      let actual;
-      if(name==='DSH_RUNTIME_ROOT'){
-        const base=await realpath(resolve(value));
-        if(!(await lstat(base)).isDirectory())throw new Error('Runtime root must be a directory.');
-        for(const candidate of [base,join(base,'node_modules'),join(base,'node_modules','@deepseek-ai')]){
-          try{actual=await realpath(createRequire(join(candidate,'package.json')).resolve('@deepseek-ai/dsh/package.json'));break;}catch{}
-        }
-      }else{
-        if(!isAbsolute(value))throw new Error('Install anchor must be absolute.');
-        const file=await realpath(value);
-        if(!(await lstat(file)).isFile())throw new Error('Install anchor must be a file.');
-        actual=await realpath(createRequire(file).resolve('@deepseek-ai/dsh/package.json'));
-      }
-      if(actual!==expected)throw new Error('Missing or foreign native graph.');
-    }catch{throw new Error(name+' must resolve to the supplied source host CLI graph.');}
-  }
-}
-async function planLinks(modules,packages,{replaceSchema=false}={}){
-  // Never follow a consumer node_modules/scope link and mutate its target.
-  for(const path of [modules,join(modules,'@deepseek-ai')]){
-    const state=await info(path);
-    if(state&&(!state.isDirectory()||state.isSymbolicLink()))throw new Error('Refuse linked or non-directory mutation boundary: '+path);
-  }
-  const scope=join(modules,'@deepseek-ai');
-  for(const name of await readdir(scope).catch(error=>{if(error.code==='ENOENT')return [];throw error;})){
-    if(/^(?:dsh(?:-|$)|cordis(?:-|$)|cosmokit$|schemastery$)/.test(name)&&!packages.has('@deepseek-ai/'+name))throw new Error('Foreign native package: '+name);
-  }
-  const changes=[];
-  for(const [name,{target,manifest}] of packages){
-    const path=join(modules,name),state=await info(path);
-    if(state&&await same(path,target))continue;
-    if(!state){changes.push({path,target});continue;}
-    // Preserve an equal-version registry schema directory in a bounded backup.
-    // Never unlink a foreign symlink or recursively delete anything.
-    if(replaceSchema&&['@deepseek-ai/schemastery','@deepseek-ai/cosmokit'].includes(name)&&state.isDirectory()&&!state.isSymbolicLink()){
-      const installed=await json(join(path,'package.json'));
-      if(installed.name===name&&installed.version===manifest.version&&await realpath(path)===path){
-        const backup=join(modules,'.dsh-extras-registry-'+name.split('/')[1]+'-'+manifest.version);
-        if(await info(backup))throw new Error('Schema backup already exists; refusing replacement.');
-        changes.push({path,target,backup});continue;
+      if (actual !== join(packages.get(edge)?.target ?? '', 'package.json')) {
+        throw new Error('Foreign native graph: ' + name + ' -> ' + edge);
       }
     }
-    throw new Error('Foreign native identity at '+path);
   }
-  return changes;
-}
-async function verifyLinks(modules,packages){
-  const require=createRequire(join(modules,'..','package.json'));
-  for(const [name,{target}] of packages){
-    if(!await same(join(modules,name),target)||await realpath(require.resolve(name+'/package.json'))!==join(target,'package.json'))throw new Error('Source host graph mismatch: '+name);
+  // Bind the consumer's public resolution as well as each native runtime/peer edge.
+  const consumer = createRequire(join(resolve(root), 'package.json'));
+  for (const [name, {target}] of packages) {
+    if (await realpath(consumer.resolve(name + '/package.json')) !== join(target, 'package.json')) {
+      throw new Error('Foreign consumer native graph: ' + name);
+    }
   }
+  const driver = packages.get('@deepseek-ai/dsh-goal-round-driver').target;
+  const driverSha256 = createHash('sha256').update(await readFile(join(driver, 'lib/index.js'))).digest('hex');
+  if (driverSha256 !== DRIVER) throw new Error('Unrecognized npm Goal driver hash.');
+  await checkSelectors(anchor);
+  return {nativeVersion: VERSION, cordisVersion: '4.1.0', driverSha256, packageCount: packages.size, owner, anchor};
 }
-export async function checkSourceHost(root){
-  const modules=join(root,'node_modules');
-  let receipt;
-  try{receipt=await json(join(modules,RECEIPT));}
-  catch{throw new Error('Source host is not provisioned; run npm run host:link -- /absolute/source-checkout after npm ci.');}
-  const audited=await auditSource(receipt.source);
-  if(JSON.stringify(receipt)!==JSON.stringify(audited.identity))throw new Error('Source host receipt identity mismatch; reprovision explicitly.');
-  await checkSelectors(audited);
-  await verifyLinks(modules,audited.packages);
-  await verifyLinks(join(audited.anchor,'node_modules'),audited.packages);
-  return audited.identity;
-}
-async function linkSourceHost(root,input){
-  const audited=await auditSource(input),modules=join(root,'node_modules');
-  await checkSelectors(audited);
-  if(inside(audited.source,root)||root===audited.source)throw new Error('Consumer must be outside the supplied source checkout.');
-  const receipt=join(modules,RECEIPT),existing=await info(receipt);
-  if(existing&&(existing.isSymbolicLink()||JSON.stringify(await json(receipt))!==JSON.stringify(audited.identity)))throw new Error('Foreign source host receipt.');
-  // Complete both plans before the first filesystem mutation.
-  const changes=[...await planLinks(join(audited.anchor,'node_modules'),audited.packages),...await planLinks(modules,audited.packages,{replaceSchema:true})];
-  for(const {path,target,backup} of changes){
-    await mkdir(dirname(path),{recursive:true});
-    if(backup)await rename(path,backup);
-    await symlink(target,path,'dir');
-  }
-  await verifyLinks(modules,audited.packages);
-  await verifyLinks(join(audited.anchor,'node_modules'),audited.packages);
-  if(!existing)await writeFile(receipt,JSON.stringify(audited.identity)+String.fromCharCode(10),{flag:'wx'});
-  return audited.identity;
-}
-if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
-  try{
-    const [command,source,...extra]=process.argv.slice(2);
-    if(extra.length||(command==='check'?source!==undefined:command!=='link'||!source))throw new Error('Usage: native-host.mjs link /absolute/source-checkout | check');
-    console.log(JSON.stringify(command==='link'?await linkSourceHost(process.cwd(),source):await checkSourceHost(process.cwd())));
-  }catch(error){console.error(error.message);process.exitCode=1;}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  try {
+    if (process.argv.length !== 3 || process.argv[2] !== 'check') throw new Error('Usage: native-host.mjs check');
+    console.log(JSON.stringify(await checkNativeHost(process.cwd())));
+  } catch (error) { console.error(error.message); process.exitCode = 1; }
 }

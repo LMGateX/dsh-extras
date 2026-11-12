@@ -1,4 +1,4 @@
-import { checkSourceHost } from './native-host.mjs';
+import { checkNativeHost } from './native-host.mjs';
 import { build } from 'esbuild';
 import { mkdir, readFile, writeFile, copyFile, cp, rm, access } from 'node:fs/promises';
 import { resolve, join, dirname } from 'node:path';
@@ -6,7 +6,7 @@ import { createRequire } from 'node:module';
 import { distributions, sourceDirectories, clientDependencies } from './distributions.mjs';
 import { writeDeclarations } from './declarations.mjs';
 const root = resolve(import.meta.dirname, '..');
-await checkSourceHost(root);
+await checkNativeHost(root);
 const source = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
 const rootRequire = createRequire(join(root, 'package.json'));
 const hostRequire = createRequire(rootRequire.resolve('@deepseek-ai/dsh/package.json'));
