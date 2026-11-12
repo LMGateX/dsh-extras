@@ -1,5 +1,7 @@
 # Source-host development for the 0.6.0-rc.1 preview
 
+**Historical workflow:** this page describes the tagged source-built preview only. Since the user requested revalidation after official npm publication,0.6.0 development returns to a public native npm lock and read-only graph check under the [new contract](<DSH_RC2_NPM_060.md>). The removed preview source linker is available in the [0.6.0-rc.1 tag](https://github.com/LMGateX/dsh-extras/tree/v0.6.0-rc.1), not required for current npm development. Do not run historical instructions against production DSH.
+
 This is an explicit **development** dependency-provisioning flow, not a DSH installer or product runtime fallback. The GitHub prerelease is limited to the observed canonical source build of official DSH 0.2.2-rc.2 commit `ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c`. Exact rc.2 npm host packages were unavailable when this boundary was approved. No claim is made about unobserved official npm bytes.
 
 ## Inputs and isolation
