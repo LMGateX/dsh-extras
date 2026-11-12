@@ -19,7 +19,13 @@ Model/shared compaction keep immutable creator/workspace provenance, default-off
 
 ## Final verification
 
-Full npm-based typecheck/source and six final packed/native/whole-GUI results, independent Standards/Spec review, tested archive digests and remote publication receipt are required before this draft is published. The old source-preview730/54 numbers are historical and are not relabeled as new npm execution. See [the current npm validation record](https://github.com/LMGateX/dsh-extras/blob/main/docs/VALIDATION_NPM_060.md).
+Fresh independent `npm ci` installed679 packages in24s from the committed public lock; read-only admission checked337 installed native packages. Typecheck passed. The final full source run passed **748/748**, and the six newly built final archives passed **54/54** packed/native tests, with zero failures/cancellations/skips. This includes the combined whole real native GUI plus five separate whole real native split GUIs, not merely CLI composition.
+
+An intermittent PTC test initially asserted while public status was migration-pending. Waiting for the existing bounded public admission status fixed only the test lifecycle; exact assertions and runtime policies remain unchanged. Twenty-five consecutive entire-file repeats and the complete source rerun passed. Independent Standards and Spec review, including that narrow correction, each reported zero required or optional findings.
+
+Product/build snapshot: `db9526e4a69449fea2862d7f658a5c1404b754cd`. Final test snapshot: `25fccc4dba1fb70d2c3c4705f9091109e7d9e859`; subsequent closure changes are documentation-only, outside packed inputs. The old source-preview730/54 numbers remain historical, not relabeled npm execution. See [validation](https://github.com/LMGateX/dsh-extras/blob/main/docs/VALIDATION_NPM_060.md) and [independent reviews](https://github.com/LMGateX/dsh-extras/blob/main/docs/REVIEW_NPM_060.md).
+
+Publication/download verification is a subsequent network gate: the actual matching main/tag and seven freshly downloaded asset checks are appended below after execution. This source snapshot does not preclaim that future receipt.
 
 ## Assets and safety
 
