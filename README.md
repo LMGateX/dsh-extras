@@ -4,7 +4,7 @@ One install, independent enhancements. **一体安装，功能独立开关。**
 
 Workspace-aware model defaults, shared compaction reasoning, native retry management, browser session chimes and goal waiting behind one plugin card. Five genuinely independent single-feature packages are built from the same source, not maintained as forks.
 
-**Source-built preview (Extras 0.6.0-rc.1):** Node `>=24.9.0`; verified only against the canonical source build of official DSH `0.2.2-rc.2` tag commit `ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c`, Cordis `4.1.0`. This is a GitHub **prerelease**, not certification of unobserved npm rc.2 bytes. The audited compiled Goal driver SHA256 is `8c56696eaac68e61a38b1068ea0f0dff976440e72b49ef4814fbea93c8b48b0c`; changed or unknown driver bytes remain fail-closed. rc.1 users should retain stable Extras 0.5.1; alpha.3 users should retain Extras 0.3.1. Extras is not published to npm: install a GitHub Release tarball only after checking its stated host boundary.
+**Published npm baseline (Extras 0.6.0):** Node `>=24.9.0`; exact official DSH `0.2.2-rc.2`, Cordis `4.1.0`. This release checks the actual published npm packages, not only a local source build. The observed npm Goal driver SHA256 is `8c56696eaac68e61a38b1068ea0f0dff976440e72b49ef4814fbea93c8b48b0c`, identical to the previously audited canonical build of official tag `ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c`; unknown or changed driver bytes still fail closed. Registry manifests do not supply gitHead, so byte equality is not presented as registry authentication of that Git commit. The historical0.6.0-rc.1 release remains a separately labeled source-built preview. rc.1 users should retain Extras 0.5.1; alpha.3 users should retain Extras 0.3.1. Extras itself is not published to npm: install a verified GitHub Release tarball for the matching host.
 
 ## Distributions
 
@@ -21,13 +21,13 @@ Choose the combined package **or** any subset of distinct splits. Two distributi
 
 ## Install
 
-This preview requires the already-provisioned exact source-built host described above. Do not replace a stock/stable host or install an unofficial rc.1 companion to satisfy it. Choose the intended profile explicitly; the example below is an intentional installation action, not a command run during this release task:
+The exact official npm DSH `0.2.2-rc.2` host must already be installed. Do not install an unofficial rc.1 recovery companion for this release. Choose the intended profile explicitly; the example below is an intentional installation action, not a command run against production during this release task:
 
 ```sh
-dsh plugin --profile web add https://github.com/LMGateX/dsh-extras/releases/download/v0.6.0-rc.1/dsh-extras-0.6.0-rc.1.tgz
+dsh plugin --profile web add https://github.com/LMGateX/dsh-extras/releases/download/v0.6.0/dsh-extras-0.6.0.tgz
 ```
 
-For one capability replace the asset name, e.g. `dsh-extras-retry-0.6.0-rc.1.tgz`. Verify downloads against release SHA256SUMS. The matching DSH runtime must already exist; packages do not install a second host runtime.
+For one capability replace the asset name, e.g. `dsh-extras-retry-0.6.0.tgz`. Verify downloads against release SHA256SUMS. The matching DSH runtime must already exist; packages do not install a second host runtime.
 
 Open **Plugins → DSH Extras → Configure**. All module settings, including the compaction reasoning editor, follow the native Chinese/English language preference and theme. With no locale service, settings use Chinese, matching the preserved Chime editor. Switching language keeps unsaved drafts; technical configuration keys, native route/model/effort IDs, and raw migration diagnostics are not translated. Combined settings have compact-context, model-policy, retry, chime and goalWait sections, with module/responsibility folding and expand/collapse-all. Folding hides mounted editors rather than discarding drafts; headers retain enable/runtime/dirty/error summaries. Each module and every original option is independently editable. Status distinguishes active, disabled, missing dependency, migration-pending, conflict and failed. Enable/disable joins feature disposal before reactivation. Policy-only changes use validated live snapshots without remounting in-flight retry classifiers or releasing goal holds.
 
@@ -156,15 +156,15 @@ See the [fixed contract and synthetic rule examples](<docs/COMPACTION_REASONING.
 ## Development
 
 ```sh
-npm ci --ignore-scripts # toolchain only; no implicit native host installation
-npm run host:link -- /absolute/already-built/official-dsh-checkout
+npm ci --ignore-scripts # exact published native development dependencies; disposable environment only
+npm run host:check
 npx playwright install chromium
 npm run check
 npm run pack
 npm run test:artifacts
 ```
 
-Follow the [isolated source-host workflow](<docs/SOURCE_HOST_DEVELOPMENT.md>). Run development commands only in an explicit disposable HOME/DSH_HOME/profile/XDG environment. Native dependencies are not fetched as root npm dev dependencies: first supply the unchanged, canonically built exact official checkout using the explicit source-host linking command. It performs no download/build/postinstall/profile operation. The checked ignored link receipt prevents an unprovisioned build/test from silently resolving an ancestor or live host. `DSH_RUNTIME_ROOT`, when supplied, must identify the same verified native graph; a bad explicit override fails closed. Native HOME/profile/processes and ports remain disposable; no developer live profile is used. The [release specification](<docs/SPEC.md>), [approved preview boundary](<docs/DSH_RC2_060.md>) and [acceptance matrix](<docs/ACCEPTANCE.md>) define the gate; [rc.2 validation](<docs/VALIDATION_060.md>) distinguishes actual source-built execution from unavailable npm evidence. `DSH_EXTRAS_CHROMIUM` may select an existing Chromium executable for isolated tests.
+Run development commands only in explicit disposable HOME/DSH_HOME/profile/XDG/cache/TMPDIR state. The public lock pins the real native npm development graph; no source checkout, mutating host linker or production installation is needed. Read-only preflight verifies the graph and lock before build/test/typecheck, refusing absent native packages and ancestor/live fallback. A fixture may borrow the whole verified node_modules graph. Both `DSH_RUNTIME_ROOT` and `DSH_TEST_INSTALL_ANCHOR`, when set, must resolve to that same physical native graph; bad or foreign selectors fail closed. See the [npm revalidation contract](<docs/DSH_RC2_NPM_060.md>), [release specification](<docs/SPEC.md>) and [acceptance matrix](<docs/ACCEPTANCE.md>). The [earlier source-built validation](<docs/VALIDATION_060.md>) remains historical, not npm execution evidence. `DSH_EXTRAS_CHROMIUM` may select an existing Chromium executable for isolated tests. No development command installs or restarts production DSH.
 
 ## Safety boundaries
 

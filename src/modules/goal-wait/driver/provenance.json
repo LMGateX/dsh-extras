@@ -80,10 +80,17 @@
       "sourceArtifact": "src/index.ts",
       "sourceSha256": "fd7a5e4c436f951ca5d236df83a7b0dd662c2ebbffffe49a30714fe55ce4bfe7",
       "behavior": "The exact rc.2 source changes the join to waitForTreeWork: only a shared subagent-tree root joins progressing whole-tree work; ordinary members return false. Queue, cancellation, disposal-abort, prompt and lifecycle frame behavior is preserved. Additive replacement policy observes Jobs only; activation retains its historical registered-descendant gate.",
-      "sourceBasis": "Unchanged official tag, frozen-lockfile dependency provisioning and canonical pnpm run build:artifacts. Locally source-built compiled artifact, NOT an observed published npm rc.2 tarball. Registry exact rc.2 endpoints were 404 during audit; unobserved published bytes are not admitted by version alone."
+      "publishedArtifact": {
+        "observedDate": "2026-11-12",
+        "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-goal-round-driver/-/dsh-goal-round-driver-0.2.2-rc.2.tgz",
+        "integrity": "sha512-EJEm/Ub72TBXnrFod5PCp0fLkloantPaJzp+Zn8GvayZoM1kFTrg+EZiUxbU1dfMi/vg/rj91/MvV3jzuvJg5w==",
+        "compiledByteIdenticalToRecordedSourceBuild": true,
+        "registryGitHead": null
+      },
+      "sourceBasis": "The initial audit used the unchanged official tag and canonical frozen-lockfile build while npm endpoints returned404. On2026-11-12 the actual published npm package was installed in disposable state; its compiled index and shipped src/index.ts and src/prompt.ts match the recorded hashes. Lifecycle observer/caller coordinates also match. Registry manifests omit gitHead; byte equality is not claimed as registry authentication of a Git revision. Exact version plus unchanged compiled digest remain required."
     }
   ],
-  "selection": "Match resolved exact version and compiled SHA-256 together against the audited artifact above; source-built and historical npm provenance remain distinct. Unknown or changed bytes are refused before driver mounting.",
+  "selection": "Match resolved exact version and compiled SHA-256 together against the audited artifact above; source-built history and independently observed published npm provenance remain distinct. Unknown or changed bytes are refused before driver mounting.",
   "derivedFiles": [
     "native-driver.ts",
     "prompt.ts"
