@@ -4,6 +4,10 @@ Changes must cite the observed host/source constraint, explain the trade-off, an
 
 No amendments at the original specification freeze. Later approved amendments follow.
 
+## 2026-11-14 — Check exact rc.3 without publication or production installation
+
+The direct request asks for one GitHub source acquisition and compatibility checking. The [rc.3 check contract](<DSH_RC3_061.md>) records the sole complete clone, exact tag and actual npm Goal byte observations before implementation, narrows work to unreleased six-package 0.6.1 / exact rc.3 recertification, and retains source/native/packed/browser/ownership/migration and independent review gates. No push, tag, release or production operation is authorized by this task. Historical rc.2 evidence is preserved rather than relabeled.
+
 ## 2026-11-12 — Recheck actual published rc.2 npm artifacts and release0.6.0
 
 The user reports exact rc.2 npm publication and explicitly requests another check, push and release without installing local DSH. A fresh registry query confirms exact metadata and real tarball/integrity. The [published-artifact contract](<DSH_RC2_NPM_060.md>) fixes before implementation the return to reproducible public native development dependencies/read-only graph preflight, exact published-byte auditing, full source and six whole-native-GUI packed gates, independent reviews and new0.6.0 release/remote checks. The historical source-only0.6.0-rc.1 preview is not relabeled or overwritten. No prior safety criterion is waived and production installation remains forbidden.
