@@ -45,6 +45,10 @@ Selectors are optional; unset is simplest for an independently installed consume
 
 A separately installed rc.3 graph remains foreign; an rc.2 graph also fails the exact version gate. Do not carry another consumer's selectors into a fresh install. Missing paths, empty values, relative install anchors and resolvable foreign graphs all refuse before tests/builds execute.
 
+## Current rc.3 evidence
+
+The current exact rc.3 graph is recorded in [candidate validation](<VALIDATION_RC3_061.md>): fresh ci installed681 packages,338 native packages; public lock SHA256 `d816c0f785381a133134d50b14543e2f5342c2c83c3ef4af952cca03a31156fd`. This link separates completed and pending execution gates; no historical counts below certify rc.3. Candidate0.6.1 is not published.
+
 ## Historical rc.2 evidence and limits
 
 The following is preserved rc.2 / Extras 0.6.0 evidence, not an rc.3 execution claim. Current candidate validation is recorded separately.
