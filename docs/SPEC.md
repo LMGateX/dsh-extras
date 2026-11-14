@@ -12,7 +12,7 @@ For 0.5.0 additionally apply the approved [workspace policy contract](WORKSPACE_
 
 For 0.6.0 additionally apply the [exact rc.2 compatibility and Goal necessity contract](DSH_RC2_060.md) and subsequent [published npm revalidation contract](<DSH_RC2_NPM_060.md>). The current direct request forbids local production installation; the prior release’s installation exception does not apply. Six synchronized distributions remain required.
 
-For the unreleased rc.3 compatibility check, apply the [exact rc.3 check contract](<DSH_RC3_061.md>). Publication and production operations are excluded from this task; historical published release evidence stays historical.
+For the unreleased rc.3 compatibility check, apply the [exact rc.3 check contract](<DSH_RC3_061.md>). The initial check excluded publication; the subsequent [explicit publication contract](<DSH_RC3_RELEASE_061.md>) authorizes final0.6.1 push/release only. Production operations remain excluded; historical evidence stays historical.
 
 ## Required deliverables
 

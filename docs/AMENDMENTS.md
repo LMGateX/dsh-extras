@@ -4,6 +4,10 @@ Changes must cite the observed host/source constraint, explain the trade-off, an
 
 No amendments at the original specification freeze. Later approved amendments follow.
 
+## 2026-11-14 — Explicitly authorize final0.6.1 push/release without local installation
+
+After completed rc.3 checking, the user requests “push、发版 暂时不为本机 dsh 安装”. The [publication addendum](<DSH_RC3_RELEASE_061.md>) fixes final README identity, rebuild/full final-artifact acceptance, independent review, atomic main/annotated tag push, formal GitHub release and fresh remote asset verification before those actions. No runtime contract changes, Actions, npm Extras publication or production operation. The historical personal-profile drift is not relabeled as passed; following the user’s direction not to tie personal configuration to Git work, publication safety is evidenced by explicit disposable execution and no agent production operations, not an assertion about mutable live-profile hash equality. No further personal-profile investigation or restoration.
+
 ## 2026-11-14 — Check exact rc.3 without publication or production installation
 
 The direct request asks for one GitHub source acquisition and compatibility checking. The [rc.3 check contract](<DSH_RC3_061.md>) records the sole complete clone, exact tag and actual npm Goal byte observations before implementation, narrows work to unreleased six-package 0.6.1 / exact rc.3 recertification, and retains source/native/packed/browser/ownership/migration and independent review gates. No push, tag, release or production operation is authorized by this task. Historical rc.2 evidence is preserved rather than relabeled.
