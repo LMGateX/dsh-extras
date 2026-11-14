@@ -4,7 +4,7 @@ One install, independent enhancements. **一体安装，功能独立开关。**
 
 Workspace-aware model defaults, shared compaction reasoning, native retry management, browser session chimes and goal waiting behind one plugin card. Five genuinely independent single-feature packages are built from the same source, not maintained as forks.
 
-**Published npm baseline (unreleased Extras 0.6.1 candidate):** Node `>=24.9.0`; exact official DSH `0.2.2-rc.3`, Cordis `4.1.0`. This compatibility check uses actual published npm packages, not only a local source build. The observed npm Goal driver SHA256 is `8c56696eaac68e61a38b1068ea0f0dff976440e72b49ef4814fbea93c8b48b0c`, byte-identical to rc.2; shipped source matches official rc.3 tag `38a6a5c965aa99ab525161efb7cc5cf1fe62fced`. Unknown or changed driver bytes still fail closed. Registry manifests do not supply gitHead, so byte equality is not presented as registry authentication of that Git commit. This branch is not a published release. rc.2 users should retain published Extras 0.6.0; the historical 0.6.0-rc.1 source-built preview is unchanged. rc.1 users should retain Extras 0.5.1; alpha.3 users should retain Extras 0.3.1. Extras itself is not published to npm.
+**Published npm baseline (Extras 0.6.1):** Node `>=24.9.0`; exact official DSH `0.2.2-rc.3`, Cordis `4.1.0`. This release uses actual published npm packages, not only a local source build. The observed npm Goal driver SHA256 is `8c56696eaac68e61a38b1068ea0f0dff976440e72b49ef4814fbea93c8b48b0c`, byte-identical to rc.2; shipped source matches official rc.3 tag `38a6a5c965aa99ab525161efb7cc5cf1fe62fced`. Unknown or changed driver bytes still fail closed. Registry manifests do not supply gitHead, so byte equality is not presented as registry authentication of that Git commit. rc.2 users should retain published Extras 0.6.0; the historical 0.6.0-rc.1 source-built preview is unchanged. rc.1 users should retain Extras 0.5.1; alpha.3 users should retain Extras 0.3.1. Extras itself is not published to npm.
 
 ## Distributions
 
@@ -21,13 +21,13 @@ Choose the combined package **or** any subset of distinct splits. Two distributi
 
 ## Install
 
-The rc.3 candidate is **not published** and has no GitHub Release install URL. Do not install it into production as part of this check. The following command is retained solely for users of the existing exact rc.2 / Extras 0.6.0 release; it does not install this rc.3 candidate. Do not install an unofficial rc.1 recovery companion. Choose the intended profile explicitly:
+The exact official npm DSH `0.2.2-rc.3` host must already be installed. Do not install an unofficial rc.1 recovery companion. Choose the intended profile explicitly; the example below is an intentional installation action, not a command run against production during this release task:
 
 ```sh
-dsh plugin --profile web add https://github.com/LMGateX/dsh-extras/releases/download/v0.6.0/dsh-extras-0.6.0.tgz
+dsh plugin --profile web add https://github.com/LMGateX/dsh-extras/releases/download/v0.6.1/dsh-extras-0.6.1.tgz
 ```
 
-For one capability replace the asset name, e.g. `dsh-extras-retry-0.6.0.tgz`. Verify downloads against release SHA256SUMS. The matching DSH runtime must already exist; packages do not install a second host runtime.
+For one capability replace the asset name, e.g. `dsh-extras-retry-0.6.1.tgz`. Verify downloads against release SHA256SUMS. The matching DSH runtime must already exist; packages do not install a second host runtime.
 
 Open **Plugins → DSH Extras → Configure**. All module settings, including the compaction reasoning editor, follow the native Chinese/English language preference and theme. With no locale service, settings use Chinese, matching the preserved Chime editor. Switching language keeps unsaved drafts; technical configuration keys, native route/model/effort IDs, and raw migration diagnostics are not translated. Combined settings have compact-context, model-policy, retry, chime and goalWait sections, with module/responsibility folding and expand/collapse-all. Folding hides mounted editors rather than discarding drafts; headers retain enable/runtime/dirty/error summaries. Each module and every original option is independently editable. Status distinguishes active, disabled, missing dependency, migration-pending, conflict and failed. Enable/disable joins feature disposal before reactivation. Policy-only changes use validated live snapshots without remounting in-flight retry classifiers or releasing goal holds.
 
@@ -164,7 +164,7 @@ npm run pack
 npm run test:artifacts
 ```
 
-Run development commands only in explicit disposable HOME/DSH_HOME/profile/XDG/cache/TMPDIR state. The public lock pins the real native npm development graph; no source checkout, mutating host linker or production installation is needed. Read-only preflight verifies the graph and lock before build/test/typecheck, refusing absent native packages and ancestor/live fallback. A fixture may borrow the whole verified node_modules graph. Both `DSH_RUNTIME_ROOT` and `DSH_TEST_INSTALL_ANCHOR`, when set, must resolve to that same physical native graph; bad or foreign selectors fail closed. See the [current rc.3 check contract](<docs/DSH_RC3_061.md>), [release specification](<docs/SPEC.md>) and [acceptance matrix](<docs/ACCEPTANCE.md>). The [earlier source-built validation](<docs/VALIDATION_060.md>) remains historical, not npm execution evidence. `DSH_EXTRAS_CHROMIUM` may select an existing Chromium executable for isolated tests. No development command installs or restarts production DSH.
+Run development commands only in explicit disposable HOME/DSH_HOME/profile/XDG/cache/TMPDIR state. The public lock pins the real native npm development graph; no source checkout, mutating host linker or production installation is needed. Read-only preflight verifies the graph and lock before build/test/typecheck, refusing absent native packages and ancestor/live fallback. A fixture may borrow the whole verified node_modules graph. Both `DSH_RUNTIME_ROOT` and `DSH_TEST_INSTALL_ANCHOR`, when set, must resolve to that same physical native graph; bad or foreign selectors fail closed. See the [rc.3 compatibility contract](<docs/DSH_RC3_061.md>), [publication addendum](<docs/DSH_RC3_RELEASE_061.md>), [release specification](<docs/SPEC.md>) and [acceptance matrix](<docs/ACCEPTANCE.md>). The [earlier source-built validation](<docs/VALIDATION_060.md>) remains historical, not npm execution evidence. `DSH_EXTRAS_CHROMIUM` may select an existing Chromium executable for isolated tests. No development command installs or restarts production DSH.
 
 ## Safety boundaries
 

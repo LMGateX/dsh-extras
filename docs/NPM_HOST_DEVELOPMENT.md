@@ -1,6 +1,6 @@
-# Native npm development graph (unreleased Extras 0.6.1 candidate)
+# Native npm development graph (Extras 0.6.1)
 
-The current branch targets published exact DSH **0.2.2-rc.3** under the [rc.3 check contract](<DSH_RC3_061.md>). Published Extras 0.6.0 remains the exact rc.2 option. Use Node >=24.9 and the committed public npm lock. There is no source-host linker, receipt, automatic download/build, postinstall or profile repair. Historical source-preview instructions remain at the 0.6.0-rc.1 tag; do not apply them to this development setup.
+The current branch targets published exact DSH **0.2.2-rc.3** under the [rc.3 compatibility contract](<DSH_RC3_061.md>) and [publication addendum](<DSH_RC3_RELEASE_061.md>). Published Extras 0.6.0 remains the exact rc.2 option. Use Node >=24.9 and the committed public npm lock. There is no source-host linker, receipt, automatic download/build, postinstall or profile repair. Historical source-preview instructions remain at the 0.6.0-rc.1 tag; do not apply them to this development setup.
 
 ## Disposable installation and checks
 
@@ -47,7 +47,7 @@ A separately installed rc.3 graph remains foreign; an rc.2 graph also fails the 
 
 ## Current rc.3 evidence
 
-The current exact rc.3 graph is recorded in [candidate validation](<VALIDATION_RC3_061.md>): fresh ci installed681 packages,338 native packages; public lock SHA256 `d816c0f785381a133134d50b14543e2f5342c2c83c3ef4af952cca03a31156fd`. This link separates completed and pending execution gates; no historical counts below certify rc.3. Candidate0.6.1 is not published.
+The current exact rc.3 graph is recorded in [candidate validation](<VALIDATION_RC3_061.md>): fresh ci installed681 packages,338 native packages; public lock SHA256 `d816c0f785381a133134d50b14543e2f5342c2c83c3ef4af952cca03a31156fd`. That initial compatibility record remains historical; [final release validation](<VALIDATION_RELEASE_061.md>) records rebuilt final-identity archives and publication gates separately. No historical counts below certify rc.3.
 
 ## Historical rc.2 evidence and limits
 
