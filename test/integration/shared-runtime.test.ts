@@ -1,4 +1,4 @@
-/** Regressions for the shared fixtures against public rc.2 packages, never a service facsimile. */
+/** Regressions for the shared fixtures against public rc.3 packages, never a service facsimile. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';

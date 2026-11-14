@@ -12,8 +12,8 @@ import {distributions} from '../../scripts/distributions.mjs';
 const root = resolve(import.meta.dirname, '../..');
 const version = JSON.parse(await readFile(join(root,'package.json'),'utf8')).version;
 const artifactDir = join(root,'artifacts');
-assert.equal(distributions.length, 6, '0.6.0 delivers combined plus five independent splits');
-assert.equal(version, '0.6.0');
+assert.equal(distributions.length, 6, '0.6.1 candidate delivers combined plus five independent splits');
+assert.equal(version, '0.6.1');
 const checksums = new Map((await readFile(join(artifactDir,'SHA256SUMS'),'utf8')).trim().split('\n').map(line => line.split('  ').reverse()));
 const hostRequire = createRequire(createRequire(join(root,'package.json')).resolve('@deepseek-ai/dsh/package.json'));
 for(const {name,modules} of distributions) test('packed installable distribution: '+name,{timeout:120000},async t=>{
@@ -29,10 +29,10 @@ for(const {name,modules} of distributions) test('packed installable distribution
   assert.equal(pkg.version,version);assert.equal(pkg.name,name);assert.equal(pkg.private,undefined);
   const readme = await readFile(join(packageDir,'README.md'),'utf8');
   assert.match(readme, /Published npm baseline/);
-  assert.ok(readme.includes('ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c'));
+  assert.ok(readme.includes('38a6a5c965aa99ab525161efb7cc5cf1fe62fced'));
   assert.ok(readme.includes('actual published npm packages'));
-  assert.ok(readme.includes('unknown or changed driver bytes still fail closed'));
-  assert.equal(pkg.engines.dsh,'0.2.2-rc.2');assert.equal(pkg.dsh.client.platform,'web');
+  assert.ok(readme.includes('Unknown or changed driver bytes still fail closed'));
+  assert.equal(pkg.engines.dsh,'0.2.2-rc.3');assert.equal(pkg.dsh.client.platform,'web');
   assert.equal(pkg.dsh.client.platforms,undefined);assert.equal(pkg.dsh.bundle.patch,'cordis.patch.yml');
   assert.equal(pkg.dsh.client.inject.includes('@deepseek-ai/dsh-api-session-controller'), modules.includes('retry') || modules.includes('chime'), 'selected session-controller dependency does not depend on chime transitively');
   assert.equal(pkg.dsh.client.inject.includes('@deepseek-ai/dsh-api-workspace-controller'), modules.includes('model-policy') || modules.includes('compact-context'), 'native workspace discovery dependency belongs only to workspace settings distributions');

@@ -4,6 +4,8 @@ For 0.5.0 additionally execute the [workspace policy contract](WORKSPACE_POLICY_
 
 For 0.6.0, additionally execute RC2-1/2/G/M/R/W/P from the [fixed rc.2 contract](DSH_RC2_060.md). Earlier applicable gates remain; no local production installation is authorized for this release. Historical rc.1-only companion gates do not certify rc.2.
 
+For the unreleased 0.6.1 / rc.3 check, apply RC3-S/D/P/R/SAFE from the [rc.3 check contract](<DSH_RC3_061.md>) in addition to all applicable earlier safety gates. This task does not authorize publication or production installation; no PUB-1 network receipt is claimed.
+
 For 0.5.1, apply every 0.5.0 row and additionally the [follow-up UI contract](UI_REFINEMENTS_050.md) acceptance items: latest-model-failure-only recovery visibility with positive model-failure origin proof, an independently presented recovery card, and global/multi-workspace model and shared-compaction scope switching with explicit inheritance, draft locks and exact opaque IDs. Six synchronized archives remain the distribution set.
 
 | ID | Additional 0.5.0 criterion |

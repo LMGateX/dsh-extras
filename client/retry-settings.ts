@@ -75,7 +75,7 @@ export function createRetrySettingsView(React:any, supplied?:RetrySettingsSource
     const [notice,setNotice]=React.useState('');
     React.useEffect(()=>{let live=true;setSnapshot(undefined);source.load().then((v:RetrySettingsSnapshot)=>{if(live){setSnapshot(v);setNotice('');}},()=>{if(live)setNotice('unavailable');});return()=>{live=false;};},[source]);
     return h('section',{'aria-label':t('Native provider retry policy','原生提供方重试策略')},
-      h('p',{role:'status'},t('Stock rc.2 Continue generating queues a new empty-content retry message; it does not replay an exact failed-request checkpoint. Optional checkpoint recovery is checked separately.','原版 rc.2 的“继续生成”会排队一条内容为空的新 retry 消息，不会重放精确的失败请求检查点。可选检查点恢复将单独核实。')),
+      h('p',{role:'status'},t('Stock rc.3 Continue generating queues a new empty-content retry message; it does not replay an exact failed-request checkpoint. Optional checkpoint recovery is checked separately.','原版 rc.3 的“继续生成”会排队一条内容为空的新 retry 消息，不会重放精确的失败请求检查点。可选检查点恢复将单独核实。')),
       !snapshot?h('p',{role:notice?'alert':'status'},notice?t('Native retry settings unavailable.','原生重试设置不可用。'):t('Loading native provider policy…','正在加载原生提供方策略…')):null,
       snapshot?.targets.length===0?h('p',{role:'status'},t('No supported native provider settings are available.','没有可用的受支持原生提供方设置。')):null,
       ...(snapshot?.targets??[]).map((target:RetrySettingsTarget)=>h(Provider,{key:target.id,target,writable:snapshot!.writable,source,onSaved:setSnapshot})));

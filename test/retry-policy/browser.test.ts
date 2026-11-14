@@ -43,7 +43,7 @@ test('emitted retry editor saves fixed/always native provider settings without a
   await card.getByText('Saved; future native requests use this policy.',{exact:true}).waitFor();
   row=(f.ctx.get('settings') as any).describe().find((x:any)=>x.ns==='custom-deepseek');assert.equal(row.value.retryPolicy.mode,'always');
   assert.equal(await page.getByRole('button',{name:/recover|retry now/i}).count(),0);
-  await page.getByText('Stock rc.2 Continue generating queues a new empty-content retry message; it does not replay an exact failed-request checkpoint. Optional checkpoint recovery is checked separately.',{exact:true}).waitFor();
+  await page.getByText('Stock rc.3 Continue generating queues a new empty-content retry message; it does not replay an exact failed-request checkpoint. Optional checkpoint recovery is checked separately.',{exact:true}).waitFor();
   await card.getByText('Unlimited retries include permanent model-request failures and repeated billing; stop by native cancellation or disposal.',{exact:true}).waitFor();
   assert.equal(await page.getByText(/Stock rc\.1/).count(),0);
 });

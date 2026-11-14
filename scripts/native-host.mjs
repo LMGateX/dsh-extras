@@ -5,7 +5,7 @@ import {pathToFileURL} from 'node:url';
 import {createRequire} from 'node:module';
 import {createHash} from 'node:crypto';
 
-const VERSION = '0.2.2-rc.2';
+const VERSION = '0.2.2-rc.3';
 // Independently observed published npm bytes; not an authorization for product owner guards.
 const DRIVER = '8c56696eaac68e61a38b1068ea0f0dff976440e72b49ef4814fbea93c8b48b0c';
 const native = name => name.startsWith('@deepseek-ai/');

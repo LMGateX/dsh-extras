@@ -88,9 +88,32 @@
         "registryGitHead": null
       },
       "sourceBasis": "The initial audit used the unchanged official tag and canonical frozen-lockfile build while npm endpoints returned404. On2026-11-12 the actual published npm package was installed in disposable state; its compiled index and shipped src/index.ts and src/prompt.ts match the recorded hashes. Lifecycle observer/caller coordinates also match. Registry manifests omit gitHead; byte equality is not claimed as registry authentication of a Git revision. Exact version plus unchanged compiled digest remain required."
+    },
+    {
+      "package": "@deepseek-ai/dsh-goal-round-driver",
+      "version": "0.2.2-rc.3",
+      "license": "MIT",
+      "copyright": "Copyright (c) 2026 DeepSeek",
+      "repository": "https://github.com/deepseek-ai/deepseek-harness",
+      "repositoryDirectory": "packages/goal/goal-round-driver",
+      "repositoryCommit": "38a6a5c965aa99ab525161efb7cc5cf1fe62fced",
+      "artifact": "lib/index.js",
+      "sha256": "8c56696eaac68e61a38b1068ea0f0dff976440e72b49ef4814fbea93c8b48b0c",
+      "companion": null,
+      "sourceArtifact": "src/index.ts",
+      "sourceSha256": "fd7a5e4c436f951ca5d236df83a7b0dd662c2ebbffffe49a30714fe55ce4bfe7",
+      "behavior": "The rc.3 Goal driver and prompt are byte-identical to rc.2 in both official Git sources and independently observed published npm artifacts. Native tree-root progressing-work joins, queued settlement, cancellation and disposal semantics remain unchanged; Extras policy is not rewritten.",
+      "publishedArtifact": {
+        "observedDate": "2026-11-14",
+        "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-goal-round-driver/-/dsh-goal-round-driver-0.2.2-rc.3.tgz",
+        "integrity": "sha512-CtaclaIowRYdZlF5JttC66z8PRM5bVr/xsQeO6K3iMjiCmkfyB66C3099KCvAg/wg1GQid+VRmWRz18b5woMXA==",
+        "archiveSha256": "21f0fe81496f168a231ff9708f0a5d67d61975972653a463ef36cbd0b0fe909a",
+        "compiledByteIdenticalToRecordedRc2": true
+      },
+      "sourceBasis": "One complete official Git clone and local rc.2..rc.3 source-tree comparison; independently downloaded actual rc.3 npm archive and fresh npm graph. Compiled digest, shipped source/prompt hashes and lifecycle observer94/mount357/unload363 coordinates are unchanged. Source comparison and npm byte equality are separate observations, not npm authentication of a Git revision."
     }
   ],
-  "selection": "Match resolved exact version and compiled SHA-256 together against the audited artifact above; source-built history and independently observed published npm provenance remain distinct. Unknown or changed bytes are refused before driver mounting.",
+  "selection": "The current port admits exact rc.3 plus the unchanged audited compiled digest only. Earlier source/npm observations are historical, not alternate accepted runtime versions. Unknown or changed bytes are refused before driver mounting.",
   "derivedFiles": [
     "native-driver.ts",
     "prompt.ts"
@@ -112,7 +135,7 @@
     "sourcePackage": "dsh-goal-wait-gate",
     "sourceVersion": "0.4.23",
     "sourceCommit": "cbd86273660893336afaee31794b5fd76487db78",
-    "supportedHost": "0.2.2-rc.2",
+    "supportedHost": "0.2.2-rc.3",
     "adaptations": [
       "Ordinary Config/apply/runtimeStatus interface; stock ownership is managed separately without unconditional bundle suppression.",
       "Only mount/teardown disarm calls carry a consumed-once lifecycle mark for the temporary exact-ref transition authority observer.",

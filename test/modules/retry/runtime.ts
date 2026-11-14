@@ -29,7 +29,7 @@ function resolveRuntimeManifest(): ResolvedRuntime {
   }
   const requireFrom = (base: string) => createRequire(base.endsWith('package.json') ? base : join(base, 'package.json'));
   // An explicit anchor is authoritative. Falling back after a bad override could
-  // silently certify an ancestor checkout's older installed DSH instead of rc.2.
+  // silently certify an ancestor checkout's older installed DSH instead of rc.3.
   const lookups = override ? bases.map((base) => () => requireFrom(base).resolve('@deepseek-ai/dsh/package.json')) : [
     () => requireFrom(join(process.cwd(), 'package.json')).resolve('@deepseek-ai/dsh/package.json'),
     () => requireFrom(new URL('../../../package.json', import.meta.url).pathname).resolve('@deepseek-ai/dsh/package.json'),
@@ -202,7 +202,7 @@ export async function createRuntime({ config = {}, product = true, retry = true,
     }
     try {
       if (subagents && ctx.get('subagents')) {
-        // rc.2 drains exact live roots, closing admission before cancellation and
+        // rc.3 drains exact live roots, closing admission before cancellation and
         // cleanup. waitForTreeWork is a progressing-work join, not a teardown:
         // parked or idle members would otherwise remain resident.
         const roots = handles.map((handle) => handle.agent).filter((agent) =>
@@ -307,7 +307,7 @@ export interface ChildRun {
 export interface ChildSpec {
   provider: string;
   label: string;
-  /** Optional rc.2 member name, unique among the parent's children. */
+  /** Optional rc.3 member name, unique among the parent's children. */
   name?: string;
   childId: string;
   request: { parent: any; prompt: unknown; agentOptions?: unknown };
@@ -315,8 +315,8 @@ export interface ChildSpec {
 }
 
 /**
- * Start one real in-process child through the rc.2 public activation API.
- * rc.2 takes the parent, prompt, and Agent options directly on the activation
+ * Start one real in-process child through the rc.3 public activation API.
+ * rc.3 takes the parent, prompt, and Agent options directly on the activation
  * spec, not in the earlier nested request. Keep the common result shape so
  * every consumer retains the same local/result/disposal assertions.
  */

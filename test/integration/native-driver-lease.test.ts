@@ -66,7 +66,7 @@ test('unverified native version or changed rc driver bytes never acquire the sto
     for (const name of ['cordis', 'cordis-plugin-loader']) await symlink(dirname(requireHost.resolve('@deepseek-ai/' + name + '/package.json')), join(scope, name), 'dir');
     const driver = join(scope, 'dsh-goal-round-driver');
     await mkdir(driver);
-    await writeFile(join(driver, 'package.json'), JSON.stringify({name:'@deepseek-ai/dsh-goal-round-driver',version:kind === 'unknown-version' ? '99.0.0' : '0.2.2-rc.2',type:'module',exports:{'.':'./index.js','./package.json':'./package.json'}}));
+    await writeFile(join(driver, 'package.json'), JSON.stringify({name:'@deepseek-ai/dsh-goal-round-driver',version:kind === 'unknown-version' ? '99.0.0' : '0.2.2-rc.3',type:'module',exports:{'.':'./index.js','./package.json':'./package.json'}}));
     await writeFile(join(driver, 'index.js'), 'export function apply() {}\n');
     const f = await fixture(t, {}, ctx => { ctx.reflect.provide('profileContext', {installAnchor:anchor}); return () => {}; });
     const original = f.entry.fiber!.ctx.fiber;

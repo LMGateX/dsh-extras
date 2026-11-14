@@ -84,7 +84,7 @@ for (const kind of ['spawn', 'fork']) test('native '+kind+' and deeper resident 
   id: run.childId, rootAtCreation: 'UNAUTHORIZED', identity: expectedIdentity,
  });
 
- // Only native managed continuation can restore runtime membership in rc.2.
+ // Only native managed continuation can restore runtime membership in rc.3.
  // Hold the restored child's request while it creates depth-two work, never a stale Agent.
  let begin!: () => void, release!: () => void;
  const started = new Promise<void>(resolve => { begin = resolve; });

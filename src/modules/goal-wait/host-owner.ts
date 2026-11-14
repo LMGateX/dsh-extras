@@ -224,7 +224,7 @@ export function createHostDriverOwner(ctx: Context, options: HostDriverOwnerOpti
     // Prefer the native profile's installation anchor, not a possibly shadowed peer tree.
     const profile = ctx.get('profileContext') as { installAnchor?: string } | undefined;
     const requireHost = createRequire(profile?.installAnchor ?? requireExtras.resolve('@deepseek-ai/dsh/package.json'));
-    if (requireHost(nativeName + '/package.json').version !== '0.2.2-rc.2'
+    if (requireHost(nativeName + '/package.json').version !== '0.2.2-rc.3'
       || requireHost('@deepseek-ai/cordis/package.json').version !== '4.1.0'
       || requireHost('@deepseek-ai/cordis-plugin-loader/package.json').version !== '1.1.0'
       || createHash('sha256').update(readFileSync(requireHost.resolve(nativeName))).digest('hex') !== driverDigest) {

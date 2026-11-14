@@ -111,7 +111,7 @@ export function createRequestRecoveryAdapter(React:any,environment?:{fetch?:type
      finally{attempt.pending=undefined;pending.current=false;if(live.current&&!disposed)setBusy(false);}
     }
     if(!closed||!session||sessionState?.running||disposed||!options.enabled())return null;
-    // Stock rc.2 has native normal-followup Continue generating, not this optional
+    // Stock rc.3 has native normal-followup Continue generating, not this optional
     // checkpoint protocol. Keep its control untouched and avoid per-turn absence noise.
     // Incompatible protocols and actual action/transport diagnostics remain visible.
     if(view?.status==='unavailable'&&view.reason==='native-recovery-unavailable'&&!notice)return null;

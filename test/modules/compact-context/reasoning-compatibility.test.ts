@@ -87,7 +87,7 @@ test('a borrowed wrapper rejects a different native Context root but preserves t
   assert.equal(Object.getOwnPropertyDescriptor(one.raw, 'stream'), undefined);
 });
 
-for (const unsupportedVersion of ['0.2.2-rc.1', 'unverified-test-version']) test('public package version '+unsupportedVersion+' fails closed without modifying native runtime', async t => {
+for (const unsupportedVersion of ['0.2.2-rc.1', '0.2.2-rc.2', 'unverified-test-version']) test('public package version '+unsupportedVersion+' fails closed without modifying native runtime', async t => {
   const { ctx, raw, seen, mount } = await fixture(t);
   // Public package metadata in the in-memory module cache only; never edit node_modules.
   const metadata = createRequire(import.meta.url)('@deepseek-ai/dsh-llm/package.json'); const version = metadata.version;

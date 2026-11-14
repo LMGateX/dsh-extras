@@ -1,4 +1,4 @@
-/** Native 0.2.2-rc.2 entry acceptance; synthetic data and offline adapters only. */
+/** Native 0.2.2-rc.3 entry acceptance; synthetic data and offline adapters only. */
 import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import * as compactContext from '../../src/modules/compact-context/index.ts';
@@ -54,7 +54,7 @@ class CaptureAdapter extends llm.LlmAdapter {
 }
 
 async function fixture(t: TestContext, options: Record<string, any> = {}) {
-  assert.equal(runtimeVersion, '0.2.2-rc.2');
+  assert.equal(runtimeVersion, '0.2.2-rc.3');
   const runtime = await createRuntime({ product: false, retry: false, persistent: true });
   t.after(() => runtime.dispose());
   const ctx = runtime.ctx;

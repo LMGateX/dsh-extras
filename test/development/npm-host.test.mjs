@@ -70,7 +70,7 @@ test('actual clean npm graph accepts read-only reruns and borrowed whole graphs 
     }
     const before = await snapshot(paths);
     const direct = accepted(invoke(root));
-    assert.equal(direct.nativeVersion, '0.2.2-rc.2'); assert.equal(direct.cordisVersion, '4.1.0'); assert.equal(direct.driverSha256, driverHash);
+    assert.equal(direct.nativeVersion, '0.2.2-rc.3'); assert.equal(direct.cordisVersion, '4.1.0'); assert.equal(direct.driverSha256, driverHash);
     assert.equal(direct.owner, owner); assert.equal(direct.anchor, join(modules, '@deepseek-ai/dsh/package.json'));
     assert.deepEqual(accepted(invoke(root)), direct);
     await borrow(cwd);
@@ -118,6 +118,16 @@ test('copied published metadata refuses wrong versions, missing entries, unknown
       const manifest = JSON.parse(before); manifest.version = '0.0.0'; await writeFile(path, JSON.stringify(manifest));
       const snapshotBefore = await snapshot([path]); refused(invoke(), /Wrong native version/); assert.deepEqual(await snapshot([path]), snapshotBefore);
       await writeFile(path, before);
+    });
+    await t.test('previous rc2 version with unchanged Goal bytes and matching lock still refuses', async () => {
+      const path = join(scope, 'dsh-goal-round-driver/package.json'), before = await readFile(path);
+      const lockPath = join(cwd, 'package-lock.json'), lockBefore = await readFile(lockPath);
+      const manifest = JSON.parse(before), lock = JSON.parse(lockBefore);
+      manifest.version = '0.2.2-rc.2'; lock.packages['node_modules/@deepseek-ai/dsh-goal-round-driver'].version = '0.2.2-rc.2';
+      await writeFile(path, JSON.stringify(manifest)); await writeFile(lockPath, JSON.stringify(lock));
+      const snapshotBefore = await snapshot([path, lockPath]);
+      refused(invoke(), /Wrong native version/); assert.deepEqual(await snapshot([path, lockPath]), snapshotBefore);
+      await writeFile(path, before); await writeFile(lockPath, lockBefore);
     });
     for (const entry of ['dsh/lib/bin.js', 'dsh-llm/lib/types/index.d.ts', 'dsh-goal-round-driver/lib/index.js']) await t.test('missing emitted entry: ' + entry, async () => {
       const path = join(scope, entry), saved = join(sandbox, 'saved'); await rename(path, saved);

@@ -1,4 +1,4 @@
-/** Exact rc.2 official-tag source-build artifact only; see shipped provenance, not an npm-byte claim. */
+/** Exact rc.3 official npm artifact, independently compared with the official tag; see provenance. */
 import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
@@ -13,7 +13,7 @@ export interface HostProfile {
   /** Exact runtime artifact; used only by the temporary lifecycle authority observer. */
   artifactPath: string
 }
-const version = '0.2.2-rc.2'
+const version = '0.2.2-rc.3'
 const cordis = '4.1.0'
 const digest = '8c56696eaac68e61a38b1068ea0f0dff976440e72b49ef4814fbea93c8b48b0c'
 const packages = ['dsh', 'dsh-agent', 'dsh-agent-loop', 'dsh-goal', 'dsh-goal-round-driver', 'dsh-session', 'dsh-session-projection', 'dsh-llm', 'dsh-system-prompt', 'dsh-tools', 'dsh-tool-goal', 'dsh-jobs', 'dsh-jobs-local', 'dsh-tool-jobs', 'dsh-scope']
