@@ -30,4 +30,6 @@ Use Extras0.6.0 for rc.2 and0.5.1 for rc.1. Prior releases/previews remain uncha
 
 ## Validation and publication boundary
 
-The initial isolated compatibility candidate passed751/751 source tests and54/54 packed/native tests including six real GUIs. Final-identity README changes require rebuilding/repacking and rerunning all final gates; those results are recorded in docs/VALIDATION_RELEASE_061.md before publication. This source note does not preclaim the subsequent network upload/download receipt.
+Final0.6.1 archives were rebuilt/repacked and passed **751/751 complete source tests** and **54/54 complete packed/native tests**, including the combined and five split **six real whole GUIs**. Native preflight/typecheck, clean consumers/public types and independent Standards/Spec follow-up reviews passed (0required/optional findings). Exact rc.3 guards and all runtime/client payloads are unchanged from the checked candidate; only shipped README content changed.
+
+[Final validation](https://github.com/LMGateX/dsh-extras/blob/v0.6.1/docs/VALIDATION_RELEASE_061.md) records frozen inputs, commands, log hashes, six archive hashes, isolation and process cleanup. [Independent review](https://github.com/LMGateX/dsh-extras/blob/v0.6.1/docs/REVIEW_RELEASE_061.md) separates review judgment from execution. This source note does not preclaim the subsequent network upload/download receipt.
