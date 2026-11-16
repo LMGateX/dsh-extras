@@ -16,7 +16,7 @@ For the unreleased rc.3 compatibility check, apply the [exact rc.3 check contrac
 
 ## Approved future design (not shipped)
 
-The user-approved [request-reported time-zone override contract](TIMEZONE_POLICY.md) and its [amendment](AMENDMENTS.md) are fixed before feature implementation. Browser/fixed/host selection must affect the actual request report and native clock policy while preserving raw detection and independent tool/task semantics. The current authorization is documentation and supplemental research only; no new module, host compatibility claim or release asset is added.
+The latest user scope correction fixes the [browser-zone privacy contract](TIMEZONE_POLICY.md) and its [amendment](AMENDMENTS.md): replace browser-origin automatic request time-zone reports with the DSH host zone. Arbitrary fixed-zone selection is not a first-version capability. Do not collect raw browser zones for request diagnostics, alter existing host-zone references, or change native time injection/refresh/retry/continuation/compaction semantics. The current work remains documentation only; no new module, host compatibility claim or release asset is added.
 
 ## Required deliverables
 

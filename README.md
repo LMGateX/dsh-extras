@@ -155,7 +155,7 @@ See the [fixed contract and synthetic rule examples](<docs/COMPACTION_REASONING.
 
 ## Approved design notes (not shipped)
 
-[Request-reported time-zone override / 请求上报时区覆盖](<docs/TIMEZONE_POLICY.md>) records the approved browser/fixed/host direction, including overriding `clientTimeZone`, source diagnostics and future acceptance gates. [Supplemental research](<docs/research/TIMEZONE_REQUEST_PATHS_2026-11-16.md>) covers request/UI, tools and automatic lifecycle paths against installed DSH rc.3. This is documentation and characterization only, not an available setting or a compatibility upgrade for Extras 0.4.0.
+[Browser-zone privacy / 请求时区跟随 DSH 本机](<docs/TIMEZONE_POLICY.md>) fixes the narrowed objective: prevent browser-detected time zones from entering automatic request reports by using the DSH host zone. Arbitrary fixed zones and native time-injection governance are out of scope; host tools/time references stay unchanged. [Supplemental research](<docs/research/TIMEZONE_REQUEST_PATHS_2026-11-16.md>) classifies source paths, not an expanded feature backlog. This is documentation only, not an available setting or a compatibility upgrade for Extras 0.4.0.
 
 ## Development
 

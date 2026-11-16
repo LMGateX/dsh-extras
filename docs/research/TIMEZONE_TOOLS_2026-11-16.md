@@ -1,11 +1,13 @@
 # 时区覆盖补查：模型工具边界（2026-11-16）
 
+> 最新范围以[浏览器时区防泄露契约](../TIMEZONE_POLICY.md)为准。以下工具源码事实用于说明“不需要改哪里”；不是工具时间治理或统一日期环境的任务清单。
+
 ## 范围与证据口径
 
 - 基线：已安装 DSH 一方包 `0.2.2-rc.3` 的随包源码、schema 与 manifest。
 - 本文只调查工具边界，不实现；唯一新增产物为本文，不提交、不修改宿主。
-- 已认可的设计：请求 `clientTimeZone` 可按 browser 自动、fixed 指定、host 策略覆盖。
-- 实际检测值独立保留；禁止为实现模型策略而修改全局 `Intl` 或进程 `TZ`。
+- 早期三模式方向已被用户收窄：新增自动上报只跟随 DSH 本机，不提供任意 fixed 时区能力。
+- 不要求采集/持久化真实浏览器检测值；禁止把它转移到诊断请求，也不修改全局 `Intl` 或进程 `TZ`。
 - “受覆盖影响”下文专指直接数据路径；模型据有效时区生成不同参数属于间接影响。
 - `Date.now()`、epoch、UTC ISO、耗时不是“时区注入”，不能与本地时间显示混淆。
 - 主调查确认官方 tag `dsh-v0.2.2-rc.3` 指向 `38a6a5c965aa99ab525161efb7cc5cf1fe62fced`。
@@ -20,18 +22,18 @@
 2. **调度有独立时间权威。** `rrule` 显式带 UTC 或 TZID；结果的 local 字段按规则时区，不按请求时区。[E01–E03]
 3. **shell 与 PTC 不可等同。** shell/PTY 继承清理后的宿主环境；PTC 主动移除大多数环境（包括继承的 `TZ`），程序看到空环境。[E05–E08]
 4. **结果不自动附带时区解释。** 通用成功结果按各工具 renderer 生成，后台通知也不统一附加“当前时区”。[E10–E13]
-5. **保留环境事实。** 命令打印的本地时间、外部服务时间、文档计算值应注明来源，而不是偷偷改成有效请求时区。[E04–E16]
+5. **保留环境事实。** 命令打印的本地时间、外部服务时间、文档计算值保持原样，不新增统一来源包装或偷偷转换。[E04–E16]
 6. **不承诺全系统统一显示。** 调度 UI 的浏览器显示、DND、本地化日期由主调查单列，不从工具结果反推。
 
 ## 路径矩阵 A：schedule
 
-| 入口 | 时间来源 | 模型可见内容 | 直接受请求覆盖影响 | 设计/测试 | 未验证项 |
+| 入口 | 时间来源 | 模型可见内容 | 直接受请求覆盖影响 | 本功能裁定 | 未验证项 |
 | --- | --- | --- | --- | --- | --- |
-| `schedule_create` schema | 模型显式提交的 DTSTART/RRULE | UTC/TZID、DST、UNTIL 等说明 | 否；只有参数生成可能间接受影响 | S1、S2；不得隐式重写显式 TZID | 未实际创建任务 |
-| `schedule_edit` schema | 新 rrule；省略则保留旧规则 | 同创建格式；active；expectedUpdatedAt | 否 | S3；覆盖切换不修改旧任务 | 未执行并发编辑 |
-| create/edit/list/view 结果 | 持久化规则 + 调度服务时钟 | scheduledAt、scheduledAtLocal、updatedAt、lastDelivery | 否 | S4；字段权威保持不变 | 未比较实时 UI |
-| 定时投递单条/批量消息 | 到期 occurrence 的 UTC instant | occurrence_at；任务 id 与 prompt | 否 | S5；请求策略与 occurrence 分离 | 未运行定时器/崩溃恢复 |
-| 定时消息激活后的 time-context | pre-step 的当前时刻；可用请求来源/回退 | 独立注入的时钟提示 | 取决于覆盖设计接入点，不是提醒字段自动继承 | S6；明确自动唤醒策略 | 新/旧目标会话跨策略行为待实现验证 |
+| `schedule_create` schema | 模型显式提交的 DTSTART/RRULE | UTC/TZID、DST、UNTIL 等说明 | 否；只有参数生成可能间接受影响 | 保持原生；不新增工具级时区治理 | 未实际创建任务 |
+| `schedule_edit` schema | 新 rrule；省略则保留旧规则 | 同创建格式；active；expectedUpdatedAt | 否 | 保持原生；不新增工具级时区治理 | 未执行并发编辑 |
+| create/edit/list/view 结果 | 持久化规则 + 调度服务时钟 | scheduledAt、scheduledAtLocal、updatedAt、lastDelivery | 否 | 保持原生；不新增工具级时区治理 | 未比较实时 UI |
+| 定时投递单条/批量消息 | 到期 occurrence 的 UTC instant | occurrence_at；任务 id 与 prompt | 否 | 保持原生；不新增工具级时区治理 | 未运行定时器/崩溃恢复 |
+| 定时消息激活后的 time-context | pre-step 的当前时刻；可用请求来源/回退 | 独立注入的时钟提示 | 注入与来源解析由 DSH 原生负责 | 保持原生；不新增工具级时区治理 | 未运行原生投递；不列为本功能待改项 |
 
 ### schema 与字段语义
 
@@ -49,20 +51,20 @@
 - `deliveredAt` 在目标会话持久化确认后用 `new Date(Date.now()).toISOString()` 采样。[E03]
 - 单条提醒只含 `occurrence_at`（UTC），批量亦如此；不附规则 TZID 或 clientTimeZone。
 - 提醒使用 `source.kind = schedule`，不是带浏览器 rpcId 的 user 来源。[E03, E13]
-- 因而请求覆盖不能被宣称已自动传入未来投递；此处需要设计并测试，而非改写历史提醒。
+- 因而请求覆盖不能被宣称已自动传入未来投递；未来投递继续由 DSH 负责，本功能不新增时区传递，也不改写历史提醒。
 
 ## 路径矩阵 B：执行器、结果与异步工作
 
-| 入口 | 时间来源/环境 | 模型可见内容 | 直接受请求覆盖影响 | 设计/测试 | 未验证项 |
+| 入口 | 时间来源/环境 | 模型可见内容 | 直接受请求覆盖影响 | 本功能裁定 | 未验证项 |
 | --- | --- | --- | --- | --- | --- |
-| `bash` / `pwsh` | shellEnv 的 DSH_* + executor overlay + scrubbed host env | stdout/stderr、退出/中断/耗时标记；结构化 timeoutMs | 未见 | X1；命令本地时间视为执行环境事实 | Windows/pwsh 后端未启动 |
-| `terminal_open/send/read` | PTY 创建时宿主基环境 + terminal override；后续会话自有状态 | 启动输出、viewport、wait/session 状态 | 未见；不重写已有 PTY | X2；策略切换不改变终端 | 实际终端启动脚本/用户修改未核验 |
-| `run_code` Node 程序 | 新/保留 Node 环境；移除普通继承环境；Date/Intl 仍可被程序调用 | 仅打印值、返回值及附加图像 | 未见 | X3；验证无 TZ 注入与 OS 默认差异 | 系统 ICU、OS zone、沙箱后端实测缺失 |
-| PTC 内 `tools.*` 子调用 | 保留 agent/toolSet、parent 与 signal；工具各自执行 | canonical JSON value，失败为异常 | 不另传请求 zone；agent 内后续政策待接入 | X4；与直接调用同参数同语义 | 其他 PTC runtime 未审 |
-| 普通工具成功结果 | 工具自己的 output renderer | 工具定义的文本/JSON/图像 | 无统一时区包装 | X5；保持 value/content 一致 | 第三方 wrapper 可另加上下文 |
-| 通用 timeout policy | elapsed timeoutMs + abort signal | TOOL_TIMEOUT，timed out after Nms | 否 | X6；预算、取消不受时区切换影响 | 未测跨 DST/系统时钟跳变 |
-| `job_list/output/kill` | 注册/结束时 Date.now() | canonical startedAt/finishedAt epoch；正文/状态 | 否 | X7；epoch 不转作本地钟点 | 未实际启动后台 job |
-| job 完成通知 | 任务状态与有限输出 | finished/status；可能内联正文或要求 job_output | 否；无浏览器来源 | X8；自动唤醒的独立 clock 策略 | 未测 idle/busy owner 通知 |
+| `bash` / `pwsh` | shellEnv 的 DSH_* + executor overlay + scrubbed host env | stdout/stderr、退出/中断/耗时标记；结构化 timeoutMs | 未见 | 保持原生；不新增工具级时区治理 | Windows/pwsh 后端未启动 |
+| `terminal_open/send/read` | PTY 创建时宿主基环境 + terminal override；后续会话自有状态 | 启动输出、viewport、wait/session 状态 | 未见；不重写已有 PTY | 保持原生；不新增工具级时区治理 | 实际终端启动脚本/用户修改未核验 |
+| `run_code` Node 程序 | 新/保留 Node 环境；移除普通继承环境；Date/Intl 仍可被程序调用 | 仅打印值、返回值及附加图像 | 未见 | 保持原生；不新增工具级时区治理 | 系统 ICU、OS zone、沙箱后端实测缺失 |
+| PTC 内 `tools.*` 子调用 | 保留 agent/toolSet、parent 与 signal；工具各自执行 | canonical JSON value，失败为异常 | 不另传请求 zone；本功能不新增策略参数 | 保持原生；不新增工具级时区治理 | 其他 PTC runtime 未审 |
+| 普通工具成功结果 | 工具自己的 output renderer | 工具定义的文本/JSON/图像 | 无统一时区包装 | 保持原生；不新增工具级时区治理 | 第三方 wrapper 可另加上下文 |
+| 通用 timeout policy | elapsed timeoutMs + abort signal | TOOL_TIMEOUT，timed out after Nms | 否 | 保持原生；不新增工具级时区治理 | 未测跨 DST/系统时钟跳变 |
+| `job_list/output/kill` | 注册/结束时 Date.now() | canonical startedAt/finishedAt epoch；正文/状态 | 否 | 保持原生；不新增工具级时区治理 | 未实际启动后台 job |
+| job 完成通知 | 任务状态与有限输出 | finished/status；可能内联正文或要求 job_output | 否；无浏览器来源 | 保持原生；不新增工具级时区治理 | 未测 idle/busy owner 通知 |
 
 ### 继承细节与潜在宿主暴露
 
@@ -82,13 +84,13 @@
 
 ## 路径矩阵 C：外部/文档工具
 
-| 入口 | 明确时间字段/时间来源 | 模型可见内容 | 请求覆盖影响 | 设计/测试 | 未验证项 |
+| 入口 | 明确时间字段/时间来源 | 模型可见内容 | 请求覆盖影响 | 本功能裁定 | 未验证项 |
 | --- | --- | --- | --- | --- | --- |
-| MCP tool bridge | 服务自定义 schema/内容；stdio 子进程可继承 TZ | description/schema、content、structuredContent、图像 | 未见附加 zone；参数原样交服务 | E1；显式服务 zone 参数优先 | 不连接服务；第三方协议扩展未审 |
-| MCP stdio / HTTP | stdio 用 scrubbed host env + 配置 env；HTTP 用配置 headers | 服务响应中可能含当地时间 | 无自动 clientTimeZone 转发 | E2；保留服务时间来源 | 远端 zone 与 SDK 内部默认未实测 |
-| `office_render/convert/recalculate` | 外部文档/引擎；工具 schema 无时区参数 | 图像/输出文件、bytes/pageCount/fonts | 未见 | E3；NOW/TODAY/动态字段列专测 | 引擎真实计算时钟/zone 未证实 |
-| `web_search` | provider supplied publishedAt；DeepSeek page_age 映射 | 搜索条目附原样日期/recency 字符串 | 无自动转换 | E4；不要将含糊 page_age 当 UTC | 不调用网络；provider 远端时间未知 |
-| `web_fetch` | 网页正文自身日期；fetch 的 HTTP 状态/URL | 正文转文本/markdown，非当前时钟 | 未见 | E5；正文日期保留原语义 | 远端按IP/locale差异未知 |
+| MCP tool bridge | 服务自定义 schema/内容；stdio 子进程可继承 TZ | description/schema、content、structuredContent、图像 | 未见附加 zone；参数原样交服务 | 保持原生；不新增工具级时区治理 | 不连接服务；第三方协议扩展未审 |
+| MCP stdio / HTTP | stdio 用 scrubbed host env + 配置 env；HTTP 用配置 headers | 服务响应中可能含当地时间 | 无自动 clientTimeZone 转发 | 保持原生；不新增工具级时区治理 | 远端 zone 与 SDK 内部默认未实测 |
+| `office_render/convert/recalculate` | 外部文档/引擎；工具 schema 无时区参数 | 图像/输出文件、bytes/pageCount/fonts | 未见 | 保持原生；不新增工具级时区治理 | 引擎真实计算时钟/zone 未证实 |
+| `web_search` | provider supplied publishedAt；DeepSeek page_age 映射 | 搜索条目附原样日期/recency 字符串 | 无自动转换 | 保持原生；不新增工具级时区治理 | 不调用网络；provider 远端时间未知 |
+| `web_fetch` | 网页正文自身日期；fetch 的 HTTP 状态/URL | 正文转文本/markdown，非当前时钟 | 未见 | 保持原生；不新增工具级时区治理 | 远端按IP/locale差异未知 |
 
 - MCP callTool 只提交工具名、arguments，加 signal/timeout；没有合成 zone 参数。[E14]
 - schema 时间字段属于远端工具，不可通过全局字符串替换或递归改写 structuredContent 纠正。
@@ -98,22 +100,14 @@
 - web `publishedAt` 是任意 provider 字符串；DeepSeek 实现来自 page_age，可能并非规范 ISO。[E16]
 - 已查 web 搜索请求仅含 query 等业务配置；HTTP fetch 默认 headers 没有请求时区。
 
-## 建议验收组（只设计，均未执行）
+## 最新范围裁定
 
-- **S1**：固定同一 wall-clock instant，browser/fixed/host 三模式生成默认日期解释；raw 检测值原样保留。
-- **S2**：显式 TZID 与有效请求 zone 冲突时仍按 TZID；覆盖不修改 DTSTART/UNTIL。
-- **S3**：切换策略后仅编辑 title/prompt/active，规则与 expectedUpdatedAt 不被重新格式化。
-- **S4**：验证 UTC scheduledAt 与规则 scheduledAtLocal 表示同一 instant；覆盖不改变任务结果。
-- **S5**：跨 DST gap/fold、停机补发、批量投递；occurrence_at 始终是原规则 occurrence。
-- **S6**：this_session/new_once/new 的无人定时唤醒；分清投递 instant、当前采样时间、有效政策来源。
-- **X1–X2**：一次性 shell 与保留 PTY，在 host TZ 与策略 zone 不同情况下仍报告真实执行环境。
-- **X3**：Node PTC 分别用 host 有/无 TZ，比较 process.env、Date/Intl 与显式 timeZone 格式化。
-- **X4**：相同工具直接调用与 PTC 调用的参数、agent 归属、值一致；不引入隐藏 zone 参数。
-- **X5–X6**：renderer、结构化值、异常、超时文本不加入虚假“浏览器时间”；不改变 timeoutMs。
-- **X7–X8**：完成/失败/取消、前台转后台、idle/busy 通知；epoch 与原日志不被策略重写。
-- **E1–E2**：伪 MCP 返回多 zone 字段；参数和内容不被吞改；stdio TZ 与 HTTP 显式字段分开断言。
-- **E3**：隔离环境中探测 Office 动态日期、公式缓存和元数据；在引擎能力未知前不承诺覆盖。
-- **E4–E5**：伪 provider 返回 UTC/offset/自然语言 recency；验证 publishedAt/正文不被自动转换。
+- 原 S/X/E 建议验收组已撤回；不为本功能新增跨 DST 调度、Office 动态日期、PTY 日期环境或外部 MCP 时区治理任务。
+- 工具继续引用宿主/自身执行环境的时区即可；stdout、epoch、UTC occurrence 和显式规则保持原样。
+- 没有浏览器自动检测值转送到请求的工具，不需要新增 host 时区字段或继承快照。
+- 只有发现某个发送路径主动转送浏览器自动检测时区时，才在原字段来源处修正为宿主值。
+- 不改定时提醒的投递来源、time-context 的注入时机或工具结果 renderer。
+- 本次静态调查没有发现已查 shell/PTC/MCP 路径自动把 clientTimeZone 注入参数或 TZ；这是保持原状的依据，不是覆盖全部外部服务的安全保证。
 
 ## 证据索引
 

@@ -4,6 +4,14 @@ Changes must cite the observed host/source constraint, explain the trade-off, an
 
 No amendments at the original specification freeze. Later approved amendments follow.
 
+## 2026-11-16 — User scope correction: prevent browser-zone disclosure, follow the DSH host
+
+The user explicitly corrected the preceding design as too broad. The objective is to keep automatically reported request time zones aligned with the DSH host, preventing browser-detected zone disclosure. Arbitrary fixed zones that disagree with the host are discouraged and are not a first-version capability. Existing host-zone references and tool environments stay native. Time injection placement/timing, refresh intervals, retries, continuation, compaction and propagation semantics belong to DSH and must not be changed for this capability.
+
+The [current narrow contract](TIMEZONE_POLICY.md) supersedes the earlier three-mode policy, raw-browser-value collection, structured policy propagation and prompt-refresh requirements below. Research facts remain useful for classifying browser-origin fields versus ordinary host time; they are not an implementation backlog. Earlier TZ-01 through TZ-14 are retired by this direct scope correction and replaced by HTZ-01 through HTZ-06, limited to automatic field sourcing, no secondary raw-zone disclosure, host availability and non-interference. Existing release/safety gates remain unchanged. No feature implementation, production modification, push or release is authorized.
+
+**History marker:** the following earlier timezone amendment records the prior interpretation only and is superseded by this correction.
+
 ## 2026-11-16 — Approved request-reported time-zone override design (documentation only)
 
 The user approved browser/fixed/host request time-zone selection and explicitly required overriding the actual `clientTimeZone` report, including the native model-facing `Browser time zone for this request` line. The latest request authorizes fixing that agreement in documentation and investigating other injection/tool paths; it does not authorize feature implementation, production installation, push or release. The [fixed design](TIMEZONE_POLICY.md) separates detected browser facts from selected wire values and keeps old `time-context.timeZone` fallback semantics.

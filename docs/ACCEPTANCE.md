@@ -1,6 +1,6 @@
 # Release acceptance matrix
 
-Future request time-zone override work must additionally execute TZ-01 through TZ-14 in the [fixed design](TIMEZONE_POLICY.md#6-功能实现交付时的验收矩阵) once implementation is authorized and its prerequisite decisions are settled. These gates are pending, not passed by static research/characterization, and do not retroactively change the released 0.4.0 certification or waive any existing gate.
+Future browser-zone privacy work must execute HTZ-01 through HTZ-06 in the [narrow contract](TIMEZONE_POLICY.md#5-收窄后的验收). The user explicitly withdrew the earlier TZ-01 through TZ-14 scope: arbitrary fixed zones, injection scheduling and cross-lifecycle time-policy governance are not required. The new gates are pending, apply only when implementation is authorized, and do not change released 0.4.0 certification or waive existing safety/regression gates.
 
 For 0.5.0 additionally execute the [workspace policy contract](WORKSPACE_POLICY_050.md) and the rows below; the independent [native terminal recovery extension](NATIVE_RECOVERY_050.md) has its own adapted-host gate. Stock rc.1 must report recovery unavailable, not a working button. Earlier gates remain unless the explicit 0.5.0 amendments change the configuration authority or distribution count.
 

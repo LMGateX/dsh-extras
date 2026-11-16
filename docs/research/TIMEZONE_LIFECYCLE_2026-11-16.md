@@ -1,9 +1,11 @@
 # 时区请求上下文生命周期补查（2026-11-16）
 
+> 用户已明确收窄范围：本报告保留 DSH 原生行为的源码记录，但不要求改注入时机、刷新、继承、重试或压缩。实施以[当前主契约](../TIMEZONE_POLICY.md)为准。
+
 ## 范围与证据口径
 
-- 本报告只固定已认可策略并补查源码；不实现、不提交，不修改宿主或其他仓库文件。
-- 已认可：请求解释时区可由 browser 自动、fixed 指定、host 服务器覆盖；真实检测值必须独立保留。
+- 本报告记录早期补查的源码事实，不实现功能、不修改宿主。
+- 当前目标仅为避免新增自动上报携带浏览器检测值、改用 DSH 本机值；原三模式及检测值审计要求已撤回。
 - 调查基线：下列已安装的 @deepseek-ai 包均读取清单确认版本 **0.2.2-rc.3**；只查发布包自带源码。
 - 未读取个人 profile、会话日志或 credentials；未启动 host、联网、安装或执行运行时测试。
 - 下文“已确认”指静态代码事实；“风险/建议”不是已发生故障，也不是已实现接口。
@@ -20,7 +22,7 @@
 5. spawn、模型间消息、goal 自动轮、job 完成通知、SDK、ACP、headless 的已查入口不携带可识别时区。[S4][S6][S7][S8][S9][S10][S11][S12]
 6. fork 继承的是已完成轮历史，不是当前请求快照；旧提示与上次注入时间也可能随 seed 被重放。[S1][S5]
 7. compaction 辅助调用直接重放选中历史，未经过新的 agent/pre-step 时间注入；摘要无专门时区保真槽。[S13][S14]
-8. 覆盖策略需要同时解决“入口快照、来源身份、持久化、跨生命周期传播、提示失效”，不能只改浏览器取值函数。
+8. 上述生命周期事实不构成新增实现要求；本功能仅修正浏览器自动上报字段的来源，不接管原生时间注入或传播。
 
 ## 路径矩阵：字段、直接注入与旧 prompt 分开看
 
@@ -114,40 +116,21 @@
 - ACP 桥接在 admitAcpPrompt 后固定 source=user；未把协议扩展元数据映射到 rpcId/时区。[S11]
 - headless 在已有/新建 Agent 上提交 task，同样固定 source=user；进程区只可能影响采样 fallback。[S12][S1]
 - 以上是**已查入口没有可识别字段**，不是“所有 SDK/ACP 生态永远无法携带区”的断言。
-- 不建议伪造 rpcId 将自动来源冒充 browser；应给非浏览器来源明确定义的上下文模型与 provenance。
+- 不伪造 rpcId 将自动来源冒充 browser；这些无浏览器上报的入口保持原样，本功能不新增上下文模型或 provenance 协议。
 
-## 6. 新覆盖策略需要的 seam（建议，尚未实施）
+## 6. 最新范围裁定
 
-| seam | 应固定的契约 | 现有依据/缺口 |
-| --- | --- | --- |
-| admission 快照 | 分离 detectedClientTimeZone、effectiveRequestTimeZone、mode=browser/fixed/host、policyRevision | 现 source 仅 clientTimeZone，无真实检测/覆盖来源分离。[S6][S15] |
-| 排队存储 | 消息接受时冻结快照，保留 messageId/requestId；策略切换不回写已接受输入 | inbox splice 已持久承载原消息，可作为传播载体。[S3] |
-| resolver 来源 | 声明 human RPC、人工子 prompt、goal、job、agent relay、SDK/ACP 的区归属；missing/mixed 显式化 | 当前 reader 只有 user+rpcId gate。[S2] |
-| 注入失效 | 时间流逝节流与语义变化分离；effective 区/模式/来源/轮身份变化要能失效 | 当前只有 session 墙钟节流。[S1] |
-| spawn/fork | 明确创建时快照是否传播；fork seed 不能冒充当前请求检测值 | provider seed 与 initial submit 分层。[S4][S5][S6] |
-| 自动唤醒 | goal/job/settlement 选择任务上下文、接收者上下文或 unknown；保存选择理由 | 当前构造器均无区字段。[S7][S8][S9] |
-| 压缩/恢复 | 结构化有效区独立于摘要；版本化投影可重建；表面替换后能恢复必要提示 | 当前 checkpoint source 不保留原 RPC attribution。[S13][S18] |
-| retry/切换 | 区快照是否随原请求固定；重试不重新检测；手动 retry 不因 kind gate 意外丢失 | 当前自动重试复用，空 RPC retry 被 reader 忽略。[S16][S15][S2] |
-| SDK/ACP/headless | 可选显式上下文契约；无浏览器时不得伪称检测到 browser 区 | 当前入口均无此契约。[S10][S11][S12] |
+- 原“新覆盖策略 seam”表已撤回；不新增 policyRevision、检测值持久化、跨生命周期策略快照或 SDK/ACP 时区协议。
+- 当前需要的最小接口仅是可靠取得 DSH 本机时区、替换已有自动上报字段来源。
+- 有人工浏览器输入的普通/子 agent 发送分支需要阻止该字段携带浏览器检测值；无此自动字段的后台路径保持原生。
+- UI 空 retry 若携带自动区字段，只修字段来源；不改 reader 为读取 retry，也不改变重试来源身份。
+- host 表示 DSH 宿主实际解析的时区，不是另一个任意固定值；无需为解释该事实而加独立模型时钟。
 
-host 的含义以[主契约](../TIMEZONE_POLICY.md#21-请求上报时区)为准：当前连接的宿主进程实际提供并校验的时区，不是另一项服务器固定值配置。仍需补齐宿主事实获取接口、采样时机及连接代次失效规则；这些是实施缺口，不重新开放 host 含义。
-来源诊断必须区分真实检测与 fixed/host 覆盖。按用户已认可的[主契约](../TIMEZONE_POLICY.md#22-区分检测事实与上报策略)，实际 wire clientTimeZone 与原生 Browser time zone 行都应使用选定上报值；该行表示本请求选定值，不强制更名。非浏览器自动入口若没有该 RPC 字段，则不能伪造 browser 检测来源，应单独展示其真实策略来源。
-以上属于待设计的新增契约；不是建议偷偷改变现有 missing/mixed 的澄清行为。
+## 7. 原生行为与历史限制，不是待修 bug
 
-## 7. 关键风险与验收建议
+十分钟节流、同轮 mixed、fork 历史 seed、goal/job 无新区字段、摘要不保证原时钟文字保真，继续由 DSH 决定。先前关于绕过节流、强制刷新、传播或保真槽的建议已撤回；不为此功能增加这些验收任务。
 
-- P0：新轮、同轮 steer 换区、检测值相同但 mode/revision 变化，均应有明确提示失效测试，不能只测 refreshIntervalMs=0。
-- P0：保留独立真实检测值及历史来源；新 fixed/host 请求同时改变 clientTimeZone wire 值与 effective 解释，不能只追加另一条有效区指令。
-- P0：队列入列后变更策略；验证消息快照、执行策略与审计展示不追溯漂移。
-- P0：同 step 两个 user-rpc 区、同轮后到异区、合法区+无区消息分别验收，明确 mixed 与 partial-unknown 政策。
-- P1：spawn 与 fork（无完成轮/有近期注入/已过节流）分别验证；不以 fork “看得到旧区”冒充字段继承。
-- P1：人工子 prompt queue/steer、send_message、settlement 忙/闲唤醒分别验证来源与区策略。
-- P1：goal 自动 round、job inject/wakeup/wakeBudget 耗尽后，验证不产生虚假的 browser 检测值。
-- P1：压缩含唯一时间提示的区域，随后立即请求/换模型/恢复；验证语义上下文仍可重建且没有依赖摘要猜测。
-- P1：自动 retry 与 UI 空 retry 分开测试；验证重试期间策略变更不会悄悄重新解释原请求。
-- P1：SDK、ACP、headless 新会话/恢复会话各测显式区、缺失区；无字段必须可观察为 unknown，而非假定服务器区。
-- P2：投影 version 不匹配、旧缓存、墙钟回拨与插件重载，验证不会长期保留过时来源或跳过必需注入。
-- 所有验收须使用隔离 HOME/DSH_HOME 与临时会话；本次未执行，不能声称通过。
+历史中的浏览器时区可能被原生恢复/重试/摘要继续带入模型请求；该功能不清洗历史，也不承诺通过改注入调度消除此现象。验证新增自动上报时使用干净会话，明确已有历史不在保护保证内。
 
 ## 8. 未验证项与退出边界
 
