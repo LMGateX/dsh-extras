@@ -4,6 +4,10 @@ Changes must cite the observed host/source constraint, explain the trade-off, an
 
 No amendments at the original specification freeze. Later approved amendments follow.
 
+## 2026-11-16 — Authorize narrow host-timezone implementation, release and local install (0.7.0)
+
+After accepting the scope correction, the user explicitly authorizes documentation-first isolated/subagent development and testing, push, release and local DSH installation. The [fixed 0.7.0 contract](HOST_TIMEZONE_070.md) retains host-aligned automatic-field privacy without time-injection governance, starts from the current released rc.3 baseline, and adds one default-off module/standalone artifact (six modules/seven archives). Implementation requires the source-evidenced seam decision before runtime edits; publication and restricted native installation follow actual full source/packed/browser and independent-review gates. This is an explicit scoped exception to earlier no-production-install text, not authority to modify native installation sources, unrelated profiles, global timezone or original runtime policy. No Actions/npm publication.
+
 ## 2026-11-16 — User scope correction: prevent browser-zone disclosure, follow the DSH host
 
 The user explicitly corrected the preceding design as too broad. The objective is to keep automatically reported request time zones aligned with the DSH host, preventing browser-detected zone disclosure. Arbitrary fixed zones that disagree with the host are discouraged and are not a first-version capability. Existing host-zone references and tool environments stay native. Time injection placement/timing, refresh intervals, retries, continuation, compaction and propagation semantics belong to DSH and must not be changed for this capability.
