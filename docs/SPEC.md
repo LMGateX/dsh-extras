@@ -14,6 +14,10 @@ For 0.6.0 additionally apply the [exact rc.2 compatibility and Goal necessity co
 
 For the unreleased rc.3 compatibility check, apply the [exact rc.3 check contract](<DSH_RC3_061.md>). The initial check excluded publication; the subsequent [explicit publication contract](<DSH_RC3_RELEASE_061.md>) authorizes final0.6.1 push/release only. Production operations remain excluded; historical evidence stays historical.
 
+## Approved future design (not shipped)
+
+The user-approved [request-reported time-zone override contract](TIMEZONE_POLICY.md) and its [amendment](AMENDMENTS.md) are fixed before feature implementation. Browser/fixed/host selection must affect the actual request report and native clock policy while preserving raw detection and independent tool/task semantics. The current authorization is documentation and supplemental research only; no new module, host compatibility claim or release asset is added.
+
 ## Required deliverables
 
 1. One combined installable distribution, dsh-extras, one plugin card and unified settings grouped into four independently enabled modules.

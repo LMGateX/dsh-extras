@@ -153,6 +153,10 @@ Both Compact-context and Model policy editors switch between global defaults and
 
 See the [fixed contract and synthetic rule examples](<docs/COMPACTION_REASONING.md>) for exact defaults, matching, lifecycle and coverage gates.
 
+## Approved design notes (not shipped)
+
+[Request-reported time-zone override / 请求上报时区覆盖](<docs/TIMEZONE_POLICY.md>) records the approved browser/fixed/host direction, including overriding `clientTimeZone`, source diagnostics and future acceptance gates. [Supplemental research](<docs/research/TIMEZONE_REQUEST_PATHS_2026-11-16.md>) covers request/UI, tools and automatic lifecycle paths against installed DSH rc.3. This is documentation and characterization only, not an available setting or a compatibility upgrade for Extras 0.4.0.
+
 ## Development
 
 ```sh

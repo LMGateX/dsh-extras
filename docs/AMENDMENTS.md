@@ -4,6 +4,14 @@ Changes must cite the observed host/source constraint, explain the trade-off, an
 
 No amendments at the original specification freeze. Later approved amendments follow.
 
+## 2026-11-16 — Approved request-reported time-zone override design (documentation only)
+
+The user approved browser/fixed/host request time-zone selection and explicitly required overriding the actual `clientTimeZone` report, including the native model-facing `Browser time zone for this request` line. The latest request authorizes fixing that agreement in documentation and investigating other injection/tool paths; it does not authorize feature implementation, production installation, push or release. The [fixed design](TIMEZONE_POLICY.md) separates detected browser facts from selected wire values and keeps old `time-context.timeZone` fallback semantics.
+
+**Evidence and trade-off.** Installed DSH 0.2.2-rc.3 sources show direct browser sampling, request source-kind filtering, refresh throttling before zone resolution, and no universal propagation into automatic turns or tool environments. The [request audit](research/TIMEZONE_REQUEST_PATHS_2026-11-16.md), [tool audit](research/TIMEZONE_TOOLS_2026-11-16.md), and [lifecycle audit](research/TIMEZONE_LIFECYCLE_2026-11-16.md) distinguish static observations from a small real-plugin/fake-port characterization replay. A settings slot or generic pre-step hook is not proof of a supported override seam. No global Intl/TZ rewrite, history rewriting, task rescheduling, hidden DND change or duplicate clock is permitted.
+
+**Future evidence gate.** TZ-01 through TZ-14 in the fixed design apply when this capability enters implementation/delivery, after unresolved snapshot/storage/authority decisions are settled. They supplement existing safety/native/packed/client gates; none is claimed passed by this documentation change. This rc.3 investigation does not replace Extras 0.4.0’s certified rc.1 baseline or alter current shipped modules/artifacts.
+
 ## 2026-11-14 — Explicitly authorize final0.6.1 push/release without local installation
 
 After completed rc.3 checking, the user requests “push、发版 暂时不为本机 dsh 安装”. The [publication addendum](<DSH_RC3_RELEASE_061.md>) fixes final README identity, rebuild/full final-artifact acceptance, independent review, atomic main/annotated tag push, formal GitHub release and fresh remote asset verification before those actions. No runtime contract changes, Actions, npm Extras publication or production operation. The historical personal-profile drift is not relabeled as passed; following the user’s direction not to tie personal configuration to Git work, publication safety is evidenced by explicit disposable execution and no agent production operations, not an assertion about mutable live-profile hash equality. No further personal-profile investigation or restoration.
