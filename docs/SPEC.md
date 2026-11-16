@@ -14,9 +14,9 @@ For 0.6.0 additionally apply the [exact rc.2 compatibility and Goal necessity co
 
 For the unreleased rc.3 compatibility check, apply the [exact rc.3 check contract](<DSH_RC3_061.md>). The initial check excluded publication; the subsequent [explicit publication contract](<DSH_RC3_RELEASE_061.md>) authorizes final0.6.1 push/release only. Production operations remain excluded; historical evidence stays historical.
 
-## Approved future design (not shipped)
+## Approved host time-zone implementation (0.7.0)
 
-The latest user scope correction fixes the [browser-zone privacy contract](TIMEZONE_POLICY.md) and its [amendment](AMENDMENTS.md): replace browser-origin automatic request time-zone reports with the DSH host zone. Arbitrary fixed-zone selection is not a first-version capability. Do not collect raw browser zones for request diagnostics, alter existing host-zone references, or change native time injection/refresh/retry/continuation/compaction semantics. The current work remains documentation only; no new module, host compatibility claim or release asset is added.
+The latest user scope correction fixes the [browser-zone privacy contract](TIMEZONE_POLICY.md): replace browser-origin automatic request time-zone reports with the DSH host zone, without fixed-zone selection, raw-zone diagnostics or native injection/refresh/retry/continuation/compaction changes. The user then explicitly authorizes isolated/subagent development/tests, push, release and verified local installation. The [0.7.0 implementation/release contract](HOST_TIMEZONE_070.md) adds only default-off host-timezone, for six modules/seven synchronized distributions on exact rc.3; all applicable earlier feature/ownership/safety gates remain.
 
 ## Required deliverables
 

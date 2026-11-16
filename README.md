@@ -2,15 +2,16 @@
 
 One install, independent enhancements. **一体安装，功能独立开关。**
 
-Workspace-aware model defaults, shared compaction reasoning, native retry management, browser session chimes and goal waiting behind one plugin card. Five genuinely independent single-feature packages are built from the same source, not maintained as forks.
+Workspace-aware model defaults, shared compaction reasoning, native retry management, browser session chimes, goal waiting and host-aligned automatic time-zone reports behind one plugin card. Six genuinely independent single-feature packages are built from the same source, not maintained as forks.
 
-**Published npm baseline (Extras 0.6.1):** Node `>=24.9.0`; exact official DSH `0.2.2-rc.3`, Cordis `4.1.0`. This release uses actual published npm packages, not only a local source build. The observed npm Goal driver SHA256 is `8c56696eaac68e61a38b1068ea0f0dff976440e72b49ef4814fbea93c8b48b0c`, byte-identical to rc.2; shipped source matches official rc.3 tag `38a6a5c965aa99ab525161efb7cc5cf1fe62fced`. Unknown or changed driver bytes still fail closed. Registry manifests do not supply gitHead, so byte equality is not presented as registry authentication of that Git commit. rc.2 users should retain published Extras 0.6.0; the historical 0.6.0-rc.1 source-built preview is unchanged. rc.1 users should retain Extras 0.5.1; alpha.3 users should retain Extras 0.3.1. Extras itself is not published to npm.
+**Native npm baseline (Extras 0.7.0):** Node `>=24.9.0`; exact official DSH `0.2.2-rc.3`, Cordis `4.1.0`. This release uses actual published npm packages, not only a local source build. The observed npm Goal driver SHA256 is `8c56696eaac68e61a38b1068ea0f0dff976440e72b49ef4814fbea93c8b48b0c`, byte-identical to rc.2; shipped source matches official rc.3 tag `38a6a5c965aa99ab525161efb7cc5cf1fe62fced`. Unknown or changed driver bytes still fail closed. Registry manifests do not supply gitHead, so byte equality is not presented as registry authentication of that Git commit. rc.2 users should retain published Extras 0.6.0; the historical 0.6.0-rc.1 source-built preview is unchanged. rc.1 users should retain Extras 0.5.1; alpha.3 users should retain Extras 0.3.1. Extras itself is not published to npm.
 
 ## Distributions
 
 | Package | Capabilities |
 | --- | --- |
-| dsh-extras | All five, independently selectable; the new model-policy module defaults off |
+| dsh-extras | All six, independently selectable; model-policy and host-timezone default off |
+| dsh-extras-host-timezone | Automatic prompt/schedule-default zones follow the DSH host, without changing native time injection; enable/disable requires full page reload |
 | dsh-extras-model-policy | Workspace defaults for root/all descendant model routes and reasoning, plus standalone shared compaction reasoning |
 | dsh-extras-compact-context | Native-policy compaction tools, independent request reasoning policy, optional status/guidance/pressure and PTC timeouts |
 | dsh-extras-retry | Stream/empty-response classification and native provider retry settings; official DSH retry owns execution |
@@ -24,14 +25,14 @@ Choose the combined package **or** any subset of distinct splits. Two distributi
 The exact official npm DSH `0.2.2-rc.3` host must already be installed. Do not install an unofficial rc.1 recovery companion. Choose the intended profile explicitly; the example below is an intentional installation action, not a command run against production during this release task:
 
 ```sh
-dsh plugin --profile web add https://github.com/LMGateX/dsh-extras/releases/download/v0.6.1/dsh-extras-0.6.1.tgz
+dsh plugin --profile web add https://github.com/LMGateX/dsh-extras/releases/download/v0.7.0/dsh-extras-0.7.0.tgz
 ```
 
-For one capability replace the asset name, e.g. `dsh-extras-retry-0.6.1.tgz`. Verify downloads against release SHA256SUMS. The matching DSH runtime must already exist; packages do not install a second host runtime.
+For one capability replace the asset name, e.g. `dsh-extras-retry-0.7.0.tgz`. Verify downloads against release SHA256SUMS. The matching DSH runtime must already exist; packages do not install a second host runtime.
 
-Open **Plugins → DSH Extras → Configure**. All module settings, including the compaction reasoning editor, follow the native Chinese/English language preference and theme. With no locale service, settings use Chinese, matching the preserved Chime editor. Switching language keeps unsaved drafts; technical configuration keys, native route/model/effort IDs, and raw migration diagnostics are not translated. Combined settings have compact-context, model-policy, retry, chime and goalWait sections, with module/responsibility folding and expand/collapse-all. Folding hides mounted editors rather than discarding drafts; headers retain enable/runtime/dirty/error summaries. Each module and every original option is independently editable. Status distinguishes active, disabled, missing dependency, migration-pending, conflict and failed. Enable/disable joins feature disposal before reactivation. Policy-only changes use validated live snapshots without remounting in-flight retry classifiers or releasing goal holds.
+Open **Plugins → DSH Extras → Configure**. All module settings, including the compaction reasoning editor, follow the native Chinese/English language preference and theme. With no locale service, settings use Chinese, matching the preserved Chime editor. Switching language keeps unsaved drafts; technical configuration keys, native route/model/effort IDs, and raw migration diagnostics are not translated. Combined settings have compact-context, model-policy, retry, chime, goalWait and host-timezone sections, with module/responsibility folding and expand/collapse-all. Folding hides mounted editors rather than discarding drafts; headers retain enable/runtime/dirty/error summaries. Each module and every original option is independently editable. Status distinguishes active, disabled, missing dependency, migration-pending, conflict and failed. Enable/disable joins feature disposal before reactivation. Policy-only changes use validated live snapshots without remounting in-flight retry classifiers or releasing goal holds.
 
-Fresh installs preserve the original four module defaults; the new model-policy module and new automatic policy effects start off. When any legacy plugin is discovered, absent capabilities begin disabled and can be explicitly enabled later. Explicit Extras values win over imports. Missing optional services affect only the corresponding module. In native web presets, compact-context operations follow the selected agent’s isolated native compaction backend and policy; Extras does not enable a second global engine or rewrite presets. A preset without a backend returns an explicit unavailable result for that agent.
+Fresh installs preserve the original four module defaults; model-policy, host-timezone and new automatic policy effects start off. When any legacy plugin is discovered, absent capabilities begin disabled and can be explicitly enabled later. Explicit Extras values win over imports. Missing optional services affect only the corresponding module. In native web presets, compact-context operations follow the selected agent’s isolated native compaction backend and policy; Extras does not enable a second global engine or rewrite presets. A preset without a backend returns an explicit unavailable result for that agent.
 
 ## Automatic legacy migration / 自动迁移
 
@@ -62,6 +63,8 @@ The canonical module id is `compact-context`. The development-only `context` id 
 
 ```yaml
 modules:
+  host-timezone:
+    enabled: false
   model-policy:
     enabled: false
     root: null
@@ -153,9 +156,13 @@ Both Compact-context and Model policy editors switch between global defaults and
 
 See the [fixed contract and synthetic rule examples](<docs/COMPACTION_REASONING.md>) for exact defaults, matching, lifecycle and coverage gates.
 
-## Approved design notes (not shipped)
+## Host-aligned request zones / 请求时区跟随 DSH 本机
 
-[Browser-zone privacy / 请求时区跟随 DSH 本机](<docs/TIMEZONE_POLICY.md>) fixes the narrowed objective: prevent browser-detected time zones from entering automatic request reports by using the DSH host zone. Arbitrary fixed zones and native time-injection governance are out of scope; host tools/time references stay unchanged. [Supplemental research](<docs/research/TIMEZONE_REQUEST_PATHS_2026-11-16.md>) classifies source paths, not an expanded feature backlog. This is documentation only, not an available setting or a compatibility upgrade for Extras 0.4.0.
+Enable **Host time zone** explicitly, then perform a **full page reload**. New automatic prompt reports (ordinary, queue/steer and manual subagent prompts) and new schedule draft defaults use the DSH host process IANA zone, including its existing TZ setting—not the browser zone. Existing task rules and explicitly selected zones retain their native meaning. This is not a fixed-zone selector.
+
+The module uses exact rc.3 SHA256-pinned client artifacts served in memory through a distinct resource namespace. Native package files, global Intl/Date/TZ, native time-context injection/refresh/reader, goal/retry/compaction and tool environments are not changed. Unsupported bytes or host-zone acquisition report unavailable; owned protected resources never silently fall back to unprotected bytes. Host serving readiness is not proof that an already-open old page has reloaded. Disabling also requires a full reload to restore native browser defaults; the addon never restarts the host automatically.
+
+The scope is **new automatic fields**, not whole-request anonymity or history scrubbing. Old session history, user-entered text, explicitly selected task rules and browser-only date/DND displays can still contain local zones. Native injection may reuse its old time context under its existing refresh rules; this module does not force a new clock. See the [privacy scope](<docs/TIMEZONE_POLICY.md>), [implementation/release contract](<docs/HOST_TIMEZONE_070.md>) and [source-path research](<docs/research/TIMEZONE_REQUEST_PATHS_2026-11-16.md>).
 
 ## Development
 
