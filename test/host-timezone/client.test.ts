@@ -1,9 +1,22 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createRequire } from 'node:module';
-import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { join, dirname } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import vm from 'node:vm';
 import { createHostTimezoneAdapter } from '../../client/host-timezone.ts';
+
+const consumer = createRequire(import.meta.url);
+const runtime = createRequire(process.env.DSH_RUNTIME_ROOT ? join(process.env.DSH_RUNTIME_ROOT, 'package.json') : consumer.resolve('@deepseek-ai/dsh/package.json'));
+const nativeConnectionSource = readFileSync(join(dirname(runtime.resolve('@deepseek-ai/dsh-client-connection/package.json')), 'lib/client.browser.js'), 'utf8');
+let nativeConnectionApi: any;
+vm.runInThisContext('(window=>{' + nativeConnectionSource + '\n})')({ __ModuleLoader__: { load(spec: any) { nativeConnectionApi = spec.factory(() => { throw new Error('unexpected native dependency'); }); } } });
+function installStockConnection(): any {
+  let connection: any;
+  nativeConnectionApi.installConnection({ provide(name: string, value: unknown) { assert.equal(name, 'connection'); connection = value; } }, { location: { hostname: 'localhost' } });
+  return connection;
+}
 
 const PAGE = '__DSH_EXTRAS_HOST_TIMEZONE_PAGE__';
 const LATCH = '__DSH_EXTRAS_HOST_TIMEZONE_GUARD_V1__';
@@ -13,7 +26,7 @@ function observable<T>(initial: T) {
   return { getSnapshot: () => value, subscribe(fn: () => void) { listeners.add(fn); return () => { listeners.delete(fn); }; },
     set(next: T) { value = next; for (const fn of [...listeners]) fn(); }, listeners };
 }
-function fixture(protectedPage = true, initialEnabled: boolean | undefined = true, nativeHandle?: any) {
+function fixture(protectedPage = true, initialEnabled: boolean | undefined = true, nativeHandle?: any, beforeMount?: (services: Record<string, any>) => void) {
   Reflect.deleteProperty(globalThis, LATCH); Reflect.deleteProperty(globalThis, PAGE);
   const previousFetch = globalThis.fetch;
   const proof = { protocol: 'dsh-extras.host-timezone.v1', epoch: 'epoch-a', proofUrl: 'extras/host-timezone/epoch-a/proof', targets: ids };
@@ -25,9 +38,8 @@ function fixture(protectedPage = true, initialEnabled: boolean | undefined = tru
     return [id, { id, exports, styles: [], edges: new Set() }];
   }));
   const calls: unknown[][] = [];
-  const rpc = { async call(this: unknown, channel: unknown, endpoint: unknown, payload: unknown, signal?: AbortSignal) { calls.push([this, channel, endpoint, payload, signal]); return { ok: true, value: 'accepted' }; } };
-  const originalCall = rpc.call;
-  const connection = nativeHandle ?? { generation, state, rpc, interactions: 'answer', isLoopback: true };
+  const connection = nativeHandle ?? installStockConnection();
+  const originalCall = connection.rpc.call;
   connection.generation = generation; connection.state = state;
   const modules = { version: 'client', manifest: { release: { version: '0.2.2-rc.3' }, modules: ids.map(id => ({ id, rev: 'same' })) }, entries: { state: entries }, loadCache: records };
   const services: Record<string, unknown> = { connection, modules, sessions: {} };
@@ -36,12 +48,20 @@ function fixture(protectedPage = true, initialEnabled: boolean | undefined = tru
   const ctx = { get: (key: string) => services[key], effect(fn: () => (() => unknown)) { const off = fn(); effects.push(off); return off; },
     inject(_deps: unknown, fn: Function) { fn(ctx); return { dispose() { for (const off of effects.splice(0).reverse()) off(); } }; } };
   const proofRequests: { input: unknown; init?: RequestInit }[] = [];
-  globalThis.fetch = (async (input: unknown, init?: RequestInit) => { proofRequests.push({ input, init }); return new Response(null, { status: 204 }); }) as typeof fetch;
+  const acceptFetch = (async (input: unknown, init?: RequestInit) => {
+    if (init?.method === 'POST') {
+      const message = JSON.parse(String(init.body)); calls.push([input, '/api', message.method, message.payload, init.signal]);
+      return Response.json({ type: 'server-response', rpcId: message.rpcId, result: { ok: true, value: 'accepted' } });
+    }
+    proofRequests.push({ input, init }); return new Response(null, { status: 204 });
+  }) as typeof fetch;
+  globalThis.fetch = acceptFetch;
   const React = { createElement: (type: unknown, props: any, ...children: unknown[]) => ({ type, props, children }), useSyncExternalStore: (_subscribe: unknown, read: Function) => read() };
   const adapter = createHostTimezoneAdapter(React);
+  beforeMount?.(services);
   const off = adapter.mount(ctx, { rowId: 'dsh-extras', enabled: () => enabled, subscribe(fn) { intentSubscriptions++; intentListeners.add(fn); return () => { intentListeners.delete(fn); }; } });
   const View = adapter.createView(ctx) as () => any;
-  return { connection, modules, generation, state, records, entries, calls, originalCall, proofRequests, services, ctx, adapter, off,
+  return { connection, modules, generation, state, records, entries, calls, originalCall, proofRequests, services, ctx, adapter, off, acceptFetch,
     phase: () => View().props['data-host-timezone-phase'],
     intentSubscriptions: () => intentSubscriptions,
     setEnabled(next: boolean | undefined) { enabled = next; for (const fn of intentListeners) fn(); },
@@ -58,7 +78,7 @@ test('protected page admits unchanged requests only after same-generation proof,
     const signal = new AbortController().signal;
     const result = await h.connection.rpc.call('/api', 'session/prompt', payload, signal);
     assert.deepEqual(result, { ok: true, value: 'accepted' });
-    assert.equal(h.calls.length, 1); assert.equal(h.calls[0]![0], h.connection.rpc); assert.equal(h.calls[0]![3], payload); assert.equal(h.calls[0]![4], signal);
+    assert.equal(h.calls.length, 1); assert.deepEqual(h.calls[0]![3], payload); assert.equal(h.calls[0]![4], signal);
     assert.equal(h.phase(), 'ready');
     assert.ok(h.proofRequests.length >= 2);
     for (const request of h.proofRequests) { assert.equal(request.input, 'extras/host-timezone/epoch-a/proof'); assert.equal(request.init?.cache, 'no-store'); assert.equal(request.init?.credentials, 'same-origin'); }
@@ -77,7 +97,7 @@ test('unknown accepted intent pauses but never permanently disables a protected 
     h.setEnabled(undefined); finish(new Response(null, { status: 204 }));
     await assert.rejects(() => pending);
     assert.equal(h.phase(), 'waiting');
-    h.setEnabled(true); globalThis.fetch = (async () => new Response(null, { status: 204 })) as typeof fetch;
+    h.setEnabled(true); globalThis.fetch = h.acceptFetch;
     await h.connection.rpc.call('/api', 'session/prompt', {});
     assert.equal(h.calls.length, 1);
   } finally { h.close(); }
@@ -166,11 +186,11 @@ test('fresh disabled page never registers a guard, proof request or connection l
 });
 
 test('actual rc.3 installConnection own plain method passes admission before native JSON serialization', async () => {
-  const consumer = createRequire(import.meta.url);
-  const runtime = createRequire(process.env.DSH_RUNTIME_ROOT ? join(process.env.DSH_RUNTIME_ROOT, 'package.json') : consumer.resolve('@deepseek-ai/dsh/package.json'));
-  const native = await import(pathToFileURL(runtime.resolve('@deepseek-ai/dsh-client-connection/client')).href);
-  let connection: any;
-  native.installConnection({ provide(name: string, value: unknown) { assert.equal(name, 'connection'); connection = value; } }, { location: { hostname: 'localhost' } });
+  const connection = installStockConnection();
+  assert.equal(createHash('sha256').update(nativeConnectionSource).digest('hex'), '5f6107953fa764c80b6c06aa161be318ffa0b71e565ac81536fc4267d5d62412');
+  assert.equal(createHash('sha256').update(Function.prototype.toString.call(connection.rpc.call)).digest('hex'), 'e9f0a1690441d6b00726bc296ad541776a9b711717e5ed3f72dc7375d35ee51b');
+  const rpcDescriptor = Object.getOwnPropertyDescriptor(connection, 'rpc')!;
+  assert.equal(rpcDescriptor.writable, true); assert.equal(rpcDescriptor.configurable, true);
   const descriptor = Object.getOwnPropertyDescriptor(connection.rpc, 'call')!;
   assert.equal(descriptor.value.name, 'call'); assert.equal(descriptor.value.length, 4); assert.equal(descriptor.enumerable, true);
   const h = fixture(true, true, connection); try {
@@ -232,5 +252,114 @@ test('unprotected status reads accepted-intent transitions on render without own
     h.setEnabled(true); assert.equal(h.phase(), 'reload-required');
     assert.equal(h.intentSubscriptions(), 0); assert.equal(h.generation.listeners.size, 0); assert.equal(h.state.listeners.size, 0); assert.equal(h.entries.listeners.size, 0);
     assert.equal(h.proofRequests.length, 0); assert.equal(h.connection.rpc.call, h.originalCall); assert.equal(Reflect.has(globalThis, LATCH), false);
+  } finally { h.close(); }
+});
+
+test('foreign own methods get refusal-only fences, including a fake native name and arity', async () => {
+  for (const frozen of [false, true]) {
+    const connection = installStockConnection(); const dispatched: any[] = [];
+    const foreign = { async call(this: unknown, channel: unknown, endpoint: unknown, payload: unknown, signal?: AbortSignal) { dispatched.push({ receiver: this, channel, endpoint, payload, signal }); return 'foreign-response'; } };
+    if (frozen) Object.freeze(foreign);
+    const before = Object.getOwnPropertyDescriptor(foreign, 'call');
+    connection.rpc = foreign;
+    const h = fixture(true, true, connection); try {
+      await h.ready(); assert.equal(h.phase(), 'unavailable');
+      for (const endpoint of ['session/prompt', 'subagents/prompt', 'schedule/create']) await assert.rejects(() => connection.rpc.call('/api', endpoint, {}), /host-timezone/);
+      await assert.rejects(() => connection.rpc.call('/api', 'schedule/edit', { args: { request: { action: 'update', patch: { timing: null } } } }));
+      assert.equal(dispatched.length, 0); assert.equal(h.proofRequests.length, 0);
+      const signal = new AbortController().signal; const payload = { title: 'kept' };
+      assert.equal(await connection.rpc.call('/api', 'schedule/history', payload, signal), 'foreign-response');
+      assert.equal(dispatched.length, 1); assert.equal(dispatched[0].payload, payload); assert.equal(dispatched[0].signal, signal);
+      assert.equal(dispatched[0].receiver, foreign, 'unrelated RPC keeps the original RPC owner as receiver');
+      if (frozen) { assert.notEqual(connection.rpc, foreign); assert.deepEqual(Object.getOwnPropertyDescriptor(foreign, 'call'), before); }
+      h.off(); await assert.rejects(() => connection.rpc.call('/api', 'session/prompt', {}));
+      assert.equal(dispatched.length, 1); assert.equal(h.generation.listeners.size, 0);
+    } finally { h.close(); }
+  }
+});
+
+test('getter, short-arity and own-toString-spoof owners are refused before their dispatch functions run', async () => {
+  for (const kind of ['getter', 'short-arity', 'toString-spoof']) {
+    const connection = installStockConnection(); let dispatched = 0; let getterReads = 0;
+    const stockSource = Function.prototype.toString.call(connection.rpc.call);
+    const foreign: any = { async call(_channel: unknown, _endpoint: unknown, _payload: unknown, _signal?: AbortSignal) { dispatched++; return 'kept'; } };
+    if (kind === 'short-arity') foreign.call = async function tracedCall() { dispatched++; return 'kept'; };
+    if (kind === 'toString-spoof') Object.defineProperty(foreign.call, 'toString', { value: () => stockSource });
+    if (kind === 'getter') { const method = foreign.call; Object.defineProperty(foreign, 'call', { configurable: true, get() { getterReads++; return method; } }); }
+    connection.rpc = foreign;
+    const h = fixture(true, true, connection); try {
+      await h.ready(); const readsAfterMount = getterReads;
+      assert.equal(h.phase(), 'unavailable');
+      await assert.rejects(() => connection.rpc.call('/api', 'session/prompt', {}), /host-timezone/);
+      assert.equal(dispatched, 0); assert.equal(getterReads, readsAfterMount); assert.equal(h.proofRequests.length, 0);
+      assert.equal(await connection.rpc.call('/api', 'schedule/history', {}), 'kept'); assert.equal(dispatched, 1);
+    } finally { h.close(); }
+  }
+});
+
+test('a frozen actual stock RPC remains untouched while the native Connection owns a refusal shadow', async () => {
+  const connection = installStockConnection(); const originalRpc = connection.rpc; const originalCall = originalRpc.call;
+  Object.freeze(originalRpc);
+  const h = fixture(true, true, connection); try {
+    await h.ready(); assert.equal(h.phase(), 'unavailable'); assert.notEqual(connection.rpc, originalRpc); assert.equal(originalRpc.call, originalCall);
+    await assert.rejects(() => connection.rpc.call('/api', 'session/prompt', {}));
+    assert.equal(h.calls.length, 0); assert.equal(h.proofRequests.length, 0);
+    await connection.rpc.call('/api', 'schedule/history', {}); assert.equal(h.calls.length, 1);
+  } finally { h.close(); }
+});
+
+test('unsupported module ports keep sensitive native calls fenced rather than returning to a raw RPC', async () => {
+  const changes: ((services: Record<string, any>) => void)[] = [
+    services => { services.modules.version = 'server'; },
+    services => { services.modules.loadCache = {}; },
+    services => { services.modules.entries.state = {}; },
+    services => { services.modules.manifest.release.version = 'unsupported'; },
+    services => { services.modules.loadCache.get(ids[0]).exports = {}; },
+  ];
+  for (const change of changes) {
+    const h = fixture(true, true, undefined, change); try {
+      await h.ready(); assert.equal(h.phase(), 'unavailable');
+      for (const endpoint of ['session/prompt', 'subagents/prompt', 'schedule/create']) await assert.rejects(() => h.connection.rpc.call('/api', endpoint, {}));
+      await assert.rejects(() => h.connection.rpc.call('/api', 'schedule/edit', { args: { request: { action: 'update', patch: { timing: null } } } }));
+      assert.equal(h.calls.length, 0); assert.equal(h.proofRequests.length, 0); assert.equal(h.intentSubscriptions(), 0);
+      assert.equal(h.generation.listeners.size, 0); assert.equal(h.state.listeners.size, 0); assert.equal(h.entries.listeners.size, 0);
+      await h.connection.rpc.call('/api', 'schedule/history', {}); assert.equal(h.calls.length, 1);
+    } finally { h.close(); }
+  }
+});
+
+test('a fully immutable foreign Connection is explicitly unavailable and never claimed as a guarded native ABI', async () => {
+  const h = fixture(true, true, undefined, services => { Object.freeze(services.connection.rpc); Object.freeze(services.connection); });
+  try {
+    await h.ready(); assert.equal(h.phase(), 'unavailable'); assert.equal(h.proofRequests.length, 0); assert.equal(h.intentSubscriptions(), 0);
+    const owner = Object.getOwnPropertyDescriptor(h.connection, 'rpc')!;
+    assert.equal(owner.writable, false); assert.equal(owner.configurable, false);
+    assert.equal(h.connection.rpc.call, h.originalCall, 'immutable non-native ownership is not overwritten or represented as guarded');
+  } finally { h.close(); }
+});
+
+test('closed-page remount fences a fresh stock Connection once without rearming or installing observers', async () => {
+  const h = fixture(); try {
+    await h.ready(); const page = (globalThis as any)[PAGE]; const latch = (globalThis as any)[LATCH];
+    h.off(); assert.equal(h.phase(), 'reload-required');
+    const beforeProofs = h.proofRequests.length; const fresh = installStockConnection();
+    const originalCall = fresh.rpc.call; let subscriptions = 0;
+    for (const source of [fresh.generation, fresh.state]) {
+      const subscribe = source.subscribe;
+      source.subscribe = function(this: unknown, listener: () => void) { subscriptions++; return subscribe.call(this, listener); };
+    }
+    h.services.connection = fresh;
+    h.ctx.inject = () => { assert.fail('closed remount must not register a DI owner'); };
+    const React = { createElement: (type: unknown, props: any, ...children: unknown[]) => ({ type, props, children }), useSyncExternalStore: (_subscribe: unknown, read: Function) => read() };
+    const adapter = createHostTimezoneAdapter(React);
+    const off = adapter.mount(h.ctx, { rowId: 'remount', enabled: () => true, subscribe() { assert.fail('closed page never observes accepted intent again'); } });
+    const View = adapter.createView(h.ctx) as () => any;
+    assert.equal(View().props['data-host-timezone-page-status'], 'reload-required');
+    for (const endpoint of ['session/prompt', 'subagents/prompt', 'schedule/create']) await assert.rejects(() => fresh.rpc.call('/api', endpoint, {}), /host-timezone/);
+    await assert.rejects(() => fresh.rpc.call('/api', 'schedule/edit', { args: { request: { action: 'update', patch: { timing: null } } } }));
+    assert.notEqual(fresh.rpc.call, originalCall); assert.equal(h.calls.length, 0); assert.equal(h.proofRequests.length, beforeProofs); assert.equal(subscriptions, 0);
+    assert.equal((globalThis as any)[PAGE], page); assert.equal((globalThis as any)[LATCH], latch);
+    off(); await assert.rejects(() => fresh.rpc.call('/api', 'session/prompt', {}));
+    await fresh.rpc.call('/api', 'schedule/history', {}); assert.equal(h.calls.length, 1);
   } finally { h.close(); }
 });

@@ -56,7 +56,9 @@ export function prepareArtifact(id: string, source: string, version: string, tim
     ? 'function resolvedClientTimeZone(){return ' + zone + '}'
     : 'function defaultTiming(){const timeZone=' + zone + ';const start=startInZone(timeZone,Date.now()+3600000).slice(0,16)+":00";const day=Number(start.slice(8,10));const weekday=(new Date(`${start.slice(0,10)}T00:00:00Z`).getUTCDay()+6)%7+1;return{frequency:`once`,interval:`1`,start,timeZone,rrule:``,weekdays:[weekday],monthDay:day,dailyTime:start.slice(11,16)}}';
   if (typeof sourceEpoch !== 'string' || !/^[A-Za-z0-9._-]{1,128}$/u.test(sourceEpoch)) throw new Error('host-timezone: source epoch is unavailable');
-  const markerBefore = isSession ? 'exports.scopeOf=scopeOf;return module.exports' : 'exports.apply=apply;exports.inject=inject;return module.exports';
+  const markerBefore = isSession
+    ? 'exports.createSessionControlStream=createSessionControlStream;exports.inject=inject;exports.scopeOf=scopeOf;return module.exports'
+    : 'SessionScheduleHover))})}exports.apply=apply;exports.inject=inject;return module.exports';
   requireSingleAnchor(source, markerBefore);
   const markerValue = JSON.stringify({ protocol: 'dsh-extras.host-timezone.v1', epoch: sourceEpoch });
   const markerAfter = markerBefore.replace('return module.exports', 'Object.defineProperty(exports,"__dshExtrasHostTimezoneSource",{value:Object.freeze(' + markerValue + ')});return module.exports');

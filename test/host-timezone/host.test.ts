@@ -155,6 +155,7 @@ test('an unknown response byte outside the sampler never passes the full artifac
   f.sources.set(ids[0]!,source.replace('function historyEntries','function changedEntries'));
   assert.equal((await f.request(url)).status,503);
   assert.equal(hostTimezone.runtimeStatus(f.fiber.ctx).capabilities.hostTimezone.phase,'unavailable');
+  assert.equal(hostTimezone.runtimeStatus(f.fiber.ctx).details.hostTimezone.failureStage,'native-response-fingerprint','a bounded native-only reason identifies the failing verification stage');
 });
 
 test('unknown package source bytes never mount the adapter even with the expected name and version', async t => {
@@ -386,6 +387,9 @@ for(const phase of ['mount','proof'] as const)test('connection package pin rejec
     await mkdir(directory,{recursive:true});
     await writeFile(join(directory,'package.json'),JSON.stringify({name:'@deepseek-ai/'+name,version:name==='dsh-client-connection'&&phase==='mount'?'0.2.2-rc.99':'0.2.2-rc.3'}));
   }
+  const connectionLib=join(root,'node_modules/@deepseek-ai/dsh-client-connection/lib');
+  await mkdir(connectionLib);
+  await writeFile(join(connectionLib,'client.browser.js'),await readFile(join(dirname(require.resolve('@deepseek-ai/dsh-client-connection/package.json')),'lib/client.browser.js')));
   const f=await fixture(t,true,{configure:({ctx}:any)=>{ctx.get('profileContext').installAnchor=join(root,'entry.js');}});
   if(phase==='mount'){
     assert.equal(hostTimezone.runtimeStatus(f.fiber.ctx).capabilities.hostTimezone.phase,'unavailable');
@@ -395,5 +399,59 @@ for(const phase of ['mount','proof'] as const)test('connection package pin rejec
     assert.equal((await f.request(page.proofUrl)).status,204);
     await writeFile(join(root,'node_modules/@deepseek-ai/dsh-client-connection/package.json'),JSON.stringify({name:'@deepseek-ai/dsh-client-connection',version:'0.2.2-rc.99'}));
     assert.equal((await f.request(page.proofUrl)).status,503);
+  }
+});
+
+test('owned multi-plugin native combo transforms target markers without rejecting an unrelated shared export suffix',async t=>{
+  const thirdId='@deepseek-ai/dsh-client-ui-renderer';
+  const thirdPath=join(dirname(require.resolve(thirdId+'/package.json')),'lib/client.js');
+  const thirdSource=await readFile(thirdPath,'utf8');
+  const generic='exports.apply=apply;exports.inject=inject;return module.exports';
+  assert.ok(thirdSource.includes(generic),'real third native factory shares the formerly ambiguous suffix');
+  const f=await fixture(t,true,{configure:({graph,sources}:any)=>{
+    const all=[...ids,thirdId];
+    const url='plugins/??'+all.map(id=>id+'/client.js').join(',')+'&rev=native-v1';
+    graph.entries=all.map(id=>({id,url,rev:'native-v1'}));
+    graph.batches=[{phase:'application',url,rev:'native-v1',entries:all}];
+    sources.set(thirdId,thirdSource);
+  }});
+  const rows=f.table();
+  const response=await f.request(rows.find(row=>row.name==='__DSH_BOOT__').value.batches[0].url);
+  assert.equal(response.status,200,'a real unrelated factory cannot make a target-only transform reject the whole native combo');
+  const body=await response.text();
+  const thirdBody=thirdSource.slice(0,thirdSource.lastIndexOf('//# sourceMappingURL=')).trimEnd();
+  assert.ok(body.includes(thirdBody),'unrelated native factory bytes stay untouched');
+  assert.equal(body.split('__dshExtrasHostTimezoneSource').length-1,2,'only target factories receive markers');
+  assert.equal(body.split(generic).length-1,1,'unrelated generic native export suffix remains unchanged');
+});
+
+for(const phase of ['mount','proof'] as const)for(const corruption of ['missing','changed'] as const)test('connection raw bytes pin rejects '+corruption+' browser artifact at '+phase,async t=>{
+  const root=await mkdtemp(join(tmpdir(),'host-zone-connection-bytes-'));
+  assert.equal(dirname(root),tmpdir());
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  for(const name of ['dsh','dsh-client-modules','dsh-host-webserver','dsh-client-connection']){
+    const directory=join(root,'node_modules/@deepseek-ai',name);
+    await mkdir(directory,{recursive:true});
+    await writeFile(join(directory,'package.json'),JSON.stringify({name:'@deepseek-ai/'+name,version:'0.2.2-rc.3'}));
+  }
+  const lib=join(root,'node_modules/@deepseek-ai/dsh-client-connection/lib');
+  await mkdir(lib);
+  const path=join(lib,'client.browser.js');
+  const native=await readFile(join(dirname(require.resolve('@deepseek-ai/dsh-client-connection/package.json')),'lib/client.browser.js'));
+  const changed=Buffer.concat([native,Buffer.from('\n// non-stock closed-over support bytes\n')]);
+  if(phase==='proof'||corruption==='changed')await writeFile(path,phase==='mount'?changed:native);
+  const f=await fixture(t,true,{configure:({ctx}:any)=>{ctx.get('profileContext').installAnchor=join(root,'entry.js');}});
+  if(phase==='mount'){
+    assert.equal(hostTimezone.runtimeStatus(f.fiber.ctx).capabilities.hostTimezone.phase,'unavailable','valid workspace bytes must not hide an unsupported installAnchor artifact');
+    assert.equal(f.routes.has('/extras/host-timezone'),false);
+  }else{
+    const page=f.table().find(row=>row.name==='__DSH_EXTRAS_HOST_TIMEZONE_PAGE__').value;
+    assert.equal((await f.request(page.proofUrl)).status,204);
+    if(corruption==='missing'){
+      assert.equal(dirname(path),lib);
+      await rm(path);
+    }else await writeFile(path,changed);
+    assert.equal((await f.request(page.proofUrl)).status,503,'every proof revalidates the untransformed connection support bytes');
+    assert.equal(hostTimezone.runtimeStatus(f.fiber.ctx).details.hostTimezone.failureStage,'host-and-artifact-verification');
   }
 });

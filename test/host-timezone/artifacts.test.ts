@@ -120,3 +120,17 @@ test('source provenance is readonly, non-enumerable and bound to the required ep
     for (const bad of ['', 'x/y', 'x?bad', '\n']) assert.throws(() => prepareArtifact(id, original.source, original.version, 'UTC', bad), /source epoch/);
   }
 });
+
+test('real native combo preserves a third plugin with the same generic exports suffix', () => {
+  const session = native(sessionId); const schedule = native(scheduleId);
+  const third = native('@deepseek-ai/dsh-client-ui-cordis');
+  const generic = 'exports.apply=apply;exports.inject=inject;return module.exports';
+  assert.ok(schedule.source.includes(generic) && third.source.includes(generic), 'real audited rc.3 plugins share the short suffix');
+  const a = prepareArtifact(sessionId, session.source, session.version, 'UTC', 'epoch-a');
+  const b = prepareArtifact(scheduleId, schedule.source, schedule.version, 'UTC', 'epoch-a');
+  const full = session.source + '\n' + schedule.source + '\n' + third.source;
+  const transformed = applyArtifactPatches(full, [a, b]);
+  assert.equal(transformed, applyArtifactPatches(session.source, [a]) + '\n' + applyArtifactPatches(schedule.source, [b]) + '\n' + third.source);
+  assert.equal(transformed.split('__dshExtrasHostTimezoneSource').length - 1, 2);
+  new vm.Script(transformed);
+});

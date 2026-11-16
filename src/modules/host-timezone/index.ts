@@ -16,7 +16,8 @@ const PREFIX = '/extras/host-timezone';
 const TARGETS = new Set<string>(HOST_TIMEZONE_TARGET_IDS);
 
 type Capability = { phase: 'disabled' | 'standby' | 'unavailable'; reason?: string };
-interface Details { requested: boolean; status: 'disabled' | 'needs-full-reload' | 'unavailable'; adapterVersion: string; timeZone?: string; reason?: string }
+type FailureStage = 'source-generation-expired' | 'host-and-artifact-verification' | 'native-source-advertisement' | 'native-resource-fetch' | 'native-resource-response' | 'native-resource-body' | 'native-response-fingerprint' | 'target-patch-anchors';
+interface Details { requested: boolean; status: 'disabled' | 'needs-full-reload' | 'unavailable'; adapterVersion: string; timeZone?: string; reason?: string; failureStage?: FailureStage }
 interface State { capabilities: { hostTimezone: Capability }; details: { hostTimezone: Details } }
 interface Entry { id: string; url: string; rev: string; [key: string]: unknown }
 interface Batch { url: string; rev: string; entries: string[]; [key: string]: unknown }
@@ -86,8 +87,14 @@ async function verifyHost(anchor: unknown): Promise<void> {
   if (typeof anchor !== 'string' || !isAbsolute(anchor)) throw new Error('native-install-anchor-unavailable');
   const require = createRequire(anchor);
   for (const id of ['@deepseek-ai/dsh', '@deepseek-ai/dsh-client-modules', '@deepseek-ai/dsh-host-webserver', '@deepseek-ai/dsh-client-connection']) {
-    const manifest = JSON.parse(await readFile(require.resolve(id + '/package.json'), 'utf8')) as { name?: string; version?: string };
+    const manifestPath = require.resolve(id + '/package.json');
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as { name?: string; version?: string };
     if (manifest.name !== id || manifest.version !== VERSION) throw new Error('unsupported-native-host-version');
+    if (id === '@deepseek-ai/dsh-client-connection') {
+      // Verify the unmodified browser implementation and its closed-over support, not a transformed target.
+      const source = await readFile(join(dirname(manifestPath), 'lib/client.browser.js'));
+      if (createHash('sha256').update(source).digest('hex') !== '5f6107953fa764c80b6c06aa161be318ffa0b71e565ac81536fc4267d5d62412') throw new Error('unsupported-native-connection-artifact');
+    }
   }
 }
 async function artifactsOf(native: ClientModules, graph: Graph, zone: string, epoch: string): Promise<Artifact[]> {
@@ -210,25 +217,36 @@ export async function apply(ctx: Context, config: Partial<Config> = {}): Promise
         if (proof && request.method !== 'GET') return reply(405);
         const mapping = generation.mappings.get(url.pathname);
         if (!proof && !mapping) return reply(404);
+        let failureStage: FailureStage = 'host-and-artifact-verification';
         try {
           const artifacts = await validate(generation);
           if (proof) { assertCurrent(generation); return reply(204); }
+          failureStage = 'native-source-advertisement';
           const nativeSource = mapping!.source;
           const advertised = [...native.graph().entries, ...native.graph().batches].some(row => (row.url.startsWith('/') ? row.url : '/' + row.url) === nativeSource);
           if (!advertised) throw new Error('native-graph-changed');
+          failureStage = 'native-resource-fetch';
           const response = await native.fetchBundle(new Request(new URL(nativeSource, url.origin), { method: 'GET', signal: request.signal }));
           assertCurrent(generation);
+          failureStage = 'native-resource-response';
           if (response.status !== 200 || !/^(?:text|application)[/]javascript(?:;|$)/u.test(response.headers.get('content-type') ?? '')) throw new Error('native-resource-unavailable');
+          failureStage = 'native-resource-body';
           const body = await response.text();
           assertCurrent(generation);
           const selected = artifacts.filter(item => mapping!.targetIds.includes(item.id));
+          failureStage = 'native-response-fingerprint';
           for (const artifact of selected) if (body.split(nativeBody(artifact.source)).length !== 2) throw new Error('native-response-fingerprint-mismatch');
+          failureStage = 'target-patch-anchors';
           const patched = stripTrailer(applyArtifactPatches(body, selected.map(item => item.prepared)));
           assertCurrent(generation);
           const headers = { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', etag: '"host-timezone-' + hash(patched) + '"' };
           return new Response(request.method === 'HEAD' ? null : patched, { status: 200, headers });
-        } catch {
-          if (current(generation)) unavailable(state, 'native-artifact-or-host-zone-changed-needs-full-reload');
+        } catch (error) {
+          if (current(generation)) {
+            unavailable(state, 'native-artifact-or-host-zone-changed-needs-full-reload');
+            // Only fixed native-stage identifiers escape; never publish raw errors or filesystem paths.
+            state.details.hostTimezone.failureStage = error instanceof Error && error.message === 'source-generation-expired' ? 'source-generation-expired' : failureStage;
+          }
           return reply(503);
         }
       };

@@ -153,7 +153,7 @@ async function fixture(t: TestContext, name: string, browserZone: string, unsupp
       probe: await page.evaluate(() => (globalThis as any).__DSH_BOOT__.entries.filter((entry: any) => entry.id.includes('probe'))) }) + '\n' + clean(), { cause });
   }
   const dismiss = async () => { const dialog = page.getByRole('dialog', { name: 'Get started', exact: true }); if (await dialog.isVisible()) await dialog.getByRole('button', { name: 'Close', exact: true }).click(); };
-  const configure = async () => { await dismiss(); await page.getByRole('button', { name: 'Plugins', exact: true }).click();
+  const configure = async () => { await dismiss(); if (await page.locator('[data-package="' + name + '"]').isVisible()) return; await page.getByRole('button', { name: 'Plugins', exact: true }).click();
     await page.getByRole('button', { name: 'View ' + name, exact: true }).click();
     await page.getByRole('button', { name: 'Configure ' + name, exact: true }).click();
     await page.locator('[data-package="' + name + '"]').waitFor();
@@ -164,7 +164,17 @@ async function fixture(t: TestContext, name: string, browserZone: string, unsupp
     await stop(); host = await startHost(port, timeZone);
     assert.equal(new URL(host.url).origin, origin, 'restart uses the exact existing isolated origin, never 3080');
   };
-  return { page, name, temp, env, profile, profileDir, wires, status, configure, dismiss, restart, reload: async () => { await page.reload(); await page.waitForFunction(() => Boolean((globalThis as any).__HTZ_NATIVE__)); } };
+  const reload = async () => {
+    await page.reload(); await page.waitForFunction(() => Boolean((globalThis as any).__HTZ_NATIVE__));
+    if (await page.evaluate(() => Boolean((globalThis as any).__DSH_EXTRAS_HOST_TIMEZONE_PAGE__))) {
+      await configure();
+      try { await expect.poll(async () => page.locator('[data-host-timezone-page-status]').getAttribute('data-host-timezone-page-status')).toBe('ready'); }
+      catch (cause) { throw new Error('Protected native page did not become ready: ' + JSON.stringify({
+        pageStatus: await page.locator('[data-host-timezone-page-status]').innerText(), browserErrors, server: (await status()).modules['host-timezone'],
+      }), { cause }); }
+    }
+  };
+  return { page, name, temp, env, profile, profileDir, wires, status, configure, dismiss, restart, reload };
 }
 
 type Fixture = Awaited<ReturnType<typeof fixture>>;

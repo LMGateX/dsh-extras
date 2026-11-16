@@ -3,7 +3,8 @@ Copyright (c) 2026 LMGateX. MIT License; see the distribution LICENSE.
 
 The exact-version adapter includes minimal function anchors and replacement
 forms derived from DeepSeek Harness 0.2.2-rc.3 session-controller and schedule
-client artifacts. Native installation files are read only and are not rewritten.
+client artifacts, plus an exact callable-source compatibility expectation from
+client-connection. Native installation files are read only and are not rewritten.
 Source: https://github.com/deepseek-ai/deepseek-harness
 
 Audited npm packages: @deepseek-ai/dsh-api-session-controller@0.2.2-rc.3
@@ -15,8 +16,18 @@ Audited npm package: @deepseek-ai/dsh-client-ui-schedule@0.2.2-rc.3
   its existing startInZone() formatter and preserves explicit/stored rules.
   lib/client.js SHA-256:
   b8dda300c8f835d825c8cbc23e56d66ffb4167d9c072f30468897611a9f34379
-The following upstream MIT notice applies to those copied function anchors
-and adapted default-construction forms:
+Audited unmodified support package: @deepseek-ai/dsh-client-connection@0.2.2-rc.3
+  Source callable: src/client/rpc.ts createWebConnectionRpc().call.
+  The selected client adapter compares the exact emitted callable source before
+  admission; its closed-over implementation is covered by the raw browser pin.
+  lib/client.browser.js SHA-256:
+  5f6107953fa764c80b6c06aa161be318ffa0b71e565ac81536fc4267d5d62412
+  Emitted callable source SHA-256 (Function.prototype.toString):
+  e9f0a1690441d6b00726bc296ad541776a9b711717e5ed3f72dc7375d35ee51b
+  This support artifact is verified only: it is neither transformed nor marked.
+
+The following upstream MIT notice applies to those copied function anchors,
+expected callable source, and adapted default-construction forms:
 
 MIT License
 

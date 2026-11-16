@@ -22,6 +22,11 @@ const PAGE = '__DSH_EXTRAS_HOST_TIMEZONE_PAGE__';
 const LATCH = '__DSH_EXTRAS_HOST_TIMEZONE_GUARD_V1__';
 const TARGETS = ['@deepseek-ai/dsh-api-session-controller', '@deepseek-ai/dsh-client-ui-schedule'];
 const FAILURE = 'host-timezone: reload this page before sending time-bearing requests';
+// rc.3 browser artifact 5f6107953fa764c80b6c06aa161be318ffa0b71e565ac81536fc4267d5d62412.
+// Actual installConnection callable SHA-256 e9f0a1690441d6b00726bc296ad541776a9b711717e5ed3f72dc7375d35ee51b.
+// Exact native callable source, not a name/arity assertion or a caller-owned toString method.
+const STOCK_CALL = "async call(channel,endpoint,payload,signal){assertTarget(channel,endpoint);const rpcId=RpcId(randomUuid());const message={type:`client-request`,rpcId,method:endpoint,payload};const response=await send(`${channel}/${endpoint}`.slice(1),{method:`POST`,headers:{\"content-type\":`application/json`},body:JSON.stringify(message),...signal===void 0?{}:{signal}});if(!response.ok)throw new Error(`transport failure for ${channel}/${endpoint}: HTTP ${response.status}`);const full=response.headers.get(`content-type`)?.split(`;`,1)[0]?.trim().toLowerCase()===`multipart/form-data`?await parseBinaryResponse(response):parseConnectionResponse(await response.json());signal?.throwIfAborted();if(full.rpcId!==rpcId)throw new Error(`rpcId mismatch for ${endpoint}: sent ${rpcId}, got ${full.rpcId}`);return full.result}";
+const callableSource = Function.prototype.toString;
 
 function pageProof(raw: any): PageProof | undefined {
   if (!raw || raw.protocol !== PROTOCOL || typeof raw.epoch !== 'string' || !/^[A-Za-z0-9._-]{1,128}$/u.test(raw.epoch)
@@ -39,6 +44,38 @@ function sensitive(channel: unknown, endpoint: unknown, payload: any): boolean {
   const request = payload?.args?.request;
   return endpoint === 'schedule/edit' && request?.action === 'update' && request.patch != null
     && Object.prototype.hasOwnProperty.call(request.patch, 'timing');
+}
+/** Unknown owners are never authorized, but still need an effective rejection path. */
+function installRefusal(connection: any, rpc: any): boolean {
+  if (!rpc || (typeof rpc !== 'object' && typeof rpc !== 'function')) return false;
+  const descriptor = Object.getOwnPropertyDescriptor(rpc, 'call');
+  const original = descriptor && 'value' in descriptor ? descriptor.value : undefined;
+  const inherited = descriptor ? undefined : Reflect.get(rpc, 'call', rpc);
+  let shadow: any;
+  const refusal = async function(this: unknown, channel: unknown, endpoint: unknown, payload: unknown, _signal?: AbortSignal) {
+    if (sensitive(channel, endpoint, payload)) throw new Error(FAILURE);
+    const receiver = this === shadow ? rpc : this;
+    const method = descriptor?.get ? Reflect.apply(descriptor.get, receiver, []) : descriptor ? original : inherited;
+    return Reflect.apply(method, receiver, Array.from(arguments));
+  };
+  try {
+    if (descriptor?.configurable || descriptor && 'value' in descriptor && descriptor.writable || !descriptor && Object.isExtensible(rpc)) {
+      // A configurable getter is replaced without executing it on the sensitive path.
+      const next = descriptor && 'value' in descriptor ? { ...descriptor, value: refusal }
+        : { value: refusal, enumerable: descriptor?.enumerable ?? true, configurable: descriptor?.configurable ?? true, writable: false };
+      Object.defineProperty(rpc, 'call', next);
+      return Object.getOwnPropertyDescriptor(rpc, 'call')?.value === refusal;
+    }
+    const owner = Object.getOwnPropertyDescriptor(connection, 'rpc');
+    if (!owner || !('value' in owner) || owner.value !== rpc || !owner.writable && !owner.configurable) return false;
+    // Native rc.3 Connection owns a replaceable data field. Do not mutate frozen foreign RPCs.
+    const descriptors = Object.getOwnPropertyDescriptors(rpc);
+    descriptors.call = { value: refusal, enumerable: descriptor?.enumerable ?? true, configurable: false, writable: false };
+    shadow = Object.create(Object.getPrototypeOf(rpc), descriptors);
+    if (Object.getOwnPropertyDescriptor(connection, 'rpc')?.value !== rpc) return false;
+    Object.defineProperty(connection, 'rpc', { ...owner, value: shadow });
+    return connection.rpc === shadow;
+  } catch { return false; }
 }
 function createLatch(proof: PageProof, proofObject: unknown): PageLatch {
   const page: PageLatch = {
@@ -86,7 +123,13 @@ export function createHostTimezoneAdapter(React: any) {
       const previous = (globalThis as any)[LATCH] as PageLatch | undefined;
       if (previous) {
         page = previous;
-        if (previous.closed) return () => {};
+        if (previous.closed) {
+          // HMR may install a new native Connection on the same permanently revoked page.
+          // Fence the current instance once, without acquiring DI or observable ownership.
+          const current = typeof ctx?.get === 'function' ? ctx.get('connection') : undefined;
+          if (current) installRefusal(current, current.rpc);
+          return () => {};
+        }
         if (previous.protocol !== PROTOCOL || previous.proofObject !== raw || previous.owned) {
           previous.revoke?.('The protected page guard owner changed.', 'unavailable');
           fallback = { phase: 'unavailable', reason: 'A foreign page guard owns this document.' };
@@ -218,16 +261,18 @@ export function createHostTimezoneAdapter(React: any) {
         const b: Binding = { ctx: scope, connection, modules, sessions: scope.get('sessions'), rpc: connection?.rpc, verified: false };
         if (binding) close('The native client service owner changed.');
         binding = b;
-        if (!observable(connection?.generation) || !observable(connection?.state) || modules?.version !== 'client'
-          || !observable(modules?.entries?.state) || !(modules?.loadCache instanceof Map)) {
-          close('Unsupported native connection/module interface.', 'unavailable'); return;
-        }
+        if (latch.closed) { installRefusal(connection, b.rpc); return; }
         const descriptor = Object.getOwnPropertyDescriptor(b.rpc ?? {}, 'call');
-        if ((globalThis as any).__DSH_TRANSPORT__ !== undefined || connection.interactions !== 'answer' || typeof connection.isLoopback !== 'boolean'
-          || b.rpc.open !== undefined || Object.getPrototypeOf(b.rpc) !== Object.prototype
-          || !descriptor || typeof descriptor.value !== 'function' || descriptor.value.name !== 'call' || descriptor.value.length !== 4
-          || descriptor.value.constructor?.name !== 'AsyncFunction' || !descriptor.configurable || !descriptor.writable || descriptor.get || descriptor.set) {
-          close('Unsupported or foreign RPC admission owner.', 'unavailable'); return;
+        const rpcOwner = Object.getOwnPropertyDescriptor(connection ?? {}, 'rpc');
+        const supported = (globalThis as any).__DSH_TRANSPORT__ === undefined && connection?.interactions === 'answer' && typeof connection?.isLoopback === 'boolean'
+          && b.rpc?.open === undefined && b.rpc && Object.getPrototypeOf(b.rpc) === Object.prototype
+          && rpcOwner && 'value' in rpcOwner && rpcOwner.value === b.rpc && rpcOwner.writable && rpcOwner.configurable
+          && descriptor && typeof descriptor.value === 'function' && descriptor.configurable && descriptor.writable
+          && callableSource.call(descriptor.value) === STOCK_CALL;
+        if (!supported) {
+          const fenced = installRefusal(connection, b.rpc);
+          close(fenced ? 'Unsupported RPC owner; sensitive calls are refused.' : 'No controllable same-Connection RPC refusal path is available.', 'unavailable');
+          return;
         }
         const original = descriptor.value;
         const wrapper = async function(this: unknown, channel: unknown, endpoint: unknown, payload: unknown, signal?: AbortSignal) {
@@ -241,6 +286,10 @@ export function createHostTimezoneAdapter(React: any) {
         };
         b.wrapper = wrapper;
         Object.defineProperty(b.rpc, 'call', { ...descriptor, value: wrapper });
+        if (!observable(connection?.generation) || !observable(connection?.state) || modules?.version !== 'client'
+          || !observable(modules?.entries?.state) || !(modules?.loadCache instanceof Map)) {
+          close('Unsupported native connection/module interface.', 'unavailable'); return;
+        }
         const offs = [connection.generation.subscribe(sync), connection.state.subscribe(sync), modules.entries.state.subscribe(sync)];
         const cleanup = () => {
           close('The protected native client owner was disposed.');

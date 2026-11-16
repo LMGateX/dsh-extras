@@ -45,6 +45,22 @@ The [fixed correction](HOST_TIMEZONE_070.md#review-driven-source-validity-correc
 
 Initial existing packed suite:59/60 PASS, one obsolete combined-GUI five-module assertion failed (actual six); this is a test expectation correction, not a successful final suite. All seven split/combined installable consumers and public declarations ran, but final full packed rerun remains mandatory.
 
+## Repaired candidate observations (not final certification)
+
+The parent reran exact preflight/typecheck and all source tests after the first correction:807/807 PASS,0 fail/skip,245305.495982ms. This predates the later combo-anchor and callable-owner corrections and does not certify those changes. Host focused gates subsequently reached26, pure transforms6 and client13; integration29 were executed, not projected as a combined suite count.
+
+Candidate2 actual native-browser matrix:2/7 PASS,5/7 FAIL at first protected reload, before the restart/cache/live-TZ assertions. A real third native renderer/cordis factory reproduced the cause: the generic schedule export marker anchor appeared in multiple combo modules. Narrowing to the audited schedule-specific suffix preserved raw SHA checks and exact-one matching; real three-factory artifact/owned-resource tests changed RED503 to GREEN200 while leaving the third factory unchanged. Native cold-fetch source did not support the earlier speculative rebuild-event hypothesis; no prewarming or weakened generation fences were added.
+
+### Standards follow-up at e9b7f46 plus eadd04f
+
+Hard1/P1, Judgement0: unsupported/foreign RPC method checks marked unavailable before installing any refusal wrapper, allowing the prior implementation to dispatch. Independent in-memory evidence counted1 sensitive dispatch. This remains a publication blocker until refusal and zero-dispatch tests pass.
+
+### Spec follow-up at e9b7f46 plus eadd04f
+
+Missing0, scope-creep0, implementation-error1/P2: method name/arity/async descriptor shape alone did not certify the original native callable source. An equivalent-signature foreign implementation could be labeled ready. Actual emitted-native callable provenance and refusal of unknown owners require correction and independent re-review. Neither axis is hidden by previous positive source tests.
+
+Candidate3 archives were built for stock-path native debug after the unique-anchor correction; they are not a formal release or final acceptance receipt. No production installation has occurred.
+
 ## Guarantee limits
 
 The feature protects newly generated automatic zones after a full protected page load, not arbitrary user text, explicit task choices, external content or old session history. It does not force native clock reinjection or unify tool environments. Installed, server-serving-ready and actually loaded browser protection must be reported separately. Unknown/changed bytes and unavailable host context are not successful protection. Local installation does not authorize native source patches, unrelated settings changes, automatic host restart or overwriting concurrent personal edits.
