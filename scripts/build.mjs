@@ -28,19 +28,22 @@ for (const { name, modules } of distributions) {
   const hasReasoning = modules.includes('compact-context') || modules.includes('model-policy');
   const hasModelPolicy = modules.includes('model-policy');
   const hasRetry = modules.includes('retry');
+  const hasHostTimezone = modules.includes('host-timezone');
   const client = 'import {createExtrasClient} from "./client/composition.ts";\n'
     + (hasChime ? 'import {createChimeAdapter} from "./client/chime.ts";\n' : '')
     + (hasReasoning ? 'import {createReasoningAdapter} from "./client/reasoning-settings.ts";\n' : '')
     + (hasModelPolicy ? 'import {createModelPolicyAdapter} from "./client/model-policy-settings.ts";\n' : '')
     + (hasRetry ? 'import {createRetrySettingsAdapter} from "./client/retry-settings.ts";\n' : '')
     + (hasRetry ? 'import {createRequestRecoveryAdapter} from "./client/request-recovery.ts";\n' : '')
+    + (hasHostTimezone ? 'import {createHostTimezoneAdapter} from "./client/host-timezone.ts";\n' : '')
     + 'window.__ModuleLoader__.load({id:' + JSON.stringify(name) + ',factory(require){return createExtrasClient('
     + JSON.stringify({rowId:name,packageName:name,moduleIds:modules}) + ',require("react"),'
     + (hasChime ? 'createChimeAdapter' : 'undefined') + ','
     + (hasReasoning ? '(React)=>createReasoningAdapter(React,' + JSON.stringify(name) + ')' : 'undefined') + ','
     + (hasModelPolicy ? 'createModelPolicyAdapter' : 'undefined') + ','
     + (hasRetry ? 'createRetrySettingsAdapter' : 'undefined') + ','
-    + (hasRetry ? 'createRequestRecoveryAdapter' : 'undefined') + ');}});';
+    + (hasRetry ? 'createRequestRecoveryAdapter' : 'undefined') + ','
+    + (hasHostTimezone ? 'createHostTimezoneAdapter' : 'undefined') + ');}});';
   await build({stdin: {contents: client, resolveDir: root, sourcefile: 'extras-client-entry.ts', loader: 'ts'}, outfile: join(out, 'lib/client.js'), bundle: true, platform: 'browser', format: 'iife', target: 'es2022', sourcemap: true, legalComments: 'linked'});
   await writeFile(join(out, 'cordis.patch.yml'), '# Generated from the same feature source as every Extras distribution.\n- insert:\n    - id: ' + name + '\n      name: ' + name + '\n      config: {}\n');
   // Driver ownership detection resolves these dynamically from the installed DSH anchor.

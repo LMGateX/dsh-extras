@@ -57,6 +57,8 @@ test('actual emitted and packed clients carry reasoning implementation only in s
       for (const marker of reasoningMarkers) assert.equal(packed.includes(marker), selected, name + ': selected payload ' + marker);
       const modelSelected=name==='dsh-extras'||name==='dsh-extras-model-policy';
       const retrySelected=name==='dsh-extras'||name==='dsh-extras-retry';
+      const hostTimezoneSelected=name==='dsh-extras'||name==='dsh-extras-host-timezone';
+      assert.equal(packed.includes('function createHostTimezoneAdapter('),hostTimezoneSelected,name+': selected timezone admission factory');
       for(const marker of ['function createModelPolicyEditor(', 'function ModelPolicySettings(', 'function createModelPolicyAdapter(']) assert.equal(packed.includes(marker),modelSelected,name+': model payload '+marker);
       for(const marker of ['function createRetrySettingsSource(', 'function RetrySettings(', 'function createRetrySettingsAdapter(', 'function createRequestRecoverySource(', 'function createRequestRecoveryAdapter(']) assert.equal(packed.includes(marker),retrySelected,name+': native retry/recovery payload '+marker);
       const map = JSON.parse(execFileSync('tar', ['-xOf', archive, 'package/lib/client.js.map'], { encoding: 'utf8', env }));
@@ -65,10 +67,13 @@ test('actual emitted and packed clients carry reasoning implementation only in s
       }
       for(const source of ['client/model-policy-settings.ts','src/modules/model-policy/policy.ts'])assert.equal(map.sources.some((path:string)=>path.endsWith(source)),modelSelected,name+': selected model source '+source);
       for(const source of ['client/retry-settings.ts','client/request-recovery.ts','src/modules/retry/recovery.ts'])assert.equal(map.sources.some((path:string)=>path.endsWith(source)),retrySelected,name+': selected native retry/recovery source '+source);
+      assert.equal(map.sources.some((path:string)=>path.endsWith('client/host-timezone.ts')),hostTimezoneSelected,name+': selected timezone guard source');
       for(const source of ['client/shared-compaction.ts'])assert.equal(map.sources.some((path:string)=>path.endsWith(source)),selected,name+': selected shared browser source '+source);
       assert.equal(map.sources.some((path:string)=>path.includes('src/shared-compaction/')),false,name+': native canonical authority is never bundled into a browser');
       for (const facade of ['client/index.ts', 'client/settings.ts']) assert.equal(map.sources.some((path: string) => path.endsWith(facade)), false, name + ': production bypasses all-feature source facade');
       const manifest = JSON.parse(execFileSync('tar', ['-xOf', archive, 'package/package.json'], { encoding: 'utf8', env }));
+      for(const service of ['@deepseek-ai/dsh-client-connection','@deepseek-ai/dsh-client-modules']) assert.equal(manifest.dsh.client.inject.includes(service),hostTimezoneSelected,name+': selected timezone service '+service);
+      if(hostTimezoneSelected) assert.ok(manifest.dsh.client.inject.includes('@deepseek-ai/dsh-api-session-controller'));
       if (selected) assert.ok(manifest.dsh.client.inject.includes('@deepseek-ai/dsh-api-remotes'));
       if (name === 'dsh-extras-retry') assert.equal(manifest.dsh.client.inject.includes('@deepseek-ai/dsh-api-remotes'), true, 'native recovery requires the declared remote service');
       if (name === 'dsh-extras-goal-wait') assert.equal(manifest.dsh.client.inject.includes('@deepseek-ai/dsh-api-remotes'), false);

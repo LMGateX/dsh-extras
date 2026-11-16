@@ -5,6 +5,7 @@ const require = createRequire(import.meta.url);
 const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 import { createSettingsView } from '../../client/settings.ts';
+import {createSettingsView as createCoreSettingsView} from '../../client/settings-core.ts';
 import { useSettingsText, translateSettingsError } from '../../client/settings-ui.ts';
 
 const descriptor = { rowId: 'dsh-extras', packageName: 'dsh-extras', moduleIds: ['compact-context', 'retry', 'goalWait'] as const };
@@ -17,7 +18,7 @@ test('all non-chime settings have Chinese titles, labels, units and actions with
   for (const text of ['Extras 设置', '上下文压缩', '流式与空响应重试', '目标等待', '保存', '放弃草稿', '秒', '毫秒']) assert.ok(html.includes(text), 'Missing Chinese UI: ' + text);
 });
 
-test('host timezone has a default-off switch and explicit full-page reload limits without a runtime factory', () => {
+test('host timezone has a default-off switch and explicit full-page reload limits without a page-status adapter', () => {
   const View = createSettingsView(React, {rowId:'dsh-extras-host-timezone',packageName:'dsh-extras-host-timezone',moduleIds:['host-timezone']});
   const html = renderToStaticMarkup(React.createElement(View as any, {configForm:form}));
   assert.match(html, /请求时区跟随 DSH 本机/);
@@ -37,6 +38,21 @@ test('host adapter readiness explicitly reports reload-required rather than prot
   assert.match(html,/服务器资源适配器运行状态：待命/);
   assert.match(html,/DSH 宿主时区：Asia\/Singapore/);
   assert.match(html,/不代表已打开的页面受到保护/);
+});
+
+test('host module presents readonly current-page status separately from server readiness in both languages', () => {
+  for(const language of ['zh','en']) {
+    const locale={getLocale:()=>({active:language}),subscribe:()=>()=>{},resolveText:(text:any)=>text[language]};
+    const PageStatus=()=>React.createElement('p',{'data-page-guard-fixture':'',role:'status'},language==='zh'?'页面已撤销，需完整重新加载':'Page revoked; full page reload required');
+    const View=createCoreSettingsView(React,{rowId:'timezone-view',packageName:'timezone-view',moduleIds:['host-timezone']},undefined,undefined,undefined,undefined,locale,undefined,undefined,PageStatus);
+    const html=renderToStaticMarkup(React.createElement(View as any,{configForm:form}));
+    assert.match(html,/data-page-guard-fixture/);
+    assert.ok(html.includes(language==='zh'?'当前页面状态':'Current page status'));
+    assert.ok(html.includes(language==='zh'?'服务器状态':'Server status'));
+    assert.ok(html.includes(language==='zh'?'页面已撤销':'Page revoked'));
+    assert.equal((html.match(/type="checkbox"/g)??[]).length,1,'page diagnostics add no selector or switch');
+    assert.doesNotMatch(html,/<select|<textarea|type="text"/);
+  }
 });
 
 test('non-chime controls and module cards ship explicit theme-aware styling', () => {

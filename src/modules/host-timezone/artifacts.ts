@@ -38,7 +38,7 @@ function requireHostTimeZone(timeZone: string): void {
 }
 
 /** Prepare only an audited native artifact using a host-derived zone, never a user fixed-zone setting. */
-export function prepareArtifact(id: string, source: string, version: string, timeZone: string): PreparedArtifact {
+export function prepareArtifact(id: string, source: string, version: string, timeZone: string, sourceEpoch: string): PreparedArtifact {
   if (version !== '0.2.2-rc.3') throw new Error('host-timezone: unsupported native version');
   const isSession = id === HOST_TIMEZONE_TARGET_IDS[0];
   if (!isSession && id !== HOST_TIMEZONE_TARGET_IDS[1]) throw new Error('host-timezone: unsupported native artifact');
@@ -55,7 +55,12 @@ export function prepareArtifact(id: string, source: string, version: string, tim
   const after = isSession
     ? 'function resolvedClientTimeZone(){return ' + zone + '}'
     : 'function defaultTiming(){const timeZone=' + zone + ';const start=startInZone(timeZone,Date.now()+3600000).slice(0,16)+":00";const day=Number(start.slice(8,10));const weekday=(new Date(`${start.slice(0,10)}T00:00:00Z`).getUTCDay()+6)%7+1;return{frequency:`once`,interval:`1`,start,timeZone,rrule:``,weekdays:[weekday],monthDay:day,dailyTime:start.slice(11,16)}}';
-  return Object.freeze({ id, patches: Object.freeze([Object.freeze({ before, after })]) });
+  if (typeof sourceEpoch !== 'string' || !/^[A-Za-z0-9._-]{1,128}$/u.test(sourceEpoch)) throw new Error('host-timezone: source epoch is unavailable');
+  const markerBefore = isSession ? 'exports.scopeOf=scopeOf;return module.exports' : 'exports.apply=apply;exports.inject=inject;return module.exports';
+  requireSingleAnchor(source, markerBefore);
+  const markerValue = JSON.stringify({ protocol: 'dsh-extras.host-timezone.v1', epoch: sourceEpoch });
+  const markerAfter = markerBefore.replace('return module.exports', 'Object.defineProperty(exports,"__dshExtrasHostTimezoneSource",{value:Object.freeze(' + markerValue + ')});return module.exports');
+  return Object.freeze({ id, patches: Object.freeze([Object.freeze({ before, after }), Object.freeze({ before: markerBefore, after: markerAfter })]) });
 }
 
 /** Apply exact anchors to a native single-entry or combo body; absent/duplicate anchors fail closed. */

@@ -28,7 +28,11 @@ async function fixture(t: any, enabled = true, options: { missingAnchor?: boolea
     { phase: 'application', url: foreignUrl, rev: 'foreign-v1', entries: ['unrelated'] } ] };
   const routes = new Map<string, any>();
   const fetches: string[] = [];
+  const graphListeners = new Set<() => void>();
+  const rebuildListeners = new Set<(id: string, rev: string) => void>();
   const native = { graph: () => graph, clientPath: (id: string) => paths.get(id),
+    onGraphChanged(listener: () => void) { graphListeners.add(listener); return () => { graphListeners.delete(listener); }; },
+    onRebuilt(listener: (id: string, rev: string) => void) { rebuildListeners.add(listener); return () => { rebuildListeners.delete(listener); }; },
     async fetchBundle(request: Request) { fetches.push(request.url); return new Response([...sources.values()].join('\n;\n'), { headers: { 'content-type': 'text/javascript', 'cache-control': 'public, max-age=31536000, immutable' } }); } };
   routes.set('/plugins', {kind:'prefix', path:'/plugins', resource:(request:Request)=>native.fetchBundle(request)});
   ctx.reflect.provide('clientModules', native);
@@ -51,7 +55,9 @@ async function fixture(t: any, enabled = true, options: { missingAnchor?: boolea
     const route = routes.get(value.pathname) ?? [...routes.values()].filter(row => row.kind === 'prefix' && value.pathname.startsWith(row.path + '/')).sort((a,b)=>b.path.length-a.path.length)[0];
     return route ? route.resource(new Request(value, { method })) as Promise<Response> : Promise.resolve(new Response(null, {status:404}));
   };
-  return { ctx, fiber, raw, graph, targetUrl, foreignUrl, table, routes, native, paths, sources, fetches, request };
+  const graphChanged=()=>{for(const listener of [...graphListeners])listener();};
+  const rebuilt=(id:string,rev="same-rev")=>{for(const listener of [...rebuildListeners])listener(id,rev);};
+  return { ctx, fiber, raw, graph, targetUrl, foreignUrl, table, routes, native, paths, sources, fetches, request, graphChanged, rebuilt, graphListeners, rebuildListeners };
 }
 
 test('host-timezone is default-off and never installs resource or boot hooks while disabled', async t => {
@@ -211,4 +217,183 @@ test('unknown boot scheduling phases do not inherit support from pinned target b
   const f=await fixture(t,true,{configure:({graph}:any)=>{graph.batches[0].phase='unknown-future-phase';}});
   assert.equal(hostTimezone.runtimeStatus(f.fiber.ctx).capabilities.hostTimezone.phase,'unavailable');
   assert.equal(f.routes.has('/extras/host-timezone'),false);
+});
+
+test('protected boot publishes a generation-bound no-store proof with no zone selector', async t => {
+  const f=await fixture(t);
+  const rows=f.table();
+  const page=rows.find(row=>row.name==='__DSH_EXTRAS_HOST_TIMEZONE_PAGE__')?.value;
+  assert.ok(page,'protected page has explicit source proof metadata');
+  assert.equal(page.protocol,'dsh-extras.host-timezone.v1');
+  assert.deepEqual(page.targets,ids);
+  assert.match(page.proofUrl,/^extras[/]host-timezone[/][^/]+[/]proof$/);
+  assert.ok(!page.proofUrl.startsWith('/'),'proof resolves beneath the served document mount');
+  const proof=await f.request(page.proofUrl);
+  assert.equal(proof.status,204);
+  assert.equal(proof.headers.get('cache-control'),'no-store');
+  assert.equal(await proof.text(),'');
+  assert.equal((await f.request(page.proofUrl+'?timeZone=UTC')).status,404);
+  assert.equal((await f.request(page.proofUrl,'POST')).status,405);
+  assert.equal((await f.request(page.proofUrl.replace(page.epoch,'foreign-epoch'))).status,404);
+});
+
+test('fresh index synchronously rebuilds pinned source for a changed host zone and retires old proofs', async t => {
+  const previous=process.env.TZ;
+  t.after(()=>{ if(previous===undefined)delete process.env.TZ;else process.env.TZ=previous; });
+  process.env.TZ='Asia/Singapore';
+  const f=await fixture(t);
+  const oldRows=f.table();
+  const oldPage=oldRows.find(row=>row.name==='__DSH_EXTRAS_HOST_TIMEZONE_PAGE__').value;
+  assert.equal((await f.request(oldPage.proofUrl)).status,204);
+  assert.equal(f.table().find(row=>row.name==='__DSH_EXTRAS_HOST_TIMEZONE_PAGE__').value.epoch,oldPage.epoch,'unchanged index does not retire other tabs');
+  process.env.TZ='America/Los_Angeles';
+  assert.equal((await f.request(oldPage.proofUrl)).status,503);
+  const newRows=f.table();
+  const page=newRows.find(row=>row.name==='__DSH_EXTRAS_HOST_TIMEZONE_PAGE__').value;
+  assert.notEqual(page.epoch,oldPage.epoch);
+  assert.equal((await f.request(oldPage.proofUrl)).status,404);
+  assert.equal((await f.request(page.proofUrl)).status,204);
+  const response=await f.request(newRows.find(row=>row.name==='__DSH_BOOT__').value.batches[0].url);
+  assert.equal(response.status,200);
+  const body=await response.text();
+  assert.ok(body.includes('function resolvedClientTimeZone(){return "America/Los_Angeles"}'));
+  assert.equal(body.split('"epoch":"'+page.epoch+'"').length-1,2,'both transformed target markers use the new page epoch');
+  assert.equal(hostTimezone.runtimeStatus(f.fiber.ctx).details.hostTimezone.timeZone,'America/Los_Angeles');
+});
+
+test('target rebuild and remove/readd rotate source nonces even with the same native revision', async t => {
+  const f=await fixture(t);
+  const page=()=>f.table().find(row=>row.name==='__DSH_EXTRAS_HOST_TIMEZONE_PAGE__').value;
+  const first=page();
+  f.rebuilt('unrelated');
+  assert.equal((await f.request(first.proofUrl)).status,204,'unrelated rebuilt cannot revoke protected sources');
+  f.graphChanged();
+  assert.equal((await f.request(first.proofUrl)).status,204,'same graph advertisement does not revoke unchanged sources');
+  f.rebuilt(ids[0]!);
+  assert.notEqual((await f.request(first.proofUrl)).status,204,'same-revision target rebuild must revoke the prior source nonce');
+  const second=page();
+  assert.notEqual(second.epoch,first.epoch);
+  const original=structuredClone(f.graph);
+  f.graph.entries.splice(0,2);
+  f.graph.batches.splice(0,1);
+  f.graphChanged();
+  assert.notEqual((await f.request(second.proofUrl)).status,204);
+  Object.assign(f.graph,original);
+  f.graphChanged();
+  const third=page();
+  assert.notEqual(third.epoch,second.epoch);
+  assert.notEqual(third.epoch,first.epoch);
+  assert.equal((await f.request(second.proofUrl)).status,404);
+  assert.equal((await f.request(third.proofUrl)).status,204);
+  assert.equal(f.graphListeners.size,1);
+  assert.equal(f.rebuildListeners.size,1);
+  f.raw.enabled=false;
+  await (f.ctx.emit as any)('loader/volatile-update',[]);
+  assert.equal(f.graphListeners.size,0);
+  assert.equal(f.rebuildListeners.size,0);
+  assert.equal((await f.request(third.proofUrl)).status,404);
+});
+
+test('native rendered page proof metadata remains readonly and frozen in the browser realm', async t => {
+  const f=await fixture(t);
+  const {stripTypeScriptTypes}=await import('node:module');
+  const {runInNewContext}=await import('node:vm');
+  const rendererPath=join(dirname(require.resolve('@deepseek-ai/dsh-host-webserver/package.json')),'src/injections.ts');
+  const renderer=stripTypeScriptTypes(await readFile(rendererPath,'utf8'));
+  const {renderIndexInjections}=await import('data:text/javascript;base64,'+Buffer.from(renderer).toString('base64'));
+  const rows=f.table().filter(row=>row.kind!=='script-src'&&row.kind!=='script-preload');
+  const html=renderIndexInjections('<html><head></head><body></body></html>',rows);
+  const realm:any={};
+  for(const script of html.split('<script>').slice(1)) runInNewContext(script.split('</script>')[0]!,realm);
+  const descriptor=Object.getOwnPropertyDescriptor(realm,'__DSH_EXTRAS_HOST_TIMEZONE_PAGE__')!;
+  assert.equal(descriptor.writable,false);
+  assert.equal(descriptor.configurable,false);
+  assert.equal(Object.isFrozen(descriptor.value),true);
+  assert.equal(Object.isFrozen(descriptor.value.targets),true);
+});
+
+test('proof approval cannot outlive an asynchronous source-generation replacement', async t => {
+  const f=await fixture(t);
+  const before=f.table().find(row=>row.name==='__DSH_EXTRAS_HOST_TIMEZONE_PAGE__').value;
+  const pending=f.request(before.proofUrl);
+  f.rebuilt(ids[0]!);
+  assert.equal((await pending).status,503,'proof captured the old generation before native manifest awaits');
+  const after=f.table().find(row=>row.name==='__DSH_EXTRAS_HOST_TIMEZONE_PAGE__').value;
+  assert.equal((await f.request(after.proofUrl)).status,204);
+  assert.equal(hostTimezone.runtimeStatus(f.fiber.ctx).details.hostTimezone.status,'needs-full-reload','stale catch cannot poison the new generation');
+});
+
+for(const hold of ['fetch','body'] as const)test('resource identity fence rejects generation replacement during native '+hold+' await',async t=>{
+  const f=await fixture(t);
+  const before=f.table().find(row=>row.name==='__DSH_BOOT__').value.entries[0].url;
+  const nativeFetch=f.native.fetchBundle.bind(f.native);
+  let enter!:()=>void;
+  let resume!:()=>void;
+  const entered=new Promise<void>(resolve=>{enter=resolve;});
+  const resumed=new Promise<void>(resolve=>{resume=resolve;});
+  const body=[...f.sources.values()].join('\n;\n');
+  f.native.fetchBundle=async()=>{
+    if(hold==='fetch'){enter();await resumed;}
+    const response=new Response(body,{headers:{'content-type':'text/javascript'}});
+    if(hold==='body')response.text=async()=>{enter();await resumed;return body;};
+    return response;
+  };
+  const pending=f.request(before);
+  await entered;
+  f.rebuilt(ids[0]!);
+  resume();
+  assert.equal((await pending).status,503);
+  assert.equal((await f.request(before)).status,404);
+  f.native.fetchBundle=nativeFetch;
+  const after=f.table().find(row=>row.name==='__DSH_BOOT__').value.entries[0].url;
+  assert.equal((await f.request(after)).status,200);
+});
+
+test('proof revalidates target bytes and versions on disk instead of trusting cached preparation',async t=>{
+  const root=await mkdtemp(join(tmpdir(),'host-zone-proof-'));
+  assert.equal(dirname(root),tmpdir());
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  await mkdir(join(root,'lib'));
+  const path=join(root,'lib/client.js');
+  const manifest=join(root,'package.json');
+  const f=await fixture(t,true,{configure:async({paths,sources}:any)=>{
+    await writeFile(manifest,JSON.stringify({name:ids[0],version:'0.2.2-rc.3'}));
+    await writeFile(path,sources.get(ids[0]));
+    paths.set(ids[0],path);
+  }});
+  const page=f.table().find(row=>row.name==='__DSH_EXTRAS_HOST_TIMEZONE_PAGE__').value;
+  assert.equal((await f.request(page.proofUrl)).status,204);
+  await writeFile(path,f.sources.get(ids[0]!)+'\n// changed bytes\n');
+  assert.equal((await f.request(page.proofUrl)).status,503);
+  await writeFile(path,f.sources.get(ids[0]!)!);
+  await writeFile(manifest,JSON.stringify({name:ids[0],version:'0.2.2-rc.99'}));
+  assert.equal((await f.request(page.proofUrl)).status,503);
+});
+
+test('unsupported native lifecycle seam refuses serving rather than retaining unrevokable proofs',async t=>{
+  const f=await fixture(t,true,{configure:({native}:any)=>{native.onGraphChanged=undefined;}});
+  assert.equal(hostTimezone.runtimeStatus(f.fiber.ctx).capabilities.hostTimezone.phase,'unavailable');
+  assert.equal(f.routes.has('/extras/host-timezone'),false);
+});
+
+for(const phase of ['mount','proof'] as const)test('connection package pin rejects unsupported native rpc implementation at '+phase,async t=>{
+  const root=await mkdtemp(join(tmpdir(),'host-zone-connection-pin-'));
+  assert.equal(dirname(root),tmpdir());
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  const packages=['dsh','dsh-client-modules','dsh-host-webserver','dsh-client-connection'];
+  for(const name of packages){
+    const directory=join(root,'node_modules/@deepseek-ai',name);
+    await mkdir(directory,{recursive:true});
+    await writeFile(join(directory,'package.json'),JSON.stringify({name:'@deepseek-ai/'+name,version:name==='dsh-client-connection'&&phase==='mount'?'0.2.2-rc.99':'0.2.2-rc.3'}));
+  }
+  const f=await fixture(t,true,{configure:({ctx}:any)=>{ctx.get('profileContext').installAnchor=join(root,'entry.js');}});
+  if(phase==='mount'){
+    assert.equal(hostTimezone.runtimeStatus(f.fiber.ctx).capabilities.hostTimezone.phase,'unavailable');
+    assert.equal(f.routes.has('/extras/host-timezone'),false);
+  }else{
+    const page=f.table().find(row=>row.name==='__DSH_EXTRAS_HOST_TIMEZONE_PAGE__').value;
+    assert.equal((await f.request(page.proofUrl)).status,204);
+    await writeFile(join(root,'node_modules/@deepseek-ai/dsh-client-connection/package.json'),JSON.stringify({name:'@deepseek-ai/dsh-client-connection',version:'0.2.2-rc.99'}));
+    assert.equal((await f.request(page.proofUrl)).status,503);
+  }
 });

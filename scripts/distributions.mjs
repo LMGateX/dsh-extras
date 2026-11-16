@@ -10,7 +10,7 @@ export const distributions = [
 ];
 export const sourceDirectories = { 'compact-context': 'compact-context', retry: 'retry', chime: 'chime', goalWait: 'goal-wait', 'model-policy': 'model-policy', 'host-timezone': 'host-timezone' };
 export const clientDependencies = {
-  'host-timezone': ['@deepseek-ai/dsh-client-locale', '@deepseek-ai/dsh-client-ui-settings', '@deepseek-ai/dsh-client-ui-plugin-manager'],
+  'host-timezone': ['@deepseek-ai/dsh-client-locale', '@deepseek-ai/dsh-client-ui-settings', '@deepseek-ai/dsh-client-ui-plugin-manager', '@deepseek-ai/dsh-client-connection', '@deepseek-ai/dsh-client-modules', '@deepseek-ai/dsh-api-session-controller'],
   'compact-context': ['@deepseek-ai/dsh-client-locale', '@deepseek-ai/dsh-client-ui-settings', '@deepseek-ai/dsh-client-ui-plugin-manager', '@deepseek-ai/dsh-api-remotes', '@deepseek-ai/dsh-api-workspace-controller'],
   retry: ['@deepseek-ai/dsh-client-locale', '@deepseek-ai/dsh-client-ui-settings', '@deepseek-ai/dsh-client-ui-plugin-manager', '@deepseek-ai/dsh-api-remotes', '@deepseek-ai/dsh-api-session-controller'],
   'model-policy': ['@deepseek-ai/dsh-client-locale', '@deepseek-ai/dsh-client-ui-settings', '@deepseek-ai/dsh-client-ui-plugin-manager', '@deepseek-ai/dsh-api-remotes', '@deepseek-ai/dsh-api-workspace-controller'],

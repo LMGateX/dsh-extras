@@ -184,7 +184,7 @@ export function capabilityText(label: string, status?: CapabilityStatus, t: Sett
 /** Uses the platform React instance. The chime component is the preserved custom editor. */
 export function createSettingsView(
   React: any, descriptor: SettingsDescriptor, chimeEditor?: unknown, status?: SettingsStatusStore, reasoningEditor?: unknown,
-  accepted?: AcceptedConfigSource, locale?: SettingsLocale, modelPolicyEditor?: unknown, retryEditor?: unknown,
+  accepted?: AcceptedConfigSource, locale?: SettingsLocale, modelPolicyEditor?: unknown, retryEditor?: unknown, hostTimezoneView?: unknown,
 ): (props: SettingsProps) => unknown {
   const h = React.createElement;
   const { Provider: CollapseProvider, Actions: CollapseActions, Group: CollapseGroup, useCollapse } = createSettingsCollapse(React, locale);
@@ -342,11 +342,14 @@ export function createSettingsView(
       h('p', {key:'activation-limitation'}, t('Activation limitation: repeated external disarm during an owned hold can be indistinguishable from the gate’s own disarm; release may rearm that goal. Use replacement to wait without changing activation. Reliable observed revocations still fail closed; no strategy changes durable goal phase.', '激活门控的历史限制：已持有等待期间，外部重复撤销激活可能与门控自身的撤销无法区分；释放等待时可能重新激活该目标。可选择 replacement，在不改变激活状态的情况下等待。可靠观测到的撤权仍会安全拒绝续跑；任何策略均不更改持久化目标阶段。')),
     ];
     else if (id === 'host-timezone') fields = [
+      h('h4', {key:'server-heading','data-host-timezone-server-heading':''},t('Server status','服务器状态')),
       h('p', {key:'reload-limit','data-host-timezone-reload':''}, t('Enabling or disabling requires a full page reload. Already-open pages are not confirmed protected by a saved switch or server readiness.', '启用或禁用后均需完整重新加载页面。已保存的开关或服务器就绪状态不代表已打开的页面受到保护。')),
       h('p', {key:'scope'}, t('Only new automatic request time-zone reports and automatic schedule defaults use the DSH host zone. Explicit task rules, existing history, native clocks and tool environments stay unchanged.', '仅新增的自动请求时区上报与自动定时默认值使用 DSH 宿主时区；明确指定的任务规则、既有历史、原生时钟和工具环境保持不变。')),
       h('p', {key:'adapter-status',role:'status','data-host-timezone-status':''}, capabilityText(t('Server artifact adapter', '服务器资源适配器'),hostDisabled ? {phase:'disabled'} : liveRuntime?.modules?.[id]?.capabilities?.hostTimezone,t)),
       h('p', {key:'reload-status',role:'status','data-host-timezone-state':''}, t('Reload status: ', '重载状态：') + phaseText(hostDisabled ? 'disabled' : hostTimezone?.status === 'needs-full-reload' ? 'reload-required' : hostTimezone?.status ?? 'unavailable',t)),
       hostTimezone?.timeZone && h('p', {key:'host-zone'}, t('DSH host time zone: ', 'DSH 宿主时区：') + hostTimezone.timeZone),
+      h('h4', {key:'page-heading','data-host-timezone-page-heading':''},t('Current page status','当前页面状态')),
+      hostTimezoneView ? h(hostTimezoneView,{key:'page-status'}) : h('p',{key:'page-status-unavailable',role:'status'},t('Current-page protection unavailable; server readiness alone is not proof. A full page reload is required.', '当前页面保护不可用；仅服务器就绪不能作为保护证明。需要完整重新加载页面。')),
     ];
     else fields = chimeEditor
       ? [h(chimeEditor, { key: 'chime-editor', configForm: form })]

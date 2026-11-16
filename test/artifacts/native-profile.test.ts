@@ -74,7 +74,7 @@ test('native CLI installs packed combined distribution into isolated web profile
   await page.getByRole('button',{name:'View dsh-extras',exact:true}).click();
   await page.getByRole('button',{name:'Configure dsh-extras',exact:true}).click();
   await page.locator('[data-package="dsh-extras"]').waitFor();
-  assert.equal(await page.locator('[data-module]').count(),5);
+  assert.equal(await page.locator('[data-module]').count(),6);
   const moduleStatus=await page.evaluate(async()=>{const response=await fetch('/extras/dsh-extras/status',{credentials:'same-origin',cache:'no-store'});return {code:response.status,body:await response.json()};});
   assert.equal(moduleStatus.code,200);assert.equal(moduleStatus.body.modules.chime.ready,true);
   assert.equal(moduleStatus.body.modules['compact-context'].phase,'active','context adapter activates without a global engine in stock web presets');
@@ -219,7 +219,7 @@ test('native CLI installs packed combined distribution into isolated web profile
   await chimeSection.locator('#dsh-session-chime-enabled').uncheck();
   await chimeSection.getByRole('button',{name:'Save',exact:true}).click();
   await page.getByRole('button',{name:'🌙 休息中',exact:true}).waitFor({state:'hidden'});
-  assert.equal(await page.locator('[data-module]').count(),5,'disabled chime keeps sibling configuration available');
+  assert.equal(await page.locator('[data-module]').count(),6,'disabled chime keeps sibling configuration available');
   assert.deepEqual(await chimeSection.getByRole('alert').allTextContents(),[]);
   const persisted=await readFile(join(environment(temp).DSH_HOME!,'profiles',profile,'cordis.patch.yml'),'utf8');
   const accepted=parse(persisted).find((row:any)=>row.id==='dsh-extras').config.modules;

@@ -37,7 +37,7 @@ for(const {name,modules} of distributions) test('packed installable distribution
   assert.ok(readme.includes('Unknown or changed driver bytes still fail closed'));
   assert.equal(pkg.engines.dsh,'0.2.2-rc.3');assert.equal(pkg.dsh.client.platform,'web');
   assert.equal(pkg.dsh.client.platforms,undefined);assert.equal(pkg.dsh.bundle.patch,'cordis.patch.yml');
-  assert.equal(pkg.dsh.client.inject.includes('@deepseek-ai/dsh-api-session-controller'), modules.includes('retry') || modules.includes('chime'), 'selected session-controller dependency does not depend on chime transitively');
+  assert.equal(pkg.dsh.client.inject.includes('@deepseek-ai/dsh-api-session-controller'), modules.includes('retry') || modules.includes('chime') || modules.includes('host-timezone'), 'selected session-controller dependency does not depend on chime transitively');
   assert.equal(pkg.dsh.client.inject.includes('@deepseek-ai/dsh-api-workspace-controller'), modules.includes('model-policy') || modules.includes('compact-context'), 'native workspace discovery dependency belongs only to workspace settings distributions');
   const patch=await readFile(join(packageDir,'cordis.patch.yml'),'utf8');assert.ok(patch.includes('id: '+name));
   const listing=execFileSync('tar',['-tzf',archive],{encoding:'utf8'}).split('\n');
@@ -47,6 +47,8 @@ for(const {name,modules} of distributions) test('packed installable distribution
   assert.ok(browser.includes(name));assert.ok(browser.includes('__ModuleLoader__'));
   const browserMap=JSON.parse(await readFile(join(packageDir,'lib/client.js.map'),'utf8'));
   assert.equal(browserMap.sources.some(path=>path.endsWith('/client/request-recovery.ts')),modules.includes('retry'),'recovery adapter ships only with selected retry');
+  assert.equal(browserMap.sources.some(path=>path.endsWith('/client/host-timezone.ts')),modules.includes('host-timezone'),'timezone page admission ships only with selected host timezone');
+  for(const service of ['@deepseek-ai/dsh-client-connection','@deepseek-ai/dsh-client-modules']) assert.equal(pkg.dsh.client.inject.includes(service),modules.includes('host-timezone'),'selected timezone client service '+service);
   assert.equal(browserMap.sources.some(path=>path.endsWith('/client/workspace-settings.ts')),modules.includes('model-policy') || modules.includes('compact-context'),'workspace discovery and picker never leak into unrelated split payloads');
   for(const id of ['compact-context','retry','chime','goalWait','model-policy','host-timezone']) {
     const notice=listing.some(file=>file==='package/notices/'+id+'.txt');

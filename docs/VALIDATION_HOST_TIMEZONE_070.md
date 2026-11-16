@@ -12,7 +12,7 @@ Status: **in progress; not a publication or active-installation receipt**. Evide
 
 Implementation candidate committed at `1ded0c5e16a882d8b9904153e98f9b294e6b52fe`; independent review and final packed evidence remain pending. Subagents own disjoint host/artifact/integration/packed-browser code. Primary source investigations identify the exact two bundle hashes and the public serving interfaces; investigations alone are not runtime acceptance. The server clones/references the boot graph and serves patched automatic-source functions in its own namespace; it never changes installed native files, time-context hooks or tool environments. Full reload is a real enable/disable boundary.
 
-Focused evidence: artifact transform4/4 (parent independently reran); exported host plugin14/14; migration/config/settings integration195/195; final lane typechecks exit0. The complete parent source command below includes these cases, not an arithmetic sum or projected count. Initial new packed-browser execution passed archive identities but failed fixture setup before privacy assertions; that is not claimed as a feature pass, and fixture debugging is in progress.
+Focused evidence: artifact transform4/4 (parent independently reran); exported host plugin14/14; migration/config/settings integration195/195; final lane typechecks exit0. The complete parent source command below includes these cases, not an arithmetic sum or projected count. Initial new packed-browser fixture failures were corrected without runtime changes. The basic matrix then passed4/4 (64.33s): seven archives, combined/NewYork, standalone/Shanghai and unknown-artifact refusal, including actual accepted child RPC/source and explicit task-rule preservation. Subsequent real restart and cached-native-factory tests exposed two P1 blockers; those basic passes do not certify the correction.
 
 ## Final command gates
 
@@ -30,6 +30,20 @@ Focused evidence: artifact transform4/4 (parent independently reran); exported h
 | Atomic remote main / annotated tag / formal release | Pending | — |
 | Fresh remote asset download / byte equality | Pending | — |
 | Restricted backup / native local installation / serving verification | Pending | Only after every preceding release gate |
+
+## Review and negative evidence (publication blocked until corrected)
+
+### Standards
+
+One high-severity documented-standard violation at candidate1ded0c5: loaded literal sampling outlives the current native connection generation. Same-origin/same-profile native host restart from Singapore to Los Angeles reproduced an unexpected serialized prompt from the old page (expected0). No Fowler judgement-call findings were reported.
+
+### Spec
+
+One confirmed P2 implementation error at candidate1ded0c5: changing host process TZ after mount made repeated full reloads fail forever, because index rendering never rebuilt the source generation. No missing-requirement or scope-creep findings. The reviewer additionally identified cached raw target re-materialization; subsequent real Chromium testing confirmed a second P1: cached native single-entry URL returned200 without reaching the server503 guard, same-revision native retry re-materialized raw Session, and actual clientTimeZone became America/New_York instead of Singapore.
+
+The [fixed correction](HOST_TIMEZONE_070.md#review-driven-source-validity-correction-fixed-before-implementation) precedes all repair code. Both axes require independent follow-up against the repaired commit; no red gate is waived.
+
+Initial existing packed suite:59/60 PASS, one obsolete combined-GUI five-module assertion failed (actual six); this is a test expectation correction, not a successful final suite. All seven split/combined installable consumers and public declarations ran, but final full packed rerun remains mandatory.
 
 ## Guarantee limits
 

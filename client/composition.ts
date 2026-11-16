@@ -12,9 +12,12 @@ export type ExtrasClientDescriptor = SettingsDescriptor;
 export type SettingsAdapterFactory = (React: any) => { createView(ctx: any): unknown };
 export interface RecoveryMountOptions { rowId:string; enabled:()=>boolean; subscribe(listener:()=>void):()=>void; }
 export type RecoveryAdapterFactory = (React:any)=>{mount(ctx:any,options:RecoveryMountOptions):()=>void};
+/** Unknown accepted configuration is not an explicit disable/revocation. */
+export interface HostTimezoneMountOptions { rowId:string; enabled():boolean|undefined; subscribe(listener:()=>void):()=>void; }
+export type HostTimezoneAdapterFactory = (React:any)=>{mount(ctx:any,options:HostTimezoneMountOptions):()=>void;createView(ctx:any):unknown};
 
 /** Public build seam: generated entry supplies selected imports and platform React. */
-export function createExtrasClient(descriptor: ExtrasClientDescriptor, React: any, makeChime?: ChimeAdapterFactory, makeReasoning?: SettingsAdapterFactory, makeModelPolicy?: SettingsAdapterFactory, makeRetry?: SettingsAdapterFactory, makeRecovery?:RecoveryAdapterFactory) {
+export function createExtrasClient(descriptor: ExtrasClientDescriptor, React: any, makeChime?: ChimeAdapterFactory, makeReasoning?: SettingsAdapterFactory, makeModelPolicy?: SettingsAdapterFactory, makeRetry?: SettingsAdapterFactory, makeRecovery?:RecoveryAdapterFactory, makeHostTimezone?:HostTimezoneAdapterFactory) {
   if (!descriptor.rowId || !descriptor.packageName) throw new TypeError('Distribution identities are required');
   const inject = ['slots', 'configForms'];
   const pageServedAt = capturePageProof(descriptor.rowId);
@@ -29,6 +32,17 @@ export function createExtrasClient(descriptor: ExtrasClientDescriptor, React: an
     const modelPolicy=descriptor.moduleIds.includes('model-policy')?makeModelPolicy?.(React):undefined;
     const retry=descriptor.moduleIds.includes('retry')?makeRetry?.(React):undefined;
     const recovery=descriptor.moduleIds.includes('retry')?makeRecovery?.(React):undefined;
+    const hostTimezone=descriptor.moduleIds.includes('host-timezone')?makeHostTimezone?.(React):undefined;
+    if(hostTimezone) {
+      let live=true;
+      const options:HostTimezoneMountOptions={rowId:descriptor.rowId,enabled:()=>{
+        if(!live)return undefined;
+        const accepted=root.getSnapshot();
+        const enabled=accepted.status==='ready' ? (accepted.value as any)?.modules?.['host-timezone']?.enabled : undefined;
+        return typeof enabled==='boolean' ? enabled : undefined;
+      },subscribe:listener=>live ? root.subscribe(listener) : ()=>{}};
+      owned.ctx.effect(()=>{const off=hostTimezone.mount(owned.ctx,options);return()=>{live=false;off();};},'extras: current-page host timezone admission');
+    }
     if(recovery) {
       let live=true;
       const options:RecoveryMountOptions={rowId:descriptor.rowId,enabled:()=>{
@@ -39,7 +53,7 @@ export function createExtrasClient(descriptor: ExtrasClientDescriptor, React: an
     }
     // Read the exact served namespace's accepted store; page.mutate remains the only page write endpoint.
     const accepted = { getSnapshot: () => root.getSnapshot(), subscribe: (listener: () => void) => root.subscribe(listener) };
-    const View = createSettingsView(React, descriptor, chime?.createView(owned.ctx), status, reasoning?.createView(owned.ctx), accepted, owned.ctx.get('locale'), modelPolicy?.createView(owned.ctx), retry?.createView(owned.ctx));
+    const View = createSettingsView(React, descriptor, chime?.createView(owned.ctx), status, reasoning?.createView(owned.ctx), accepted, owned.ctx.get('locale'), modelPolicy?.createView(owned.ctx), retry?.createView(owned.ctx), hostTimezone?.createView(owned.ctx));
     owned.ctx.effect(() => ctx.configForms.whileServed([descriptor.rowId], () => {
       const offRow = ctx.slots.inject('plugins.row.config', () => ctx.slots.register({
         name: 'plugins.row.config', key: descriptor.packageName + '#' + descriptor.rowId,
