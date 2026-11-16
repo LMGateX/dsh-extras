@@ -66,16 +66,20 @@ export function createHostTimezoneAdapter(React: any) {
   let page: PageLatch | undefined;
   let fallback: Snapshot = { phase: 'disabled', reason: 'This page has no protected source proof.' };
   const fallbackListeners = new Set<() => void>();
+  let readFallback = () => fallback;
   return {
     mount(ctx: any, options: HostTimezoneMountOptions): () => void {
       const raw = (globalThis as any)[PAGE];
       const proof = pageProof(raw);
       if (!proof) {
-        const update = () => {
-          fallback = { phase: raw || options.enabled() === true ? 'reload-required' : options.enabled() === undefined ? 'waiting' : 'disabled', reason: 'Full page reload required to load a protected source.' };
-          for (const listener of fallbackListeners) listener();
+        // Existing settings renders supply accepted-intent changes; this page owns no observer.
+        readFallback = () => {
+          const enabled = options.enabled();
+          const phase = raw || enabled === true ? 'reload-required' : enabled === undefined ? 'waiting' : 'disabled';
+          if (fallback.phase !== phase) fallback = Object.freeze({ phase, reason: 'Full page reload required to load a protected source.' });
+          return fallback;
         };
-        update();
+        readFallback();
         // An unprotected/default-off page owns no guard, subscription or tombstone.
         return () => {};
       }
@@ -267,8 +271,8 @@ export function createHostTimezoneAdapter(React: any) {
         const t = useSettingsText(React, locale);
         const snapshot = React.useSyncExternalStore(
           (listener: () => void) => { const listeners = page?.listeners ?? fallbackListeners; listeners.add(listener); return () => listeners.delete(listener); },
-          () => page?.snapshot ?? fallback,
-          () => page?.snapshot ?? fallback,
+          () => page?.snapshot ?? readFallback(),
+          () => page?.snapshot ?? readFallback(),
         ) as Snapshot;
         const labels: Record<Phase, string> = { disabled: '未启用', waiting: '等待验证', ready: '已验证', 'reload-required': '需要重新加载', unavailable: '不可用' };
         const reasons: Record<Phase, string> = {

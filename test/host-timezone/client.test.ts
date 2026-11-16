@@ -31,6 +31,7 @@ function fixture(protectedPage = true, initialEnabled: boolean | undefined = tru
   connection.generation = generation; connection.state = state;
   const modules = { version: 'client', manifest: { release: { version: '0.2.2-rc.3' }, modules: ids.map(id => ({ id, rev: 'same' })) }, entries: { state: entries }, loadCache: records };
   const services: Record<string, unknown> = { connection, modules, sessions: {} };
+  let intentSubscriptions = 0;
   let enabled: boolean | undefined = initialEnabled; const intentListeners = new Set<() => void>(); const effects: (() => unknown)[] = [];
   const ctx = { get: (key: string) => services[key], effect(fn: () => (() => unknown)) { const off = fn(); effects.push(off); return off; },
     inject(_deps: unknown, fn: Function) { fn(ctx); return { dispose() { for (const off of effects.splice(0).reverse()) off(); } }; } };
@@ -38,10 +39,11 @@ function fixture(protectedPage = true, initialEnabled: boolean | undefined = tru
   globalThis.fetch = (async (input: unknown, init?: RequestInit) => { proofRequests.push({ input, init }); return new Response(null, { status: 204 }); }) as typeof fetch;
   const React = { createElement: (type: unknown, props: any, ...children: unknown[]) => ({ type, props, children }), useSyncExternalStore: (_subscribe: unknown, read: Function) => read() };
   const adapter = createHostTimezoneAdapter(React);
-  const off = adapter.mount(ctx, { rowId: 'dsh-extras', enabled: () => enabled, subscribe(fn) { intentListeners.add(fn); return () => { intentListeners.delete(fn); }; } });
+  const off = adapter.mount(ctx, { rowId: 'dsh-extras', enabled: () => enabled, subscribe(fn) { intentSubscriptions++; intentListeners.add(fn); return () => { intentListeners.delete(fn); }; } });
   const View = adapter.createView(ctx) as () => any;
   return { connection, modules, generation, state, records, entries, calls, originalCall, proofRequests, services, ctx, adapter, off,
     phase: () => View().props['data-host-timezone-phase'],
+    intentSubscriptions: () => intentSubscriptions,
     setEnabled(next: boolean | undefined) { enabled = next; for (const fn of intentListeners) fn(); },
     async ready() { state.set('connected'); generation.set({ id: 1, host: { home: '/irrelevant' } }); await new Promise(resolve => setImmediate(resolve)); },
     close() { off(); globalThis.fetch = previousFetch; Reflect.deleteProperty(globalThis, LATCH); Reflect.deleteProperty(globalThis, PAGE); } };
@@ -220,5 +222,15 @@ test('accepted disable immediately removes native observers and reenable cannot 
     await assert.rejects(() => h.connection.rpc.call('/api', 'session/prompt', {}));
     const next = createHostTimezoneAdapter({}).mount(h.ctx, { rowId: 'again', enabled: () => true, subscribe() { assert.fail('closed page never resubscribes'); } });
     assert.equal(h.generation.listeners.size, 0); next();
+  } finally { h.close(); }
+});
+
+test('unprotected status reads accepted-intent transitions on render without owning observers', () => {
+  const h = fixture(false, false); try {
+    h.setEnabled(undefined); assert.equal(h.phase(), 'waiting');
+    h.setEnabled(false); assert.equal(h.phase(), 'disabled');
+    h.setEnabled(true); assert.equal(h.phase(), 'reload-required');
+    assert.equal(h.intentSubscriptions(), 0); assert.equal(h.generation.listeners.size, 0); assert.equal(h.state.listeners.size, 0); assert.equal(h.entries.listeners.size, 0);
+    assert.equal(h.proofRequests.length, 0); assert.equal(h.connection.rpc.call, h.originalCall); assert.equal(Reflect.has(globalThis, LATCH), false);
   } finally { h.close(); }
 });
