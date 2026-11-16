@@ -10,17 +10,19 @@ Status: **in progress; not a publication or active-installation receipt**. Evide
 
 ## Implementation and focused evidence
 
-Pending completion/review. Subagents own disjoint host/artifact/integration/packed-browser code. Primary source investigations identify the exact two bundle hashes and the public serving interfaces; investigations alone are not runtime acceptance. The server clones/references the boot graph and serves patched automatic-source functions in its own namespace; it never changes installed native files, time-context hooks or tool environments. Full reload is a real enable/disable boundary.
+Implementation candidate committed at `1ded0c5e16a882d8b9904153e98f9b294e6b52fe`; independent review and final packed evidence remain pending. Subagents own disjoint host/artifact/integration/packed-browser code. Primary source investigations identify the exact two bundle hashes and the public serving interfaces; investigations alone are not runtime acceptance. The server clones/references the boot graph and serves patched automatic-source functions in its own namespace; it never changes installed native files, time-context hooks or tool environments. Full reload is a real enable/disable boundary.
+
+Focused evidence: artifact transform4/4 (parent independently reran); exported host plugin14/14; migration/config/settings integration195/195; final lane typechecks exit0. The complete parent source command below includes these cases, not an arithmetic sum or projected count. Initial new packed-browser execution passed archive identities but failed fixture setup before privacy assertions; that is not claimed as a feature pass, and fixture debugging is in progress.
 
 ## Final command gates
 
 | Gate | Result | Evidence |
 | --- | --- | --- |
 | Exact npm graph | PASS | Fresh npm ci and host preflight above |
-| Typecheck | Pending | — |
-| Full source suite | Pending | — |
-| Build seven distributions | Pending | — |
-| Pack/checksums | Pending | — |
+| Typecheck | PASS | `npm run typecheck`, exact native preflight plus tsc |
+| Full source suite | PASS | `npm test`:778/778,0 fail/skip,243812.783438ms; explicit isolated environment |
+| Build seven distributions | Initial candidate PASS | Seven actual distributions built; final repack after review remains required |
+| Pack/checksums | Initial candidate PASS | Seven real0.7.0 tarballs plus SHA256SUMS; not yet a final/publication receipt |
 | Full packed clean-consumer/native/browser suite | Pending | — |
 | Actual new automatic request fields / explicit task rule preservation | Pending | — |
 | Independent Standards / Spec reviews | Pending | — |
