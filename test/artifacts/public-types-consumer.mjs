@@ -22,7 +22,8 @@ export async function verifyPublicTypes(temp, name, modules) {
     modules.includes('compact-context') ? 'const attempts: number = output.modules["compact-context"].retryAttempts.get();\nconst rules = output.modules["compact-context"].compactionReasoning.get().rules;\nConfig({modules:{"compact-context":{retryAttempts:0,ptcModelTimeouts:{},compactionReasoning:{enabled:true,rules:[{scope:"all",mode:"fixed",effort:"opaque"}]}}}});\n// @ts-expect-error wrong compaction value\nConfig({modules:{"compact-context":{notifyAtRatio:"high"}}});' : '',
     modules.includes('chime') ? 'const volume: number = output.modules.chime.volume.get();\nConfig({modules:{chime:{soundDone:"chime-soft",restMode:false}}});\n// @ts-expect-error unknown sound\nConfig({modules:{chime:{soundDone:"imaginary"}}});' : '',
     modules.includes('goalWait') ? 'const hold: number = output.modules.goalWait.maxHoldMs.get();\nConfig({modules:{goalWait:{maxHoldMs:0,waitForJobs:false}}});\n// @ts-expect-error wrong goal value\nConfig({modules:{goalWait:{maxHoldMs:"forever"}}});' : '',
-    ...['compact-context','retry','chime','goalWait','model-policy'].filter(id=>!modules.includes(id)).map(id => '// @ts-expect-error non-selected module\nConfig({modules:{' + JSON.stringify(id) + ':{enabled:true}}});'),
+    modules.includes('host-timezone') ? 'Config({modules:{"host-timezone":{enabled:true}}});\n// @ts-expect-error arbitrary fixed zones are not supported\nConfig({modules:{"host-timezone":{timeZone:"UTC"}}});\n// @ts-expect-error enabled must be boolean\nConfig({modules:{"host-timezone":{enabled:"yes"}}});' : '',
+    ...['compact-context','retry','chime','goalWait','model-policy','host-timezone'].filter(id=>!modules.includes(id)).map(id => '// @ts-expect-error non-selected module\nConfig({modules:{' + JSON.stringify(id) + ':{enabled:true}}});'),
   ].join('\n');
   const reasoningChecks = modules.includes('compact-context') ? [
     'const enabledOnly = Config({modules:{"compact-context":{compactionReasoning:{enabled:true}}}});',
@@ -90,7 +91,7 @@ export async function verifyPublicTypes(temp, name, modules) {
     'const recovered: Promise<MigrationReport> = migration.rollbackMigration(host,target,{operationId:"test",modules:target.moduleIds});',
     'const controller: MigrationController = migration.startAutomaticMigration(host,{...target,auto:false,onReport(report:MigrationReport){}});',
     'controller.subscribe(state=>state.report); controller.inspect(); controller.retry(); controller.rollback({operationId:"test",modules:target.moduleIds}); controller.dispose();',
-    'const ids: readonly ("compact-context"|"retry"|"chime"|"goalWait"|"model-policy")[] = migration.MODULE_IDS;',
+    'const ids: readonly ("compact-context"|"retry"|"chime"|"goalWait"|"model-policy"|"host-timezone")[] = migration.MODULE_IDS;',
     'const defaults: Record<string, Record<string, unknown>> = migration.LEGACY_DEFAULTS;',
     'const packages: Record<string, string> = migration.LEGACY_PACKAGES;',
     '// @ts-expect-error invalid migration target id\nmigration.inspectMigration(host,{rowId:identity,moduleIds:["unknown"]});',

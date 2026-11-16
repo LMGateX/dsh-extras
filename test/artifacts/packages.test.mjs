@@ -12,8 +12,8 @@ import {distributions} from '../../scripts/distributions.mjs';
 const root = resolve(import.meta.dirname, '../..');
 const version = JSON.parse(await readFile(join(root,'package.json'),'utf8')).version;
 const artifactDir = join(root,'artifacts');
-assert.equal(distributions.length, 6, '0.6.1 delivers combined plus five independent splits');
-assert.equal(version, '0.6.1');
+assert.equal(distributions.length, 7, '0.7.0 delivers combined plus six independent splits');
+assert.equal(version, '0.7.0');
 const checksums = new Map((await readFile(join(artifactDir,'SHA256SUMS'),'utf8')).trim().split('\n').map(line => line.split('  ').reverse()));
 const hostRequire = createRequire(createRequire(join(root,'package.json')).resolve('@deepseek-ai/dsh/package.json'));
 for(const {name,modules} of distributions) test('packed installable distribution: '+name,{timeout:120000},async t=>{
@@ -28,10 +28,10 @@ for(const {name,modules} of distributions) test('packed installable distribution
   const pkg=JSON.parse(await readFile(join(packageDir,'package.json'),'utf8'));
   assert.equal(pkg.version,version);assert.equal(pkg.name,name);assert.equal(pkg.private,undefined);
   const readme = await readFile(join(packageDir,'README.md'),'utf8');
-  assert.match(readme, /Published npm baseline \(Extras 0\.6\.1\)/);
+  assert.match(readme, /Native npm baseline \(Extras 0\.7\.0\)/);
   assert.ok(!readme.includes('This branch is not a published release'));
   assert.ok(!readme.includes('candidate is **not published**'));
-  assert.ok(readme.includes('https://github.com/LMGateX/dsh-extras/releases/download/v0.6.1/dsh-extras-0.6.1.tgz'));
+  assert.ok(readme.includes('https://github.com/LMGateX/dsh-extras/releases/download/v0.7.0/dsh-extras-0.7.0.tgz'));
   assert.ok(readme.includes('38a6a5c965aa99ab525161efb7cc5cf1fe62fced'));
   assert.ok(readme.includes('actual published npm packages'));
   assert.ok(readme.includes('Unknown or changed driver bytes still fail closed'));
@@ -48,7 +48,7 @@ for(const {name,modules} of distributions) test('packed installable distribution
   const browserMap=JSON.parse(await readFile(join(packageDir,'lib/client.js.map'),'utf8'));
   assert.equal(browserMap.sources.some(path=>path.endsWith('/client/request-recovery.ts')),modules.includes('retry'),'recovery adapter ships only with selected retry');
   assert.equal(browserMap.sources.some(path=>path.endsWith('/client/workspace-settings.ts')),modules.includes('model-policy') || modules.includes('compact-context'),'workspace discovery and picker never leak into unrelated split payloads');
-  for(const id of ['compact-context','retry','chime','goalWait','model-policy']) {
+  for(const id of ['compact-context','retry','chime','goalWait','model-policy','host-timezone']) {
     const notice=listing.some(file=>file==='package/notices/'+id+'.txt');
     assert.equal(notice,modules.includes(id),'selected feature notice '+id);
   }
@@ -101,6 +101,11 @@ for(const {name,modules} of distributions) test('packed installable distribution
     assert.equal(resolved.modules['compact-context'].retryAttempts.get(), 0);
     assert.deepEqual(entry.Config({}).modules['compact-context'].compactionReasoning.get(), {enabled:false,rules:[{scope:'all',mode:'inherit'}]}, 'packed defaults keep request reasoning disabled and tool-independent');
   }
+  if (modules.includes('host-timezone')) {
+    assert.deepEqual(Object.keys(entry.Config({}).modules['host-timezone']),['enabled']);
+    assert.equal(entry.Config({}).modules['host-timezone'].enabled.get(),false);
+    assert.equal(entry.Config({modules:{'host-timezone':{enabled:true}}}).modules['host-timezone'].enabled.get(),true);
+  }
   if (modules.includes('model-policy')) {
     const defaults = entry.Config({}).modules['model-policy'];
     assert.equal(defaults.enabled.get(), false, 'new capability never auto-enables');
@@ -114,14 +119,18 @@ for(const {name,modules} of distributions) test('packed installable distribution
   }
   for (const bundle of ['index.js','migration.js','migrate.js']) {
     const map = JSON.parse(await readFile(join(packageDir, 'lib', bundle + '.map'), 'utf8'));
-    for (const [id,directory] of Object.entries({'compact-context':'compact-context',retry:'retry',chime:'chime',goalWait:'goal-wait','model-policy':'model-policy'})) {
+    for (const [id,directory] of Object.entries({'compact-context':'compact-context',retry:'retry',chime:'chime',goalWait:'goal-wait','model-policy':'model-policy','host-timezone':'host-timezone'})) {
       if (!modules.includes(id)) assert.ok(!map.sources.some(source => source.includes('/modules/' + directory + '/') && !source.endsWith('/reasoning-policy.ts')), name + '/' + bundle + ' excludes ' + id);
     }
   }
   const migration=await import(pathToFileURL(join(packageDir,'lib/migration.js')).href);
-  assert.deepEqual(migration.MODULE_IDS, ['compact-context','retry','chime','goalWait','model-policy']);
+  assert.deepEqual(migration.MODULE_IDS, ['compact-context','retry','chime','goalWait','model-policy','host-timezone']);
   assert.deepEqual(migration.LEGACY_MODULE_IDS, ['compact-context','retry','chime','goalWait']);
-  assert.equal(Object.hasOwn(migration.LEGACY_DEFAULTS,'model-policy'), false);
+  for (const id of ['model-policy','host-timezone']) {
+    assert.equal(Object.hasOwn(migration.LEGACY_DEFAULTS,id),false);
+    assert.equal(Object.hasOwn(migration.LEGACY_PACKAGES,id),false);
+  }
+  assert.equal(Boolean(pkg.peerDependencies['@deepseek-ai/dsh-client-modules']),modules.includes('host-timezone'),'artifact service peer only follows selected host adapter');
   if (modules.includes('model-policy')) {
     const input = {profileId:'packed-fixture',profile:{dir:temp,patchPath:join(temp,'profile.patch.yml'),home:temp,installAnchor:join(temp,'package.json')},revision:'one',manifest:{},patchText:'[]',manifestText:'{}',rows:[],sources:[],target:{rowId:name,moduleIds:['model-policy']},explicit:{},peers:{},problems:[],legacyMode:false};
     assert.deepEqual(migration.planMigration(input).decisions.map(({phase,enabled,config}) => ({phase,enabled,config})), [{phase:'fresh',enabled:false,config:{enabled:false}}]);

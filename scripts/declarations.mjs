@@ -10,6 +10,7 @@ const configTypes = {
   chime: ['config', 'ResolvedRowConfig'],
   goalWait: ['config', 'ResolvedConfig'],
   'model-policy': ['policy', 'ResolvedConfig'],
+  'host-timezone': ['index', 'Config'],
 };
 
 export async function writeDeclarations(root, out, {name, modules}) {

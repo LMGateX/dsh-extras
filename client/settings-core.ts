@@ -2,17 +2,17 @@ import { createSettingsCollapse } from './collapse.ts';
 import { SETTINGS_CSS, useSettingsText, translateSettingsError, type SettingsLocale, type SettingsText } from './settings-ui.ts';
 import { bindSection, createPageFormAdapter } from './forms.ts';
 import { createSettingsGroupView, type GroupField } from './settings-group.ts';
-import type { CapabilityStatus, GoalWaitStatus } from './status.ts';
+import type { CapabilityStatus, GoalWaitStatus, HostTimezoneStatus } from './status.ts';
 import type { ConfigForm, ConfigFormSnapshot, ConfigPageForm, PathOperation, AcceptedConfigSource } from './forms.ts';
 
-export type ModuleId = 'compact-context' | 'retry' | 'chime' | 'goalWait' | 'model-policy';
+export type ModuleId = 'compact-context' | 'retry' | 'chime' | 'goalWait' | 'model-policy' | 'host-timezone';
 export interface SettingsDescriptor {
   rowId: string;
   packageName: string;
   moduleIds: readonly ModuleId[];
 }
 export interface SettingsStatus {
-  modules?: Partial<Record<ModuleId, { phase?: string; ready?: boolean; enabled?: boolean; reason?: string; capabilities?: { compactionReasoning?: CapabilityStatus; tools?: CapabilityStatus; continuation?: CapabilityStatus }; details?: { goalWait?: GoalWaitStatus } }>>;
+  modules?: Partial<Record<ModuleId, { phase?: string; ready?: boolean; enabled?: boolean; reason?: string; capabilities?: { compactionReasoning?: CapabilityStatus; tools?: CapabilityStatus; continuation?: CapabilityStatus; hostTimezone?: CapabilityStatus }; details?: { goalWait?: GoalWaitStatus; hostTimezone?: HostTimezoneStatus } }>>;
   report?: unknown;
 }
 export interface SettingsStatusStore {
@@ -164,6 +164,7 @@ export function createFieldEditor(form: ConfigForm, field: TextField) {
 const labels: Record<ModuleId, { en: string; zh: string }> = {
   'compact-context': { en: 'Compact-context', zh: '上下文压缩' },
   'model-policy': { en: 'Model policy', zh: '模型策略' },
+  'host-timezone': { en: 'Request time zone follows DSH host', zh: '请求时区跟随 DSH 本机' },
   retry: { en: 'Stream and empty-response retry', zh: '流式与空响应重试' },
   chime: { en: 'Session chime', zh: '会话提示音' },
   goalWait: { en: 'Goal wait', zh: '目标等待' },
@@ -285,6 +286,9 @@ export function createSettingsView(
     const form = bindSection(root, ['modules', id]);
     const snapshot = useSnapshot(form);
     const moduleStatus = runtime?.modules?.[id];
+    const defaultEnabled = id !== 'model-policy' && id !== 'host-timezone';
+    const hostTimezone = liveRuntime?.modules?.[id]?.details?.hostTimezone;
+    const hostDisabled = liveRuntime?.modules?.[id]?.phase === 'disabled';
     const text = (field: TextField, label: string, hint?: string) => h(TextControl, { key: field, form, field, label, hint });
     const flag = (field: string, label: string, fallback = false) => h(Switch, { key: field, form, field, label, fallback });
     let fields: unknown[];
@@ -337,6 +341,13 @@ export function createSettingsView(
       ] satisfies GroupField[]}),
       h('p', {key:'activation-limitation'}, t('Activation limitation: repeated external disarm during an owned hold can be indistinguishable from the gate’s own disarm; release may rearm that goal. Use replacement to wait without changing activation. Reliable observed revocations still fail closed; no strategy changes durable goal phase.', '激活门控的历史限制：已持有等待期间，外部重复撤销激活可能与门控自身的撤销无法区分；释放等待时可能重新激活该目标。可选择 replacement，在不改变激活状态的情况下等待。可靠观测到的撤权仍会安全拒绝续跑；任何策略均不更改持久化目标阶段。')),
     ];
+    else if (id === 'host-timezone') fields = [
+      h('p', {key:'reload-limit','data-host-timezone-reload':''}, t('Enabling or disabling requires a full page reload. Already-open pages are not confirmed protected by a saved switch or server readiness.', '启用或禁用后均需完整重新加载页面。已保存的开关或服务器就绪状态不代表已打开的页面受到保护。')),
+      h('p', {key:'scope'}, t('Only new automatic request time-zone reports and automatic schedule defaults use the DSH host zone. Explicit task rules, existing history, native clocks and tool environments stay unchanged.', '仅新增的自动请求时区上报与自动定时默认值使用 DSH 宿主时区；明确指定的任务规则、既有历史、原生时钟和工具环境保持不变。')),
+      h('p', {key:'adapter-status',role:'status','data-host-timezone-status':''}, capabilityText(t('Server artifact adapter', '服务器资源适配器'),hostDisabled ? {phase:'disabled'} : liveRuntime?.modules?.[id]?.capabilities?.hostTimezone,t)),
+      h('p', {key:'reload-status',role:'status','data-host-timezone-state':''}, t('Reload status: ', '重载状态：') + phaseText(hostDisabled ? 'disabled' : hostTimezone?.status === 'needs-full-reload' ? 'reload-required' : hostTimezone?.status ?? 'unavailable',t)),
+      hostTimezone?.timeZone && h('p', {key:'host-zone'}, t('DSH host time zone: ', 'DSH 宿主时区：') + hostTimezone.timeZone),
+    ];
     else fields = chimeEditor
       ? [h(chimeEditor, { key: 'chime-editor', configForm: form })]
       : [h('p', { key: 'chime-unavailable', role: 'status' }, t("The custom chime editor is unavailable in this distribution.", "此分发版本的提示音编辑器不可用。"))];
@@ -360,9 +371,9 @@ export function createSettingsView(
     return h('section', { key: id, className: 'extras-module', 'data-module': id, 'aria-label': moduleLabel },
       h('h3', null, h('button', collapse.buttonProps, moduleLabel)),
       collapse.summary,
-      h('p', { 'data-saved-enable': '', role: 'status' }, t('Saved enable intent: ', '已保存的启用意图：') + ((record(snapshot.value).enabled ?? id !== 'model-policy') ? t('enabled', '已启用') : t('disabled', '已禁用'))),
+      h('p', { 'data-saved-enable': '', role: 'status' }, t('Saved enable intent: ', '已保存的启用意图：') + ((record(snapshot.value).enabled ?? defaultEnabled) ? t('enabled', '已启用') : t('disabled', '已禁用'))),
       // The original custom editor already owns the same chime.enabled switch.
-      (id !== 'chime' || !chimeEditor) && flag('enabled', t('Enable ', '启用') + moduleLabel, id !== 'model-policy'),
+      (id !== 'chime' || !chimeEditor) && flag('enabled', t('Enable ', '启用') + moduleLabel, defaultEnabled),
       h('p', { role: 'status' }, moduleStatus
         ? [phaseText(moduleStatus.phase ?? 'Status unknown', t), moduleStatus.ready === undefined ? '' : moduleStatus.ready ? t('ready', '已就绪') : t('not ready', '未就绪'),
           moduleStatus.enabled === undefined ? '' : moduleStatus.enabled ? t('enabled', '已启用') : t('disabled', '已禁用'), translateSettingsError(moduleStatus.reason ?? '', t)].filter(Boolean).join(' · ')

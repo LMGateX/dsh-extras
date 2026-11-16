@@ -258,7 +258,7 @@ export async function runMigration(host: NativeMigrationHost, target: Distributi
       // capabilities have no legacy owner: append only a safely validated fresh gate,
       // never replace the old operation, backup, input evidence or target identity.
       const completed = journal;
-      const missing = target.moduleIds.filter(id => id === 'model-policy' && !completed.plan.decisions.some(d => d.moduleId === id));
+      const missing = target.moduleIds.filter(id => !Object.hasOwn(LEGACY_PACKAGES, id) && !completed.plan.decisions.some(d => d.moduleId === id));
       const additions = missing.length ? planMigration({...input,target:{...target,moduleIds:missing}}).decisions : [];
       const admitted = additions.filter(d => d.phase === 'fresh' && !d.source && !completed.recoveryWrites && completed.ownershipVersion === 1);
       if (admitted.length) {
@@ -325,8 +325,9 @@ export async function runMigration(host: NativeMigrationHost, target: Distributi
 }
 
 const PEER_MODULES: Record<string, readonly ModuleId[]> = {
-  'dsh-extras': ['compact-context', 'retry', 'chime', 'goalWait', 'model-policy'],
+  'dsh-extras': ['compact-context', 'retry', 'chime', 'goalWait', 'model-policy', 'host-timezone'],
   'dsh-extras-model-policy': ['model-policy'],
+  'dsh-extras-host-timezone': ['host-timezone'],
   'dsh-extras-compact-context': ['compact-context'], 'dsh-extras-retry': ['retry'],
   'dsh-extras-chime': ['chime'], 'dsh-extras-goal-wait': ['goalWait'],
 };

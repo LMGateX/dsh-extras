@@ -87,6 +87,16 @@ test('new model-policy peer is off by omission and explicit enable creates a con
   assert.deepEqual((await inspectMigration(f.host,modelTarget)).peers['model-policy'], ['combined-upgrade']);
 });
 
+test('new host-timezone peer is off by omission and explicit enable creates a conflict', async t => {
+  const f = await fixture(t);
+  const hostTarget: Distribution = {rowId:'dsh-extras-host-timezone',packageName:'dsh-extras-host-timezone',moduleIds:['host-timezone']};
+  const rows = (enabled?: boolean) => [{id:hostTarget.rowId,name:hostTarget.rowId,config:{}},{id:'combined-upgrade',name:'dsh-extras',config:{modules:enabled === undefined ? {} : {'host-timezone':{enabled}}}}];
+  await f.patch([{insert:rows()}]);
+  assert.equal((await inspectMigration(f.host,hostTarget)).peers['host-timezone'], undefined);
+  await f.patch([{insert:rows(true)}]);
+  assert.deepEqual((await inspectMigration(f.host,hostTarget)).peers['host-timezone'], ['combined-upgrade']);
+});
+
 async function snapshot(root: string): Promise<Record<string, string>> {
   const values: Record<string, string> = {};
   for (const entry of await readdir(root, { withFileTypes: true })) {

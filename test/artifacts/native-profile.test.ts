@@ -78,9 +78,11 @@ test('native CLI installs packed combined distribution into isolated web profile
   const moduleStatus=await page.evaluate(async()=>{const response=await fetch('/extras/dsh-extras/status',{credentials:'same-origin',cache:'no-store'});return {code:response.status,body:await response.json()};});
   assert.equal(moduleStatus.code,200);assert.equal(moduleStatus.body.modules.chime.ready,true);
   assert.equal(moduleStatus.body.modules['compact-context'].phase,'active','context adapter activates without a global engine in stock web presets');
-  assert.deepEqual(Object.keys(moduleStatus.body.modules).sort(),['chime','compact-context','goalWait','model-policy','retry']);
+  assert.deepEqual(Object.keys(moduleStatus.body.modules).sort(),['chime','compact-context','goalWait','host-timezone','model-policy','retry']);
   assert.equal(moduleStatus.body.modules['model-policy'].enabled,false);
   assert.equal(moduleStatus.body.modules['model-policy'].phase,'disabled');
+  assert.equal(moduleStatus.body.modules['host-timezone'].enabled,false);
+  assert.equal(moduleStatus.body.modules['host-timezone'].phase,'disabled');
   await page.getByRole('button',{name:'Expand all',exact:true}).click();
   console.log('Native module phases:',Object.fromEntries(Object.entries(moduleStatus.body.modules).map(([id,value])=>[id,(value as any).phase])));
   const patchFile=join(environment(temp).DSH_HOME!,'profiles',profile,'cordis.patch.yml');
@@ -237,12 +239,12 @@ test('native CLI installs packed combined distribution into isolated web profile
   console.log('Native startup log:',clean(log).slice(-3000));
 });
 
-test('all six packed manifests compose through native CLI; distinct split peers coexist', {timeout:180000}, async t=>{
+test('all seven packed manifests compose through native CLI; distinct split peers coexist', {timeout:180000}, async t=>{
   const temp=await mkdtemp(join(root,'.sandbox-native-'));
   t.after(async()=>{assert.ok(temp.startsWith(join(root,'.sandbox-native-')));await rm(temp,{recursive:true,force:true});});
   const seed=process.env.DSH_EXTRAS_NATIVE_SEED;
   if(seed){assert.ok(resolve(seed).startsWith(join(root,'.sandbox-native-')));await cp(join(seed,'cache'),join(temp,'cache'),{recursive:true});await cp(join(seed,'data'),join(temp,'data'),{recursive:true});}
-  const names=['dsh-extras','dsh-extras-compact-context','dsh-extras-retry','dsh-extras-chime','dsh-extras-goal-wait','dsh-extras-model-policy'];
+  const names=['dsh-extras','dsh-extras-compact-context','dsh-extras-retry','dsh-extras-chime','dsh-extras-goal-wait','dsh-extras-model-policy','dsh-extras-host-timezone'];
   const flatten=(value:any):any[]=>Array.isArray(value)?value.flatMap(flatten):value&&typeof value==='object'?[...(typeof value.id==='string'?[value]:[]),...Object.values(value).flatMap(flatten)]:[];
   for(const [index,name] of names.entries()){
     const profile='compose-'+index;
@@ -264,7 +266,7 @@ test('all six packed manifests compose through native CLI; distinct split peers 
   assert.equal(peerRows.some(row=>row.id==='dsh-extras'),false);
 });
 
-/** Real CLI install + native web shell shared by the five independent split consumers. */
+/** Real CLI install + native web shell shared by the six independent split consumers. */
 async function splitWebFixture(t: TestContext, suffix: string, moduleId: string) {
   // Chromium's process-singleton socket has a short Unix pathname limit,
   // including the caller's explicit disposable TMPDIR.
@@ -385,19 +387,26 @@ async function sharedPolicyRoundtrip(f: Awaited<ReturnType<typeof splitWebFixtur
   };
 }
 
-for (const [suffix, moduleId] of [['compact-context', 'compact-context'], ['model-policy', 'model-policy'], ['retry', 'retry'], ['chime', 'chime'], ['goal-wait', 'goalWait']] as const) {
+for (const [suffix, moduleId] of [['compact-context', 'compact-context'], ['model-policy', 'model-policy'], ['retry', 'retry'], ['chime', 'chime'], ['goal-wait', 'goalWait'], ['host-timezone', 'host-timezone']] as const) {
   test('packed split whole GUI persists selected module only: ' + suffix, { timeout: 180000 }, async t => {
     const f = await splitWebFixture(t, suffix, moduleId); const { page } = f;
     const section = page.locator('[data-module="' + moduleId + '"]');
-    if (moduleId === 'model-policy') {
+    if (moduleId === 'model-policy' || moduleId === 'host-timezone') {
       assert.equal((await f.status()).modules[moduleId].enabled, false);
       assert.equal((await f.status()).modules[moduleId].phase, 'disabled');
-      await section.getByRole('checkbox', { name: 'Enable Model policy', exact: true }).click();
+      await section.getByRole('checkbox', { name: moduleId === 'host-timezone' ? 'Enable Request time zone follows DSH host' : 'Enable Model policy', exact: true }).click();
       await expect.poll(async () => (await f.readModules())[moduleId]?.enabled).toBe(true);
     }
     await f.active();
     let verifySaved: () => Promise<void>;
-    if (moduleId === 'retry') {
+    if (moduleId === 'host-timezone') {
+      verifySaved = async () => {
+        await expect(section.getByRole('checkbox', {name:'Enable Request time zone follows DSH host',exact:true})).toBeChecked();
+        await expect(section.locator('[data-host-timezone-reload]')).toContainText('full page reload');
+        await expect.poll(async () => (await f.status()).modules[moduleId].capabilities?.hostTimezone?.phase).toBe('standby');
+        await expect.poll(async () => (await f.status()).modules[moduleId].details?.hostTimezone?.status).toBe('needs-full-reload');
+      };
+    } else if (moduleId === 'retry') {
       const policy = section.locator('[data-group="retry-policy"]');
       await policy.getByRole('checkbox', { name: 'Retry empty model responses', exact: true }).uncheck();
       await policy.getByRole('button', { name: 'Save', exact: true }).click();

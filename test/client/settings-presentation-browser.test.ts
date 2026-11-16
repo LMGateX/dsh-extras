@@ -6,6 +6,7 @@ import {dirname, join} from 'node:path';
 import {createRequire} from 'node:module';
 import {createServer} from 'node:http';
 import {once} from 'node:events';
+import {tmpdir} from 'node:os';
 import {build} from 'esbuild';
 import {chromium, type Page} from '@playwright/test';
 import {canonicalPolicyHttpFixture} from './canonical-http.fixture.ts';
@@ -18,15 +19,17 @@ const modules = {
   chime:{zh:'会话提示音',en:'Session chime'},
   goalWait:{zh:'目标等待',en:'Goal wait'},
   'model-policy':{zh:'模型策略',en:'Model policy'},
+  'host-timezone':{zh:'请求时区跟随 DSH 本机',en:'Request time zone follows DSH host'},
 };
 type ModuleId = keyof typeof modules;
 const distributions: {name:string;ids:ModuleId[];field: string;draft:string;value:unknown}[] = [
-  {name:'dsh-extras',ids:['compact-context','retry','chime','goalWait','model-policy'],field:'guidanceText',draft:'Unsaved guidance / 保留草稿',value:'Unsaved guidance / 保留草稿'},
+  {name:'dsh-extras',ids:['compact-context','retry','chime','goalWait','model-policy','host-timezone'],field:'guidanceText',draft:'Unsaved guidance / 保留草稿',value:'Unsaved guidance / 保留草稿'},
   {name:'dsh-extras-compact-context',ids:['compact-context'],field:'guidanceText',draft:'Unsaved guidance / 保留草稿',value:'Unsaved guidance / 保留草稿'},
   {name:'dsh-extras-retry',ids:['retry'],field:'providers',draft:'Route/Exact-Case',value:['Route/Exact-Case']},
   {name:'dsh-extras-chime',ids:['chime'],field:'durationMs',draft:'3000',value:3000},
   {name:'dsh-extras-goal-wait',ids:['goalWait'],field:'maxHoldMs',draft:'2500',value:2500},
   {name:'dsh-extras-model-policy',ids:['model-policy'],field:'provider',draft:'Unsaved/Provider',value:'Unsaved/Provider'},
+  {name:'dsh-extras-host-timezone',ids:['host-timezone'],field:'enabled',draft:'',value:true},
 ];
 const chinese = /[\u3400-\u9fff]/;
 
@@ -164,8 +167,8 @@ async function presentation(page: Page, theme:'light'|'dark') {
 
 // Build and pack exactly as selected-payload.test.ts does. No source-only entry,
 // release output mutation, profile install, live GUI, or persistent web server.
-test('all six actual packed settings localize, retain drafts and use native themed presentation', {timeout:180000}, async t => {
-  const sandbox=await mkdtemp('/tmp/dxp-presentation-');
+test('all seven actual packed settings localize, retain drafts and use native themed presentation', {timeout:180000}, async t => {
+  const sandbox=await mkdtemp(join(tmpdir(),'dxp-presentation-'));
   const env={PATH:process.env.PATH,HOME:join(sandbox,'home'),DSH_HOME:join(sandbox,'dsh'),DSH_PROFILE:'fixture',
     XDG_CONFIG_HOME:join(sandbox,'config'),XDG_CACHE_HOME:join(sandbox,'cache'),XDG_DATA_HOME:join(sandbox,'data'),
     npm_config_cache:join(sandbox,'npm'),TMPDIR:sandbox};
@@ -252,6 +255,30 @@ test('all six actual packed settings localize, retain drafts and use native them
           await page.setViewportSize({width:960,height:800});await presentation(page,'light');
           assert.deepEqual(await page.evaluate(()=>(window as any).writes),[]);
         }));
+        if(ids[0]==='host-timezone') {
+          await t.test(name+': switch-only settings localize reload limits and save only explicit enablement',()=>scenario('en',async page=>{
+            const section=page.locator('[data-module="host-timezone"]');
+            const toggle=section.getByRole('checkbox');
+            assert.equal(await toggle.count(),1);
+            assert.equal(await toggle.isChecked(),false);
+            assert.match(await section.locator('[data-host-timezone-reload]').innerText(),/full page reload.*Already-open pages/);
+            await toggle.check();
+            await page.waitForFunction(()=>(window as any).accepted().revision===8);
+            assert.deepEqual(await page.evaluate(()=>(window as any).writes),[{revision:7,ops:[{op:'set',path:['modules','host-timezone','enabled'],value:true}]}]);
+            await page.evaluate(()=>(window as any).setLocale('zh'));
+            await titles(page,ids,'zh');
+            assert.match(await section.locator('[data-host-timezone-reload]').innerText(),/完整重新加载页面.*已打开的页面/);
+            assert.equal(await toggle.isChecked(),true);
+            await toggle.uncheck();
+            await page.waitForFunction(()=>(window as any).accepted().revision===9);
+            assert.deepEqual(await page.evaluate(()=>(window as any).writes.at(-1)),{revision:8,ops:[{op:'set',path:['modules','host-timezone','enabled'],value:false}]});
+            for(const patch of [{writable:false},{writable:true,status:'loading'},{status:'unavailable'},{status:'ready',revision:undefined}]) {
+              await page.evaluate(patch=>(window as any).setFormState(patch),patch);
+              assert.equal(await toggle.isDisabled(),true);
+            }
+          }));
+          continue; // A switch-only module has no text/group draft to exercise below.
+        }
         await t.test(name+': owned runtime notices and conflict alerts follow Chinese and native error colors',()=>scenario('zh',async page=>{
           await page.getByRole('status').filter({hasText:'syntheticService'}).first().waitFor();
           for (const id of ids) {
@@ -274,7 +301,7 @@ test('all six actual packed settings localize, retain drafts and use native them
           await page.getByRole('heading',{name:'Extras settings',exact:true}).waitFor();
           assert.match(await alert.innerText(),/configuration changed/i);
         }));
-        for(const id of ids.filter(id=>id!=='chime'&&id!=='model-policy')) await t.test(name+': '+id+' grouped policy is atomic across language switch, reset, conflict and permission fences',()=>scenario('en',async page=>{
+        for(const id of ids.filter(id=>id!=='chime'&&id!=='model-policy'&&id!=='host-timezone')) await t.test(name+': '+id+' grouped policy is atomic across language switch, reset, conflict and permission fences',()=>scenario('en',async page=>{
           const specs = {
             retry:{name:'retry-policy',fields:['errorCodes','providers','retryEmptyResponse'],edits:{errorCodes:'EXACT',providers:'',retryEmptyResponse:false},expected:[['errorCodes',['EXACT']],['providers',[]],['retryEmptyResponse',false]]},
             'compact-context':{name:'compact-timeouts',fields:['retryAttempts','retryDelayMs','ptcTimeoutMs','ptcModelTimeouts'],edits:{retryAttempts:'0',retryDelayMs:'0.125',ptcTimeoutMs:'0',ptcModelTimeouts:''},expected:[['retryAttempts',0],['retryDelayMs',125],['ptcTimeoutMs',0],['ptcModelTimeouts',{}]]},
@@ -452,7 +479,7 @@ test('all six actual packed settings localize, retain drafts and use native them
       }
     } finally {await browser?.close();server.close();await once(server,'close');}
   } finally {
-    assert.equal(dirname(await realpath(sandbox)),'/tmp','Cleanup stays inside the allocated absolute disposable root.');
+    assert.equal(dirname(await realpath(sandbox)),await realpath(tmpdir()),'Cleanup stays inside the allocated absolute disposable root.');
     await rm(sandbox,{recursive:true,force:true});
   }
 });

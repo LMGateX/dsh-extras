@@ -6,7 +6,15 @@ export interface GoalWaitStatus {
   fallback?: string;
   host?: { version?: string; distribution?: string; cordis?: string; driverDigest?: string; driverSha256?: string };
 }
-export interface ModuleStatus { phase: string; ready: boolean; enabled: boolean; reason?: string; capabilities?: { compactionReasoning?: CapabilityStatus; tools?: CapabilityStatus; continuation?: CapabilityStatus }; details?: { goalWait?: GoalWaitStatus }; }
+/** Host adapter readiness does not certify the scripts of an already-open page. */
+export interface HostTimezoneStatus {
+  requested: boolean;
+  status: 'disabled' | 'needs-full-reload' | 'unavailable';
+  timeZone?: string;
+  adapterVersion: '0.2.2-rc.3';
+  reason?: string;
+}
+export interface ModuleStatus { phase: string; ready: boolean; enabled: boolean; reason?: string; capabilities?: { compactionReasoning?: CapabilityStatus; tools?: CapabilityStatus; continuation?: CapabilityStatus; hostTimezone?: CapabilityStatus }; details?: { goalWait?: GoalWaitStatus; hostTimezone?: HostTimezoneStatus }; }
 export interface ExtrasStatus {
   modules: Record<string, ModuleStatus>;
   report?: unknown;

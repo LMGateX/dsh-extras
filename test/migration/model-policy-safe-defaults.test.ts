@@ -6,15 +6,25 @@ import type { Discovery } from '../../src/migration/types.ts';
 function snapshot(legacyMode = false): Discovery {
   return {profileId:'fixture', profile:{dir:'/disposable/profile',patchPath:'/disposable/profile/cordis.patch.yml',home:'/disposable/home',installAnchor:'/disposable/dsh/package.json'},revision:'one',manifest:{},patchText:'[]',manifestText:'{}',rows:[],sources:[],target:{rowId:'dsh-extras-model-policy',moduleIds:['model-policy']},explicit:{},peers:{},problems:[],legacyMode};
 }
-test('new model-policy remains off without a predecessor on fresh and legacy upgrades', () => {
-  for (const legacyMode of [false, true]) {
-    const decision = planMigration(snapshot(legacyMode)).decisions[0];
-    assert.equal(decision.phase, 'fresh');
-    assert.equal(decision.enabled, false);
-    assert.deepEqual(decision.config, {enabled:false});
+test('new capabilities remain off without invented predecessors on fresh and legacy upgrades', () => {
+  for (const id of ['model-policy', 'host-timezone'] as const) {
+    for (const legacyMode of [false, true]) {
+      const input = snapshot(legacyMode);
+      input.target = {rowId:'dsh-extras-' + id,moduleIds:[id]};
+      const decision = planMigration(input).decisions[0];
+      assert.equal(decision.phase, 'fresh', id);
+      assert.equal(decision.enabled, false, id);
+      assert.deepEqual(decision.config, {enabled:false});
+      input.explicit[id] = {enabled:true};
+      const enabled = planMigration(input).decisions[0];
+      assert.equal(enabled.phase, 'fresh', id);
+      assert.deepEqual(enabled.config, {enabled:true});
+      input.explicit[id] = {enabled:'yes'};
+      assert.equal(planMigration(input).decisions[0].phase,'conflict');
+    }
+    assert.equal(Object.hasOwn(LEGACY_DEFAULTS, id), false);
+    assert.equal(Object.hasOwn(LEGACY_PACKAGES, id), false);
   }
-  assert.equal(Object.hasOwn(LEGACY_DEFAULTS, 'model-policy'), false);
-  assert.equal(Object.hasOwn(LEGACY_PACKAGES, 'model-policy'), false);
 });
 
 test('explicit model-policy enable and exact selections survive an upgrade without legacy defaults', () => {

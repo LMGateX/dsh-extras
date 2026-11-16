@@ -1,9 +1,9 @@
 /** Canonical capability identifiers, independent of a distribution's install shape. */
 export const LEGACY_MODULE_IDS = ['compact-context', 'retry', 'chime', 'goalWait'] as const;
 export type LegacyModuleId = typeof LEGACY_MODULE_IDS[number];
-export const MODULE_IDS = [...LEGACY_MODULE_IDS, 'model-policy'] as const;
+export const MODULE_IDS = [...LEGACY_MODULE_IDS, 'model-policy', 'host-timezone'] as const;
 /** New capabilities must require explicit opt-in, including schema-less/status paths. */
-export function moduleDefaultEnabled(id: ModuleId): boolean { return id !== 'model-policy'; }
+export function moduleDefaultEnabled(id: ModuleId): boolean { return LEGACY_MODULE_IDS.some(legacyId => legacyId === id); }
 export type ModuleId = typeof MODULE_IDS[number];
 export interface CapabilityStatus {
   phase: 'disabled' | 'active' | 'standby' | 'handover' | 'unavailable';

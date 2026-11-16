@@ -35,10 +35,11 @@ for (const {name, modules} of distributions) test('packed public declaration ent
     assert.equal(files.includes('package/lib/driver/' + file), modules.includes('goalWait') && hasGoalPort, 'selected goal driver asset ' + file);
   }
   for (const dependency of ['@deepseek-ai/dsh', '@deepseek-ai/dsh-goal-round-driver']) {
-    const selected = modules.includes('goalWait') || dependency === '@deepseek-ai/dsh' && modules.includes('retry');
+    const selected = modules.includes('goalWait') || dependency === '@deepseek-ai/dsh' && (modules.includes('retry') || modules.includes('host-timezone'));
     assert.equal(Boolean(manifest.peerDependencies[dependency]), selected, 'selected dynamic host peer ' + dependency);
     if (selected) assert.equal(manifest.peerDependenciesMeta[dependency].optional, true);
   }
+  assert.equal(Boolean(manifest.peerDependencies['@deepseek-ai/dsh-client-modules']),modules.includes('host-timezone'),'selected host artifact service peer');
   for (const bundle of ['index', 'migration', 'migrate', 'client']) {
     const map = JSON.parse(execFileSync('tar', ['-xOf', archive, 'package/lib/' + bundle + '.js.map'], {encoding:'utf8'}));
     for (const [id, directory] of Object.entries(sourceDirectories)) {

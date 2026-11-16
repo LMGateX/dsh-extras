@@ -24,8 +24,9 @@ const OLD_ROWS: Record<LegacyModuleId, string[]> = {
   chime: ['dsh-session-chime', 'session-chime'], goalWait: ['goal-wait-gate'],
 };
 const DISTRIBUTIONS: Record<string, readonly ModuleId[]> = {
-  'dsh-extras': ['compact-context', 'retry', 'chime', 'goalWait', 'model-policy'],
+  'dsh-extras': ['compact-context', 'retry', 'chime', 'goalWait', 'model-policy', 'host-timezone'],
   'dsh-extras-model-policy': ['model-policy'],
+  'dsh-extras-host-timezone': ['host-timezone'],
   'dsh-extras-compact-context': ['compact-context'], 'dsh-extras-retry': ['retry'],
   'dsh-extras-chime': ['chime'], 'dsh-extras-goal-wait': ['goalWait'],
 };

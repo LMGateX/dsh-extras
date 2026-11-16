@@ -5,20 +5,21 @@ import { mkdtemp, mkdir, readFile, rm, cp, symlink, access, realpath } from 'nod
 import { join, dirname } from 'node:path';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
+import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
 import { build } from 'esbuild';
 import { chromium } from '@playwright/test';
 import {canonicalPolicyHttpFixture} from './canonical-http.fixture.ts';
 
 const root = new URL('../../', import.meta.url).pathname;
-const distributions = ['dsh-extras', 'dsh-extras-compact-context', 'dsh-extras-retry', 'dsh-extras-chime', 'dsh-extras-goal-wait', 'dsh-extras-model-policy'];
+const distributions = ['dsh-extras', 'dsh-extras-compact-context', 'dsh-extras-retry', 'dsh-extras-chime', 'dsh-extras-goal-wait', 'dsh-extras-model-policy', 'dsh-extras-host-timezone'];
 const reasoningMarkers = [
   'function createReasoningEditor(', 'function ReasoningControl(', 'validateCompactionReasoning',
   'Compaction-request reasoning', 'Refresh native effort choices', 'Native metadata unavailable.', 'modelCatalog()',
 ];
 
 test('actual emitted and packed clients carry reasoning implementation only in selected distributions', { timeout: 120000 }, async () => {
-  const sandbox = await mkdtemp('/tmp/dxp-');
+  const sandbox = await mkdtemp(join(tmpdir(), 'dxp-'));
   const env = {
     PATH: process.env.PATH, HOME: join(sandbox, 'home'), DSH_HOME: join(sandbox, 'dsh'), DSH_PROFILE: 'fixture',
     XDG_CONFIG_HOME: join(sandbox, 'config'), XDG_CACHE_HOME: join(sandbox, 'cache'),
@@ -138,7 +139,7 @@ test('actual emitted and packed clients carry reasoning implementation only in s
       }
     } finally { await browser?.close(); server.close(); await once(server, 'close'); }
   } finally {
-    assert.equal(dirname(await realpath(sandbox)), '/tmp', 'Cleanup must remain inside the allocated absolute temporary root.');
+    assert.equal(dirname(await realpath(sandbox)), await realpath(tmpdir()), 'Cleanup must remain inside the allocated absolute temporary root.');
     await rm(sandbox, { recursive: true, force: true });
   }
 });

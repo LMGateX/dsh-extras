@@ -80,6 +80,54 @@ test('additive journal admission retries a cleared peer conflict without replaci
   assert.equal(cleared.operationId,first.operationId);
 }));
 
+test('saved five-module journal upgrades additive host timezone without losing legacy recovery evidence',async()=>fixture(async({host,dir,entries})=>{
+  const baseline: Distribution = {...target,moduleIds:[...target.moduleIds,'model-policy']};
+  const first = await runMigration(host,baseline);
+  const paths = await profilePaths(host,baseline.rowId);
+  const old = JSON.parse(await readFile(paths.journal,'utf8'));
+  const patch = await readFile(host.profileContext.patchPath,'utf8');
+  const backup = await readFile(old.backup,'utf8');
+  const upgraded: Distribution = {...baseline,moduleIds:[...baseline.moduleIds,'host-timezone']};
+  const current = await inspectMigration(host,upgraded);
+  const config = current.rows.find(row=>row.id===baseline.rowId)!.config as any;
+  entries.push({id:'include:dsh-extras',options:{id:baseline.rowId,name:baseline.rowId},fiber:{state:2,effectiveConfig:{...config,modules:{...config.modules,'host-timezone':{enabled:false}}}}});
+  const report = await runMigration(host,upgraded);
+  assert.deepEqual(report.modules['host-timezone'],{phase:'fresh',ready:true,enabled:false});
+  assert.equal(report.operationId,first.operationId);
+  assert.equal(await readFile(host.profileContext.patchPath,'utf8'),patch,'additive opt-in does not rewrite prior feature settings');
+  const saved = JSON.parse(await readFile(paths.journal,'utf8'));
+  assert.deepEqual(saved.plan.decisions.filter((d:any)=>d.moduleId!=='host-timezone'),old.plan.decisions);
+  for (const key of ['operationId','backup','steps','previous','rollbackEvidence','environment','origin']) assert.deepEqual(saved[key],old[key],key+' preserved');
+  assert.equal(await readFile(old.backup,'utf8'),backup);
+  host.moduleConfig = id => id === 'host-timezone' ? {enabled:true} : config.modules[id];
+  const doc = parse(patch);doc.push({id:baseline.rowId,name:baseline.rowId,config:{...config,modules:{...config.modules,'host-timezone':{enabled:true}}}});
+  await writeFile(host.profileContext.patchPath,JSON.stringify(doc));
+  const enabled = await runMigration(host,upgraded);
+  assert.equal(enabled.modules['host-timezone']?.enabled,true);
+  assert.equal(enabled.modules['host-timezone']?.ready,true);
+  assert.equal(enabled.operationId,first.operationId);
+  const recovered=await rollbackMigration(host,upgraded,{operationId:first.operationId,modules:['retry']});
+  assert.equal(recovered.modules.retry?.phase,'restart-required','original recovery remains available and owner-fenced');
+}));
+
+test('host-timezone additive admission retries a cleared peer conflict without replacing the old operation',async()=>fixture(async({host,entries})=>{
+  const baseline: Distribution = {...target,moduleIds:[...target.moduleIds,'model-policy']};
+  const first=await runMigration(host,baseline);
+  const upgraded:Distribution={...baseline,moduleIds:[...baseline.moduleIds,'host-timezone']};
+  const input=await inspectMigration(host,upgraded);const config=input.rows.find(row=>row.id===baseline.rowId)!.config as any;
+  entries.push({id:baseline.rowId,options:{id:baseline.rowId,name:baseline.rowId},fiber:{state:2,effectiveConfig:{...config,modules:{...config.modules,'host-timezone':{enabled:false}}}}});
+  const patch=await readFile(host.profileContext.patchPath,'utf8');
+  const docs=parse(patch);docs.push({insert:[{id:'model-peer',name:'dsh-extras-host-timezone',config:{modules:{'host-timezone':{enabled:true}}}}]});
+  await writeFile(host.profileContext.patchPath,JSON.stringify(docs));
+  const conflicted=await runMigration(host,upgraded);
+  assert.equal(conflicted.modules['host-timezone']?.phase,'conflict');
+  assert.equal(conflicted.modules['host-timezone']?.ready,false);
+  await writeFile(host.profileContext.patchPath,patch);
+  const cleared=await runMigration(host,upgraded);
+  assert.equal(cleared.modules['host-timezone']?.phase,'fresh');assert.equal(cleared.modules['host-timezone']?.ready,true);
+  assert.equal(cleared.operationId,first.operationId);
+}));
+
 test('legacy adoption receipt is emitted only after saved imported config is actually adopted',async()=>fixture(async({host,entries})=>{
   const receipts:any[]=[];host.onLegacyAdopted=async(id,config,receipt)=>{await withProfileLock(host,async()=>{receipts.push({id,config:structuredClone(config),receipt});config.retryEmptyResponse=true;});};
   const first=await runMigration(host,target);assert.equal(receipts.length,0,'persisted-only import is not live adoption');

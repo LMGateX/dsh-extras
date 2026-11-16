@@ -47,7 +47,7 @@ for (const { name, modules } of distributions) {
   const actualHostPackages = Object.values(serverBuild.metafile.outputs).flatMap(output => output.imports)
     .filter(item => item.external && item.path.startsWith('@deepseek-ai/'))
     .map(item => item.path.split('/')[1]);
-  const selectedHostPackages = [...new Set([...hostPackages, ...actualHostPackages, ...(modules.includes('goalWait') ? ['dsh-goal-round-driver'] : []), ...(modules.includes('goalWait') || modules.includes('retry') ? ['dsh'] : [])])].sort();
+  const selectedHostPackages = [...new Set([...hostPackages, ...actualHostPackages, ...(modules.includes('goalWait') ? ['dsh-goal-round-driver'] : []), ...(modules.includes('goalWait') || modules.includes('retry') || modules.includes('host-timezone') ? ['dsh'] : []), ...(modules.includes('host-timezone') ? ['dsh-client-modules'] : [])])].sort();
   const peers = Object.fromEntries(await Promise.all(selectedHostPackages.map(async pkg => {
     const fullName = '@deepseek-ai/' + pkg;
     const manifest = JSON.parse(await readFile(hostRequire.resolve(fullName + '/package.json'), 'utf8'));

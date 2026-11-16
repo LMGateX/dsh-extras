@@ -83,6 +83,7 @@ const workspaceOverrides: Rule = (value, field) => {
   })(value, field);
 };
 const rules: Record<ModuleId, Record<string, Rule>> = {
+  'host-timezone': { enabled: boolean },
   'model-policy': { enabled: boolean, root:selection, descendants:selection, workspaceOverrides, compactionReasoning:value => { resolveCompactionReasoning(value); } },
   'compact-context': {
     enabled: boolean, compactTool: boolean, statusTool: boolean, guidance: boolean,

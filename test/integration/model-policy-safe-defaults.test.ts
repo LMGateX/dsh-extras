@@ -10,6 +10,9 @@ test('combined upgrades omit model policy safely while preserving original modul
   const config = Config({}) as any;
   for (const id of ['compact-context','retry','chime','goalWait']) assert.equal(config.modules[id].enabled.get(),true);
   assert.equal(config.modules['model-policy'].enabled.get(),false);
+  assert.deepEqual(Object.keys(config.modules['host-timezone']),['enabled']);
+  assert.equal(config.modules['host-timezone'].enabled.get(),false);
+  assert.equal((Config({modules:{'host-timezone':{enabled:true}}}) as any).modules['host-timezone'].enabled.get(),true);
   // Native Schemastery omits null defaults. Public feature resolution supplies inherit semantics.
   const resolved = modelPolicy.resolveConfig(config.modules['model-policy']);
   assert.equal(resolved.root,null);

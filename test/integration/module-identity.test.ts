@@ -14,9 +14,10 @@ import type { ModuleId as ClientId } from '../../client/settings.ts';
 type Assert<T extends true> = T;
 type NoOldId = Assert<'context' extends ModuleId | MigrationId | ClientId ? false : true>;
 type NewIdEverywhere = Assert<'compact-context' extends ModuleId & MigrationId & ClientId ? true : false>;
+type HostTimezoneEverywhere = Assert<'host-timezone' extends ModuleId & MigrationId & ClientId ? true : false>;
 
 test('combined native schema and public ids expose compact-context without a context alias', () => {
-  assert.deepEqual(MODULE_IDS, ['compact-context', 'retry', 'chime', 'goalWait', 'model-policy']);
+  assert.deepEqual(MODULE_IDS, ['compact-context', 'retry', 'chime', 'goalWait', 'model-policy', 'host-timezone']);
   assert.deepEqual(migrationIds, MODULE_IDS);
   assert.equal(compactContext.name, 'extras-compact-context');
   assert.deepEqual(Object.keys((Config as any).dict.modules.dict), [...MODULE_IDS]);

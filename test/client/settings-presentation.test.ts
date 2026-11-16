@@ -17,6 +17,28 @@ test('all non-chime settings have Chinese titles, labels, units and actions with
   for (const text of ['Extras 设置', '上下文压缩', '流式与空响应重试', '目标等待', '保存', '放弃草稿', '秒', '毫秒']) assert.ok(html.includes(text), 'Missing Chinese UI: ' + text);
 });
 
+test('host timezone has a default-off switch and explicit full-page reload limits without a runtime factory', () => {
+  const View = createSettingsView(React, {rowId:'dsh-extras-host-timezone',packageName:'dsh-extras-host-timezone',moduleIds:['host-timezone']});
+  const html = renderToStaticMarkup(React.createElement(View as any, {configForm:form}));
+  assert.match(html, /请求时区跟随 DSH 本机/);
+  assert.match(html, /完整重新加载页面/);
+  assert.match(html, /已打开的页面/);
+  assert.match(html, /已保存的启用意图：已禁用/);
+  assert.equal((html.match(/type="checkbox"/g) ?? []).length,1);
+  assert.doesNotMatch(html, /checked=/);
+  assert.doesNotMatch(html, /提示音编辑器不可用/);
+});
+
+test('host adapter readiness explicitly reports reload-required rather than protection of the loaded page', () => {
+  const status = {getSnapshot:()=>({modules:{'host-timezone':{phase:'active',ready:true,enabled:true,capabilities:{hostTimezone:{phase:'standby' as const}},details:{hostTimezone:{requested:true,status:'needs-full-reload' as const,timeZone:'Asia/Singapore',adapterVersion:'0.2.2-rc.3' as const}}}}}),subscribe:()=>()=>{}};
+  const View = createSettingsView(React,{rowId:'dsh-extras-host-timezone',packageName:'dsh-extras-host-timezone',moduleIds:['host-timezone']},undefined,status);
+  const html = renderToStaticMarkup(React.createElement(View as any,{configForm:form}));
+  assert.match(html,/重载状态：需要刷新页面/);
+  assert.match(html,/服务器资源适配器运行状态：待命/);
+  assert.match(html,/DSH 宿主时区：Asia\/Singapore/);
+  assert.match(html,/不代表已打开的页面受到保护/);
+});
+
 test('non-chime controls and module cards ship explicit theme-aware styling', () => {
   const html = markup();
   assert.match(html, /data-extras-settings/);
