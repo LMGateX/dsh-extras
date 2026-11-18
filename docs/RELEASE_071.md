@@ -18,7 +18,9 @@
 dsh plugin --profile web add https://github.com/LMGateX/dsh-extras/releases/download/v0.7.1/dsh-extras-0.7.1.tgz
 ```
 
-按需使用其他独立包；先校验 SHA256SUMS。包不捆绑第二份 DSH/Cordis，也不会执行 postinstall 迁移。
+按需使用其他独立包；先校验 SHA256SUMS。包不捆绑第二份 DSH/Cordis，也不会执行 postinstall 迁移。rc.3 / Extras 0.7.0 用户仍可使用保留的旧资产：`https://github.com/LMGateX/dsh-extras/releases/download/v0.7.0/dsh-extras-0.7.0.tgz`。
+
+本发行不安装、更新、配置或重启本机生产 DSH；不使用 GitHub Actions；不发布 Extras 到 npm。此说明不预称后续网络上传/下载回执。
 
 ## English
 
@@ -26,10 +28,10 @@ Exact compatibility refresh for official npm **DSH 0.2.2-rc.4**, Node >=24.9.0 a
 
 One complete official source clone and independent audits found the rc.4 non-manifest production delta limited to DeepSeek content-refusal translation, the `dsh-llm` failure code and an experimental LiveShare fix. Exact guards move together; the audited Goal compiled digest and three browser fingerprints are unchanged. Unknown versions, changed bytes and foreign owners remain fail-closed. rc.4's native `CONTENT_REFUSED` stays permanent in Extras stream classification and compaction retry classification; there is no new retry loop, synthetic message or provider dispatch. Native compaction/model/retry authority, the four Goal strategies/defaults, one shared executor and migration fail-closed boundaries are preserved. Native Continue remains ordinary retry-source follow-up, not immutable failed-request replay.
 
-Use Extras 0.7.0 for rc.3, 0.6.0 for rc.2 and 0.5.1 for rc.1. Prior releases/previews remain unchanged. This release does not install, update, configure or restart local production DSH. No GitHub Actions or Extras npm publication.
+Use Extras 0.7.0 for rc.3, 0.6.0 for rc.2 and 0.5.1 for rc.1. Prior releases/previews remain unchanged; the retained rc.3 asset is `https://github.com/LMGateX/dsh-extras/releases/download/v0.7.0/dsh-extras-0.7.0.tgz`. This release does not install, update, configure or restart local production DSH. No GitHub Actions or Extras npm publication.
 
 ## Validation and publication boundary
 
-Final 0.7.1 archives were rebuilt/repacked and passed **825/825 complete source tests** and **67/67 complete packed/native/browser tests**, including seven distributions, six split whole-GUI persistence runs and combined/host-timezone packed browser lifecycle cases. Native preflight/typecheck, clean consumers/public types and independent Standards/Spec follow-up reviews passed. Only the shipped README and final identity/assertions differ from the checked candidate; runtime/client payloads remain byte-identical.
+Final 0.7.1 archives were rebuilt/repacked and passed **825/825 complete source tests** and **67/67 complete packed/native/browser tests**, including seven distributions, six split whole-GUI persistence runs and combined/host-timezone packed browser lifecycle cases. Native preflight/typecheck and clean consumers/public types passed; independent Standards/Spec follow-up reviews and their documentation dispositions are recorded in the final review. Only the shipped README and final identity/assertions differ from the checked candidate; runtime/client payloads remain byte-identical.
 
 [Final validation](https://github.com/LMGateX/dsh-extras/blob/v0.7.1/docs/VALIDATION_RELEASE_071.md) records frozen inputs, commands, log hashes, seven archive hashes, identity comparison, isolation and process cleanup. [Independent review](https://github.com/LMGateX/dsh-extras/blob/v0.7.1/docs/REVIEW_RELEASE_071.md) separates review judgment from execution. This source note does not preclaim the subsequent network upload/download receipt.

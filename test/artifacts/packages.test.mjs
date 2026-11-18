@@ -33,7 +33,7 @@ for(const {name,modules} of distributions) test('packed installable distribution
   assert.ok(!readme.includes('rc.4 candidate is **not published**'));
   assert.ok(readme.includes('https://github.com/LMGateX/dsh-extras/releases/download/v0.7.1/dsh-extras-0.7.1.tgz'));
   assert.ok(readme.includes('3f321d32bfe382212a8ed8785c1d47a5a300aa23'));
-  assert.ok(readme.includes('actual published npm packages'));
+  assert.ok(readme.includes('actual published npm DSH packages'));
   assert.ok(readme.includes('Unknown or changed driver bytes still fail closed'));
   assert.equal(pkg.engines.dsh,'0.2.2-rc.4');assert.equal(pkg.dsh.client.platform,'web');
   assert.equal(pkg.dsh.client.platforms,undefined);assert.equal(pkg.dsh.bundle.patch,'cordis.patch.yml');
