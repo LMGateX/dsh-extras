@@ -4,6 +4,10 @@ Changes must cite the observed host/source constraint, explain the trade-off, an
 
 No amendments at the original specification freeze. Later approved amendments follow.
 
+## 2026-11-18 — Record the rc.4 production-profile baseline limitation honestly
+
+No task-start production-profile hash baseline was captured before the first read. The [rc.4 check contract](<DSH_RC4_071.md>) therefore cannot certify RC4-SAFE by equality. This is an evidence limitation, not permission to mutate and not a claim that equality passed. The underlying safety requirement is retained and separately evidenced: every install/build/test command used disposable HOME/DSH_HOME/XDG/TMP state and one worktree native graph; the only production-profile commands were read-only `sha256sum`/`stat`; both observed files' mtimes and kernel ctimes precede the task-start sample; no production installation, restart, live-GUI request, push or release occurred. The validation report records equality as unresolved and keeps the current read-only observations outside Git. Later tasks must sample a fresh baseline rather than reusing this one as current.
+
 ## 2026-11-18 — Check exact rc.4 without publication or production installation
 
 The direct request asks for one GitHub source acquisition and compatibility checking. The [rc.4 check contract](<DSH_RC4_071.md>) records the sole complete clone, exact tag and actual npm byte observations before implementation, narrows work to unreleased seven-package 0.7.1 / exact rc.4 recertification, and retains source/native/packed/browser/ownership/migration and independent review gates. rc.4 changes DeepSeek refusal reporting to native `CONTENT_REFUSED`; Extras must keep it permanent instead of retrying or remapping it. No push, tag, release or production operation is authorized by this task. Historical rc.3 evidence is preserved rather than relabeled.

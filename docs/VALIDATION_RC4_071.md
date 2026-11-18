@@ -5,7 +5,7 @@ Date: 2026-11-18, Asia/Singapore. Scope is the [pre-implementation contract](<DS
 ## Frozen candidate and acquisition
 
 - Base: published Extras 0.7.0 / rc.3 commit `5b1780861f2ab6cc4ea30641856c55fc019ed63c`.
-- Product/build/full-source candidate: `310bff3` (42 files; manifests, exact guards, refusal classification, tests and user-facing rc.4 labels).
+- Product/build/full-source candidate: `310bff3` (42 files; manifests, exact guards, refusal classification, tests and user-facing rc.4 labels). Later commits are test/documentation-only; the shipped source and the seven tested archives remain the `310bff3` build.
 - Exactly one full `git clone https://github.com/deepseek-ai/deepseek-harness.git` to disposable `/tmp/extras-rc4.v42Q00/upstream`, then detached `dsh-v0.2.2-rc.4` = `3f321d32bfe382212a8ed8785c1d47a5a300aa23`. The clone's tracked status is clean. rc.3 resolves to `38a6a5c965aa99ab525161efb7cc5cf1fe62fced`. No incremental source-page reads, second clone, source build, linker or upstream modification.
 - Official release metadata was fetched once with `gh release view`. Actual exact rc.4 npm packages were downloaded with `npm pack` for source-independent byte checks; no npm Git revision is inferred.
 - Actual exact official npm rc.4 dependencies, not a source-linked or production host. `npm install --ignore-scripts --no-audit --no-fund` with disposable HOME/DSH_HOME/profile/XDG/cache/TMP state changed 530 packages in about two minutes; the physical graph contains **682 installed packages**, **338 `@deepseek-ai` native packages**, and the same audited Goal digest. Lock SHA256 is `37137c35fd25ae2d1599b46372968b3cfa4349a64000aa12aef91f55b6a0d8cd`.
@@ -28,6 +28,11 @@ npm run host:check
 npm run typecheck
 npm run build
 npm run pack
+node --expose-internals --test --test-concurrency=1 \
+  test/modules/retry/plugin.test.ts test/modules/retry/integration.test.ts \
+  test/modules/compact-context/plugin.test.ts test/host-timezone/artifacts.test.ts \
+  test/migration/native-owner-runtime.test.ts test/integration/native-driver-lease.test.ts \
+  test/modules/compact-context/reasoning-compatibility.test.ts test/host-timezone/client.test.ts
 npm test
 npm run test:artifacts
 ~~~
@@ -39,18 +44,22 @@ Whole native GUI fixtures allocate their own disposable profiles and loopback po
 - `npm run host:check`: **passed**, exact rc.4 / Cordis 4.1.0, 338 admitted packages, unchanged Goal digest `8c56696eaac68e61a38b1068ea0f0dff976440e72b49ef4814fbea93c8b48b0c`, physical graph and lock selected.
 - `npm run typecheck`: **passed**.
 - Seven `npm run build` outputs and `npm run pack` archives: **passed**.
-- Focused public retry/compaction/Goal/migration/host-timezone guard run: **200/200 passed**, exit 0.
-- Complete source suite: **825/825 passed**, exit 0, 0 failed/cancelled/skipped, 240974.632837 ms. This includes the new `CONTENT_REFUSED` retry and compaction regressions, rc.3/previous-version refusal fixtures, unchanged Goal digest, unchanged host-timezone fingerprints, and all prior ownership/migration/config tests.
-- Complete packed/native/browser suite: **67/67 passed**, exit 0, 0 failed/cancelled/skipped, 653987.342236 ms. This actually executed seven packed distributions (combined plus six splits), seven whole native GUIs, native CLI composition/coexistence, settings persistence/selected module scopes, host-timezone lifecycle/restart/cache cases, clean npm consumers and public declarations.
-- Source log SHA256 `b5ec52e1a23a99e4df17ae7ea777a6188747032b576c3c43d92daed49f579835`; packed log SHA256 `a6d266a06a878208fa7b352f79e0404f9bf5824caa78c37096baaf8087adc8c7`.
+- Focused public retry/compaction/Goal/migration/host-timezone guard run (`node --expose-internals --test --test-concurrency=1` over the eight focused files): **200/200 passed**, exit 0, 5893.164684 ms; log SHA256 `e67a8f9483b3a307f3da90da739836af63e1296cfba03fa82d2c1814964bb87b`.
+- Complete source suite: **825/825 passed**, exit 0, 0 failed/cancelled/skipped, 245100.327692 ms. This includes the new `CONTENT_REFUSED` retry and compaction regressions, rc.3/previous-version refusal fixtures, unchanged Goal digest, unchanged host-timezone fingerprints, and all prior ownership/migration/config tests.
+- Complete packed/native/browser suite: **67/67 passed**, exit 0, 0 failed/cancelled/skipped, 653987.342236 ms. This actually executed seven packed distributions (combined plus six splits): six split whole-GUI persistence runs, combined and host-timezone packed browser lifecycle runs, native CLI composition/coexistence, settings persistence/selected module scopes, host-timezone restart/cache/live-zone cases, clean npm consumers and public declarations.
+- Source log SHA256 `c9ab9aaef442b3bca2684fe72c06838b5373e5fafe12f9131d8b531dfbf7fef8`; packed log SHA256 `a6d266a06a878208fa7b352f79e0404f9bf5824caa78c37096baaf8087adc8c7`.
 
 One packed native startup log reports `mcp-manager ... failed to import` and `warning: 1 entry did not activate`. The isolated consumer installs with `--omit=optional`; this is an optional MCP graph resolution warning, not an Extras module failure, and every packed assertion passed. It is recorded as an environmental observation, not suppressed.
 
+## Independent source audit
+
+The separate RC4-S audit recorded in the [review report](<REVIEW_RC4_071.md>) independently re-ran the tag diff, extracted-archive comparisons, hashes, installed-graph checks and guard inventory. It returned **PASS** on all four claimed areas, with static-audit caveats (it did not execute the suites, and some unchanged-package emitted bytes were not independently compared). Those are limits of that audit, not execution evidence.
+
 ## Red/green evidence and safety preservation
 
-1. Before the exact guard refresh, the real rc.4 graph failed public preflight as expected: `Wrong native version or unlocked identity: @deepseek-ai/dsh` (exit 1). After the coordinated manifest/guard refresh the same preflight passed with the output above.
+1. Before the exact guard refresh, the real rc.4 graph failed public preflight as expected: `Wrong native version or unlocked identity: @deepseek-ai/dsh` (exit 1). This was a terminal observation; no pre-change log was retained, and it is not presented as a retained artifact. After the coordinated manifest/guard refresh the same preflight passed with the output above.
 2. Previous-version refusals are retained in public tests: rc.3 manifests with otherwise unchanged Goal bytes and matching lock still fail the npm graph preflight; rc.1/rc.2/rc.3/unknown driver versions and Loader proofs refuse; rc.2/rc.3/unknown compaction and host-timezone versions refuse; changed bytes still fail before module evaluation.
-3. New rc.4 refusal regressions prove `CONTENT_REFUSED` keeps its permanent code in the unit classifier and the real LLM-stream/official-retry seam, and that a refused native compaction request is not retried even with a transient-looking message. No new retry loop, synthetic message or provider dispatch was added.
+3. New rc.4 refusal regressions prove `CONTENT_REFUSED` keeps its permanent code in the unit classifier and the real LLM-stream/official-retry seam, and that the compaction retry classifier does not retry a synthetic `CONTENT_REFUSED` failure even when its message also carries a transient marker. The compaction assertion exercises the deterministic classifier through the tool harness; it does not itself dispatch a native summary request. No new retry loop, synthetic message or provider dispatch was added.
 4. The audited Goal compiled/source/prompt bytes and the three host-timezone browser fingerprints are unchanged from rc.3; rc.3 and rc.4 npm archives differ only in `package.json` for those packages. Their exact guards still move to rc.4, so an old version is not admitted by a byte coincidence.
 5. No product feature behavior, migration authority, native compaction/retention/routing, native retry execution, Goal strategy/default or distribution payload was rewritten. Only the refusal classification and exact-version labels changed.
 
@@ -62,16 +71,7 @@ Actual rc.4 Goal archive SHA256 is `97586255e0b6a8bda7813f2a1c360baad56f90cdfc5c
 
 No production installation/update/restart, live-GUI use, Actions, push, tag, release or asset upload is performed. Historical published 0.7.0/rc.3 and earlier assets remain untouched.
 
-The task-start production-profile baseline was **not captured**, so final equality is explicitly **not certified**. At final read-only observation the profile files were:
-
-```text
-89a14e167d1aaca2b61675226d09c0ac847e537ee3630ffab05dc75fd4afc5a2  /home/dev/.dsh/profiles/web/package.json
-2026-11-18 10:54:06.066423717 +0800
-f83797b0173d220a906680fb4ccca73af9001b0b96cffafb09d32b20b084a84e  /home/dev/.dsh/profiles/web/cordis.patch.yml
-2026-11-18 10:53:17.151546406 +0800
-```
-
-Both recorded mtimes precede the task-start sample (2026-11-18 10:56 Asia/Singapore), and no agent command targets the production profile or live 3080 GUI. Those are observations, not a substitute for the missing start hashes. No personal-profile mutation, restoration or attribution is claimed.
+The task-start production-profile baseline was **not captured**, so final equality is explicitly **not certified**. A final read-only observation found exactly two profile files at the previously known profile location; their current hashes, mtimes, ctimes and sampling command are retained only in the disposable evidence root (`profile-safety.txt`, SHA256 `27a7f241695fa488cc49fc10059aefb77f6f43955f01ae52ad1db636f5503bb7`). No profile path, hash, content or other identifying profile fact is committed. Both mtimes and kernel ctimes precede the task-start sample; ctime changes on writes, renames, chmod and attribute updates, so this is positive no-write evidence for those two files, not equality proof. Every install/build/test command used disposable HOME/DSH_HOME/XDG/TMP state; the only production-profile commands were read-only `sha256sum`/`stat`; no agent command targets the live 3080 GUI. The [documented amendment](<AMENDMENTS.md>) records the unresolved equality rather than claiming it passed. No personal-profile mutation, restoration or attribution is claimed.
 
 The check does not certify arbitrary future native versions, third-party wrappers, the experimental LiveShare fix itself, or complete runtime equivalence of all unchanged source trees. The host-timezone adapter remains exact-byte and fails closed; the audited Goal driver remains exact-digest and fails closed.
 
