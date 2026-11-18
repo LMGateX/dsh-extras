@@ -41,7 +41,7 @@ function fixture(protectedPage = true, initialEnabled: boolean | undefined = tru
   const connection = nativeHandle ?? installStockConnection();
   const originalCall = connection.rpc.call;
   connection.generation = generation; connection.state = state;
-  const modules = { version: 'client', manifest: { release: { version: '0.2.2-rc.3' }, modules: ids.map(id => ({ id, rev: 'same' })) }, entries: { state: entries }, loadCache: records };
+  const modules = { version: 'client', manifest: { release: { version: '0.2.2-rc.4' }, modules: ids.map(id => ({ id, rev: 'same' })) }, entries: { state: entries }, loadCache: records };
   const services: Record<string, unknown> = { connection, modules, sessions: {} };
   let intentSubscriptions = 0;
   let enabled: boolean | undefined = initialEnabled; const intentListeners = new Set<() => void>(); const effects: (() => unknown)[] = [];
@@ -185,7 +185,7 @@ test('fresh disabled page never registers a guard, proof request or connection l
   } finally { h.close(); }
 });
 
-test('actual rc.3 installConnection own plain method passes admission before native JSON serialization', async () => {
+test('actual rc.4 installConnection own plain method passes admission before native JSON serialization', async () => {
   const connection = installStockConnection();
   assert.equal(createHash('sha256').update(nativeConnectionSource).digest('hex'), '5f6107953fa764c80b6c06aa161be318ffa0b71e565ac81536fc4267d5d62412');
   assert.equal(createHash('sha256').update(Function.prototype.toString.call(connection.rpc.call)).digest('hex'), 'e9f0a1690441d6b00726bc296ad541776a9b711717e5ed3f72dc7375d35ee51b');

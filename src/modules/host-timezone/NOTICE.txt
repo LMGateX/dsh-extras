@@ -2,21 +2,21 @@ Host time-zone privacy adapter — original DSH Extras implementation.
 Copyright (c) 2026 LMGateX. MIT License; see the distribution LICENSE.
 
 The exact-version adapter includes minimal function anchors and replacement
-forms derived from DeepSeek Harness 0.2.2-rc.3 session-controller and schedule
+forms derived from DeepSeek Harness 0.2.2-rc.4 session-controller and schedule
 client artifacts, plus an exact callable-source compatibility expectation from
 client-connection. Native installation files are read only and are not rewritten.
 Source: https://github.com/deepseek-ai/deepseek-harness
 
-Audited npm packages: @deepseek-ai/dsh-api-session-controller@0.2.2-rc.3
+Audited npm packages: @deepseek-ai/dsh-api-session-controller@0.2.2-rc.4
   Source function: src/client/time-zone.ts resolvedClientTimeZone().
   lib/client.js SHA-256:
   e9af25a01168a8405730c107471cbd6befccfab3294e793b10e1467c57255852
-Audited npm package: @deepseek-ai/dsh-client-ui-schedule@0.2.2-rc.3
+Audited npm package: @deepseek-ai/dsh-client-ui-schedule@0.2.2-rc.4
   Source function: src/client/editor-timing.ts defaultTiming(); replacement uses
   its existing startInZone() formatter and preserves explicit/stored rules.
   lib/client.js SHA-256:
   b8dda300c8f835d825c8cbc23e56d66ffb4167d9c072f30468897611a9f34379
-Audited unmodified support package: @deepseek-ai/dsh-client-connection@0.2.2-rc.3
+Audited unmodified support package: @deepseek-ai/dsh-client-connection@0.2.2-rc.4
   Source callable: src/client/rpc.ts createWebConnectionRpc().call.
   The selected client adapter compares the exact emitted callable source before
   admission; its closed-over implementation is covered by the raw browser pin.

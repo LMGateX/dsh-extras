@@ -86,6 +86,16 @@ test('rc2 permanent machine failures and their carrier identifiers retain native
   }
 });
 
+test('rc4 content refusal stays permanent even when explicitly configured as retryable', async () => {
+  for (const input of [
+    failure('CONTENT_REFUSED', 'stream_timeout: refusal explanation'),
+    failure('PI_AI_ERROR', 'CONTENT_REFUSED'),
+    failure('UNKNOWN', 'Error Code CONTENT_REFUSED: refusal explanation'),
+  ]) {
+    assert.equal((await runStream([input], { errorCodes: ['CONTENT_REFUSED', 'stream_timeout'] })).output[0], input);
+  }
+});
+
 test('existing normalized retry codes keep the provider policy classification', async () => {
   for (const code of ['TIMEOUT', 'TRANSPORT', 'RATE_LIMIT', 'SERVER', 'EMPTY_RESPONSE']) {
     const input = failure(code, 'Error Code upstream_stream_read_error: another description');

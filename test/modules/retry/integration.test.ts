@@ -163,6 +163,14 @@ test('plain thrown ordinary Error remains UNKNOWN without retry', { timeout: 100
   });
 });
 
+test('rc4 native content refusal keeps its permanent code and one dispatch', { timeout: 10000 }, async () => {
+  await faultCase(new llm.LlmError('DeepSeek refused to answer under its content safety review', 'CONTENT_REFUSED'), {
+    config: { errorCodes: ['CONTENT_REFUSED', 'stream_timeout'] },
+    expectRetry: false,
+    expectedCode: 'CONTENT_REFUSED',
+  });
+});
+
 for (const code of ['TIMEOUT', 'TRANSPORT', 'RATE_LIMIT', 'SERVER', 'EMPTY_RESPONSE']) {
   test('existing official retry code is preserved: ' + code, { timeout: 10000 }, async () => {
     await faultCase({ code, message: 'Error Code stream_timeout: description' }, { expectRetry: true, expectedCode: code });

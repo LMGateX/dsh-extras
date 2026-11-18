@@ -107,6 +107,7 @@ function isDeterministicFailure(error: unknown): boolean {
   const code = error !== null && typeof error === 'object' ? (error as { code?: unknown }).code : undefined;
   if (typeof code === 'string') {
     if (code === 'MAX_TOKENS'
+      || code === 'CONTENT_REFUSED'
       || code === 'UNSUPPORTED_CONTENT'
       || code === 'UNSUPPORTED_REASONING_EFFORT'
       || code === 'INVALID_MODEL_INFO'

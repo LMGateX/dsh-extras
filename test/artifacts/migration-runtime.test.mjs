@@ -105,7 +105,7 @@ async function consumer() {
     console.log('PASS missing, unsupported version/isolate, and foreign anchored Context refused');
 
     host.nativeMigration=native;
-    for(const kind of ['driver-version','driver-bytes','loader-version','loader-missing','loader-foreign']) {
+    for(const kind of ['driver-version','driver-previous-version','driver-bytes','loader-version','loader-missing','loader-foreign']) {
       const out=join(process.cwd(),'anchors',kind), scope=join(out,'node_modules','@deepseek-ai');
       await mkdir(scope,{recursive:true});
       const fakeAnchor=join(out,'package.json');await writeFile(fakeAnchor,JSON.stringify({name:'unverified-artifact-host',type:'module'}));
@@ -113,7 +113,7 @@ async function consumer() {
       if(kind.startsWith('driver-')) {
         await symlink(dirname(hostRequire.resolve('@deepseek-ai/cordis-plugin-loader/package.json')),join(scope,'cordis-plugin-loader'),'dir');
         const dir=join(scope,'dsh-goal-round-driver');await mkdir(dir);
-        await writeFile(join(dir,'package.json'),JSON.stringify({name:'@deepseek-ai/dsh-goal-round-driver',version:kind==='driver-version'?'99.0.0':'0.2.2-rc.3',type:'module',exports:{'.':'./index.js','./package.json':'./package.json'}}));
+        await writeFile(join(dir,'package.json'),JSON.stringify({name:'@deepseek-ai/dsh-goal-round-driver',version:kind==='driver-version'?'99.0.0':kind==='driver-previous-version'?'0.2.2-rc.3':'0.2.2-rc.4',type:'module',exports:{'.':'./index.js','./package.json':'./package.json'}}));
         await writeFile(join(dir,'index.js'),'globalThis[Symbol.for("unverified-packed-driver-evaluated")]=true;export * from '+JSON.stringify(pathToFileURL(hostRequire.resolve('@deepseek-ai/dsh-goal-round-driver')).href)+';');
       } else {
         await symlink(dirname(hostRequire.resolve('@deepseek-ai/dsh-goal-round-driver/package.json')),join(scope,'dsh-goal-round-driver'),'dir');
@@ -124,7 +124,7 @@ async function consumer() {
         }
       }
       host.profileContext.installAnchor=fakeAnchor;
-      await refusal(kind==='driver-version'?/unsupported anchored native driver version/:kind==='driver-bytes'?/anchored native driver.*fingerprint/:/anchored.*Loader/);
+      await refusal(kind==='driver-version'||kind==='driver-previous-version'?/unsupported anchored native driver version/:kind==='driver-bytes'?/anchored native driver.*fingerprint/:/anchored.*Loader/);
       assert.equal(globalThis[Symbol.for('unverified-packed-driver-evaluated')],undefined,'unverified driver is rejected before evaluation');
       assert.equal(stock.fiber.state,2);assert.equal(stock.options.disabled,undefined);
     }

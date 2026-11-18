@@ -17,7 +17,7 @@ const cli = join(dirname(manifest), JSON.parse(await readFile(manifest, 'utf8'))
 const artifacts = resolve(process.env.DSH_EXTRAS_ARTIFACT_DIR ?? join(root, 'artifacts'));
 const sandbox = resolve(process.env.DSH_EXTRAS_TIMEZONE_ROOT ?? tmpdir());
 const run = promisify(execFile);
-const version = '0.7.0';
+const version = JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).version;
 const hostZone = 'Asia/Singapore';
 
 function environment(temp: string, profile: string): NodeJS.ProcessEnv {
@@ -266,7 +266,7 @@ async function scheduleRoundtrip(f: Fixture, browserZone: string) {
   assert.equal(removed.ok, true);
 }
 
-test('0.7.0 provides seven synchronized archives including real host-timezone split', async () => {
+test(version + ' provides seven synchronized archives including real host-timezone split', async () => {
   for (const name of ['dsh-extras', 'dsh-extras-compact-context', 'dsh-extras-model-policy', 'dsh-extras-retry', 'dsh-extras-chime', 'dsh-extras-goal-wait', 'dsh-extras-host-timezone']) {
     const { stdout } = await run('tar', ['-xOf', join(artifacts, name + '-' + version + '.tgz'), 'package/package.json']);
     const manifest = JSON.parse(stdout); assert.equal(manifest.name, name); assert.equal(manifest.version, version);

@@ -27,6 +27,9 @@ const PROTECTED = new Set([
   'AUTHENTICATION_ERROR', 'PERMISSION_DENIED', 'INSUFFICIENT_QUOTA',
   'QUOTA_EXCEEDED', 'INVALID_REQUEST_ERROR', 'CONTEXT_LENGTH_EXCEEDED',
   'BILLING_HARD_LIMIT_REACHED',
+  // rc.4 reports a provider content refusal as CONTENT_REFUSED. It is a
+  // deterministic refusal, never transient transport, so it stays permanent.
+  'CONTENT_REFUSED',
   // Audited rc.2 native configuration/auth/model/registration failures. Do not
   // let custom compatibility markers replace their native machine authority.
   'ACCOUNT_SIGN_IN_REQUIRED', 'ACCOUNT_TOKEN_INVALID', 'CLIENT_UPGRADE_REQUIRED',

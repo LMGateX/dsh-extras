@@ -653,6 +653,21 @@ test('does not retry unsupported native reasoning effort even when the message l
   assert.equal(result.ok, false); assert.equal(attempts, 1);
 });
 
+test('does not retry a native content refusal even when the message looks transient', async () => {
+  const harness = makeHarness({ retryAttempts: 5, retryDelayMs: 0 });
+  let attempts = 0;
+  harness.ctx.compaction.compactIfNeeded = async () => {
+    attempts += 1;
+    const error = new Error('DeepSeek refused to answer under its content safety review: blocked image');
+    error.code = 'CONTENT_REFUSED';
+    throw error;
+  };
+  const result = await harness.tool().execute({}, { agent: { session: harness.session, options: {} }, signal: new AbortController().signal });
+  assert.equal(result.ok, false);
+  assert.equal(attempts, 1);
+  assert.match(result.reason, /content safety review/);
+});
+
 test('stops after the configured transient retry budget', async () => {
   const harness = makeHarness({ retryAttempts: 1 });
   let attempts = 0;

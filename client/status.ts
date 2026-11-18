@@ -11,7 +11,7 @@ export interface HostTimezoneStatus {
   requested: boolean;
   status: 'disabled' | 'needs-full-reload' | 'unavailable';
   timeZone?: string;
-  adapterVersion: '0.2.2-rc.3';
+  adapterVersion: '0.2.2-rc.4';
   reason?: string;
 }
 export interface ModuleStatus { phase: string; ready: boolean; enabled: boolean; reason?: string; capabilities?: { compactionReasoning?: CapabilityStatus; tools?: CapabilityStatus; continuation?: CapabilityStatus; hostTimezone?: CapabilityStatus }; details?: { goalWait?: GoalWaitStatus; hostTimezone?: HostTimezoneStatus }; }

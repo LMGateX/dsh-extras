@@ -21,7 +21,7 @@ async function fixture(t: any, enabled = true, options: { missingAnchor?: boolea
   }
   const targetUrl = 'plugins/??' + ids.map(id => id + '/client.js').join(',') + '&rev=native-v1';
   const foreignUrl = 'plugins/??unrelated/client.js&rev=foreign-v1';
-  const graph = { rev: 'graph-v1', release: { version: '0.2.2-rc.3' }, entries: [
+  const graph = { rev: 'graph-v1', release: { version: '0.2.2-rc.4' }, entries: [
     ...ids.map(id => ({ id, url: targetUrl, rev: 'native-v1' })),
     { id: 'unrelated', url: foreignUrl, rev: 'foreign-v1' },
   ], batches: [ { phase: 'application', url: targetUrl, rev: 'native-v1', entries: [...ids] },
@@ -165,7 +165,7 @@ test('unknown package source bytes never mount the adapter even with the expecte
   await mkdir(join(root,'lib'));
   const path=join(root,'lib/client.js');
   const f=await fixture(t,true,{configure:async({paths,sources}:any)=>{
-    await writeFile(join(root,'package.json'),JSON.stringify({name:ids[0],version:'0.2.2-rc.3'}));
+    await writeFile(join(root,'package.json'),JSON.stringify({name:ids[0],version:'0.2.2-rc.4'}));
     await writeFile(path,sources.get(ids[0])+'\n// unknown build\n');
     paths.set(ids[0],path);
   }});
@@ -358,7 +358,7 @@ test('proof revalidates target bytes and versions on disk instead of trusting ca
   const path=join(root,'lib/client.js');
   const manifest=join(root,'package.json');
   const f=await fixture(t,true,{configure:async({paths,sources}:any)=>{
-    await writeFile(manifest,JSON.stringify({name:ids[0],version:'0.2.2-rc.3'}));
+    await writeFile(manifest,JSON.stringify({name:ids[0],version:'0.2.2-rc.4'}));
     await writeFile(path,sources.get(ids[0]));
     paths.set(ids[0],path);
   }});
@@ -367,6 +367,8 @@ test('proof revalidates target bytes and versions on disk instead of trusting ca
   await writeFile(path,f.sources.get(ids[0]!)+'\n// changed bytes\n');
   assert.equal((await f.request(page.proofUrl)).status,503);
   await writeFile(path,f.sources.get(ids[0]!)!);
+  await writeFile(manifest,JSON.stringify({name:ids[0],version:'0.2.2-rc.3'}));
+  assert.equal((await f.request(page.proofUrl)).status,503);
   await writeFile(manifest,JSON.stringify({name:ids[0],version:'0.2.2-rc.99'}));
   assert.equal((await f.request(page.proofUrl)).status,503);
 });
@@ -385,7 +387,7 @@ for(const phase of ['mount','proof'] as const)test('connection package pin rejec
   for(const name of packages){
     const directory=join(root,'node_modules/@deepseek-ai',name);
     await mkdir(directory,{recursive:true});
-    await writeFile(join(directory,'package.json'),JSON.stringify({name:'@deepseek-ai/'+name,version:name==='dsh-client-connection'&&phase==='mount'?'0.2.2-rc.99':'0.2.2-rc.3'}));
+    await writeFile(join(directory,'package.json'),JSON.stringify({name:'@deepseek-ai/'+name,version:name==='dsh-client-connection'&&phase==='mount'?'0.2.2-rc.99':'0.2.2-rc.4'}));
   }
   const connectionLib=join(root,'node_modules/@deepseek-ai/dsh-client-connection/lib');
   await mkdir(connectionLib);
@@ -432,7 +434,7 @@ for(const phase of ['mount','proof'] as const)for(const corruption of ['missing'
   for(const name of ['dsh','dsh-client-modules','dsh-host-webserver','dsh-client-connection']){
     const directory=join(root,'node_modules/@deepseek-ai',name);
     await mkdir(directory,{recursive:true});
-    await writeFile(join(directory,'package.json'),JSON.stringify({name:'@deepseek-ai/'+name,version:'0.2.2-rc.3'}));
+    await writeFile(join(directory,'package.json'),JSON.stringify({name:'@deepseek-ai/'+name,version:'0.2.2-rc.4'}));
   }
   const lib=join(root,'node_modules/@deepseek-ai/dsh-client-connection/lib');
   await mkdir(lib);

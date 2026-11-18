@@ -1,4 +1,4 @@
-/** Exact rc.3 served-artifact adapter. Native files and global browser APIs stay untouched. */
+/** Exact rc.4 served-artifact adapter. Native files and global browser APIs stay untouched. */
 import { createHash } from 'node:crypto';
 
 export const HOST_TIMEZONE_TARGET_IDS = [
@@ -39,7 +39,7 @@ function requireHostTimeZone(timeZone: string): void {
 
 /** Prepare only an audited native artifact using a host-derived zone, never a user fixed-zone setting. */
 export function prepareArtifact(id: string, source: string, version: string, timeZone: string, sourceEpoch: string): PreparedArtifact {
-  if (version !== '0.2.2-rc.3') throw new Error('host-timezone: unsupported native version');
+  if (version !== '0.2.2-rc.4') throw new Error('host-timezone: unsupported native version');
   const isSession = id === HOST_TIMEZONE_TARGET_IDS[0];
   if (!isSession && id !== HOST_TIMEZONE_TARGET_IDS[1]) throw new Error('host-timezone: unsupported native artifact');
   const fingerprint = isSession

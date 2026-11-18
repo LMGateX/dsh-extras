@@ -11,7 +11,7 @@ export interface Config { enabled: boolean }
 export const Config: Schemastery<any, any, any> = z.object({ enabled: z.boolean().default(false).volatile() });
 export const name = 'extras-host-timezone';
 export const inject = ['clientModules', 'webServer', 'profileContext'];
-const VERSION = '0.2.2-rc.3';
+const VERSION = '0.2.2-rc.4';
 const PREFIX = '/extras/host-timezone';
 const TARGETS = new Set<string>(HOST_TIMEZONE_TARGET_IDS);
 

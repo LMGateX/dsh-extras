@@ -71,7 +71,7 @@ test('native schedule defaults use host-local dates across midnight and DST with
 test('preparation rejects unknown IDs, versions, bytes and unavailable or non-IANA zones without leaking input', () => {
   const original = native(sessionId);
   assert.deepEqual(Array.from(HOST_TIMEZONE_TARGET_IDS), [sessionId, scheduleId]);
-  for (const version of ['0.2.2-rc.2', '0.2.2', '0.2.2-rc.3-custom', '']) {
+  for (const version of ['0.2.2-rc.2', '0.2.2-rc.3', '0.2.2', '0.2.2-rc.4-custom', '']) {
     assert.throws(() => prepareArtifact(sessionId, original.source, version, 'UTC', 'epoch-a'), /host-timezone: unsupported native version/);
   }
   assert.throws(() => prepareArtifact('other', original.source, original.version, 'UTC', 'epoch-a'), /unsupported native artifact/);
@@ -125,7 +125,7 @@ test('real native combo preserves a third plugin with the same generic exports s
   const session = native(sessionId); const schedule = native(scheduleId);
   const third = native('@deepseek-ai/dsh-client-ui-cordis');
   const generic = 'exports.apply=apply;exports.inject=inject;return module.exports';
-  assert.ok(schedule.source.includes(generic) && third.source.includes(generic), 'real audited rc.3 plugins share the short suffix');
+  assert.ok(schedule.source.includes(generic) && third.source.includes(generic), 'real audited rc.4 plugins share the short suffix');
   const a = prepareArtifact(sessionId, session.source, session.version, 'UTC', 'epoch-a');
   const b = prepareArtifact(scheduleId, schedule.source, schedule.version, 'UTC', 'epoch-a');
   const full = session.source + '\n' + schedule.source + '\n' + third.source;
