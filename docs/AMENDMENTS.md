@@ -4,6 +4,10 @@ Changes must cite the observed host/source constraint, explain the trade-off, an
 
 No amendments at the original specification freeze. Later approved amendments follow.
 
+## 2026-11-18 — Check exact rc.4 without publication or production installation
+
+The direct request asks for one GitHub source acquisition and compatibility checking. The [rc.4 check contract](<DSH_RC4_071.md>) records the sole complete clone, exact tag and actual npm byte observations before implementation, narrows work to unreleased seven-package 0.7.1 / exact rc.4 recertification, and retains source/native/packed/browser/ownership/migration and independent review gates. rc.4 changes DeepSeek refusal reporting to native `CONTENT_REFUSED`; Extras must keep it permanent instead of retrying or remapping it. No push, tag, release or production operation is authorized by this task. Historical rc.3 evidence is preserved rather than relabeled.
+
 ## 2026-11-16 — Correct source lifetime before host-timezone publication
 
 Independent review and actual same-origin restart / Chromium cache tests exposed stale host literals and browser-zone reentry beyond a server-only HMR guard. The [fixed source-validity correction](HOST_TIMEZONE_070.md#review-driven-source-validity-correction-fixed-before-implementation) adds only connection-bound per-submission proof/admission and readonly in-memory source markers, with permanent page revocation on loss/change and a refusal-only disposal tombstone until reload. Fresh index generation safely rotates host-zone source instead of looping on reload-required. No arbitrary timezone selection, persisted browser facts, time injection/reader/refresh/propagation/tool changes. Earlier candidate passes are retained but do not certify the correction; full final native/browser/cache/restart and independent re-review gates remain required.

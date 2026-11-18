@@ -18,6 +18,8 @@ For the unreleased rc.3 compatibility check, apply the [exact rc.3 check contrac
 
 The latest user scope correction fixes the [browser-zone privacy contract](TIMEZONE_POLICY.md): replace browser-origin automatic request time-zone reports with the DSH host zone, without fixed-zone selection, raw-zone diagnostics or native injection/refresh/retry/continuation/compaction changes. The user then explicitly authorizes isolated/subagent development/tests, push, release and verified local installation. The [0.7.0 implementation/release contract](HOST_TIMEZONE_070.md) adds only default-off host-timezone, for six modules/seven synchronized distributions on exact rc.3; all applicable earlier feature/ownership/safety gates remain.
 
+For the unreleased rc.4 compatibility check, apply the [exact rc.4 check contract](<DSH_RC4_071.md>). The check prepares seven synchronized 0.7.1 candidate distributions for exact DSH 0.2.2-rc.4 and treats native CONTENT_REFUSED as permanent. Publication and production operations are excluded; historical 0.7.0/rc.3 evidence stays historical.
+
 ## Required deliverables
 
 1. One combined installable distribution, dsh-extras, one plugin card and unified settings grouped into four independently enabled modules.

@@ -2,6 +2,8 @@
 
 For 0.7.0 execute HTZ-01 through HTZ-06 in the [privacy scope](TIMEZONE_POLICY.md#5-收窄后的验收) plus the [implementation/release contract](HOST_TIMEZONE_070.md), retaining every applicable native/packed/browser/ownership gate. Seven synchronized archives and independently verified actual wire fields are required. The latest explicit local-install exception applies only after isolated and remote verification; documentation/characterization alone is not completion.
 
+For the unreleased 0.7.1 / rc.4 check, apply RC4-S/D/P/R/SAFE from the [rc.4 check contract](<DSH_RC4_071.md>) in addition to all applicable earlier safety gates. The check does not authorize publication or production operations. Native CONTENT_REFUSED must remain permanent in both retry and compaction classification, and exact rc.4 guards must retain rc.3/unknown/foreign refusal.
+
 For 0.5.0 additionally execute the [workspace policy contract](WORKSPACE_POLICY_050.md) and the rows below; the independent [native terminal recovery extension](NATIVE_RECOVERY_050.md) has its own adapted-host gate. Stock rc.1 must report recovery unavailable, not a working button. Earlier gates remain unless the explicit 0.5.0 amendments change the configuration authority or distribution count.
 
 For 0.6.0, additionally execute RC2-1/2/G/M/R/W/P from the [fixed rc.2 contract](DSH_RC2_060.md). Earlier applicable gates remain; no local production installation is authorized for this release. Historical rc.1-only companion gates do not certify rc.2.
