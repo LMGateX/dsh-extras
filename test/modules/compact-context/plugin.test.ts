@@ -653,12 +653,12 @@ test('does not retry unsupported native reasoning effort even when the message l
   assert.equal(result.ok, false); assert.equal(attempts, 1);
 });
 
-test('does not retry a native content refusal even when the message looks transient', async () => {
+test('does not retry a native content refusal even when the message carries a transient marker', async () => {
   const harness = makeHarness({ retryAttempts: 5, retryDelayMs: 0 });
   let attempts = 0;
   harness.ctx.compaction.compactIfNeeded = async () => {
     attempts += 1;
-    const error = new Error('DeepSeek refused to answer under its content safety review: blocked image');
+    const error = new Error('upstream 503 overloaded: DeepSeek refused to answer under its content safety review');
     error.code = 'CONTENT_REFUSED';
     throw error;
   };
