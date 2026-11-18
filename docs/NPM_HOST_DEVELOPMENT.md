@@ -1,6 +1,6 @@
 # Native npm development graph (Extras 0.7.1)
 
-The current branch targets published exact DSH **0.2.2-rc.4** under the [rc.4 compatibility check contract](<DSH_RC4_071.md>). Published Extras 0.7.0 remains the exact rc.3 option, 0.6.0 the rc.2 option, and the 0.6.0-rc.1 source preview stays historical. Use Node >=24.9 and the committed public npm lock. There is no source-host linker, receipt, automatic download/build, postinstall or profile repair. Historical source-preview instructions remain at the 0.6.0-rc.1 tag; do not apply them to this development setup.
+The current branch targets published exact DSH **0.2.2-rc.4** under the [rc.4 compatibility check contract](<DSH_RC4_071.md>) and [publication contract](<DSH_RC4_RELEASE_071.md>). Published Extras 0.7.0 remains the exact rc.3 option, 0.6.0 the rc.2 option, and the 0.6.0-rc.1 source preview stays historical. Use Node >=24.9 and the committed public npm lock. There is no source-host linker, receipt, automatic download/build, postinstall or profile repair. Historical source-preview instructions remain at the 0.6.0-rc.1 tag; do not apply them to this development setup.
 
 ## Disposable installation and checks
 
