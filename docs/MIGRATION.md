@@ -44,6 +44,10 @@ Every false→true runtime enablement first withdraws cached readiness synchrono
 
 Recovery first disables the new module, then waits for every recorded owning process to stop. A CLI-created journal with no later runtime owner can recover after its CLI exits. Before each legacy restoration and each interrupted-recovery write, fresh discovery rechecks overlapping selected/live/durably recorded peer owners, source identity and hashes, overlays, expressions and ambiguity. Conflicted capabilities remain disabled while independently valid requested capabilities may restore. Only owned deltas are replayed; unrelated later peer edits are preserved. Journals missing required provenance fail closed rather than guessing.
 
+## Alpha.2 launcher overlays
+
+Runtime migration reads the running profile’s actual ordered `overlayPaths`; launcher files are never write targets, including symlink or hardlink aliases of the writable profile patch. With the standalone migration CLI, repeat `--overlay PATH` for each launcher overlay, in exactly the same order as the intended DSH invocation and from the same relative-path base. Omit `--overlay` only for a launcher that uses none. An offline command cannot infer flags from a running, past, or future DSH invocation; use the runtime path if the list cannot be established. Use the identical ordered list for inspection, apply, retry, and rollback. Recorded overlay evidence that is missing, changed, reordered, or ambiguous cannot authorize replay; this includes an older journal that has no such provenance.
+
 ## Boundaries
 
 Never scan every profile, uninstall dependencies, edit package stores, force a restart, rearm externally disarmed goals, silently replace experimental startup owners, or report a mere file save as an active handover. Permission errors, dynamic overlays, multiple conflicting instances and malformed files produce actionable reports. Release only after interruption/concurrency/unload/native-integration acceptance tests pass.
