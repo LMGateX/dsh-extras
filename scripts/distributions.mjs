@@ -9,12 +9,14 @@ export const distributions = [
   { name: 'dsh-extras-host-timezone', modules: ['host-timezone'] },
 ];
 export const sourceDirectories = { 'compact-context': 'compact-context', retry: 'retry', chime: 'chime', goalWait: 'goal-wait', 'model-policy': 'model-policy', 'host-timezone': 'host-timezone' };
+// These are hard bundle-arrival edges. Plugin Manager only consumes our
+// settings slots; awaiting it would transitively require native session status.
 export const clientDependencies = {
-  'host-timezone': ['@deepseek-ai/dsh-client-locale', '@deepseek-ai/dsh-client-ui-settings', '@deepseek-ai/dsh-client-ui-plugin-manager', '@deepseek-ai/dsh-client-connection', '@deepseek-ai/dsh-client-modules', '@deepseek-ai/dsh-api-session-controller'],
-  'compact-context': ['@deepseek-ai/dsh-client-locale', '@deepseek-ai/dsh-client-ui-settings', '@deepseek-ai/dsh-client-ui-plugin-manager', '@deepseek-ai/dsh-api-remotes', '@deepseek-ai/dsh-api-workspace-controller'],
-  retry: ['@deepseek-ai/dsh-client-locale', '@deepseek-ai/dsh-client-ui-settings', '@deepseek-ai/dsh-client-ui-plugin-manager', '@deepseek-ai/dsh-api-remotes', '@deepseek-ai/dsh-api-session-controller'],
-  'model-policy': ['@deepseek-ai/dsh-client-locale', '@deepseek-ai/dsh-client-ui-settings', '@deepseek-ai/dsh-client-ui-plugin-manager', '@deepseek-ai/dsh-api-remotes', '@deepseek-ai/dsh-api-workspace-controller'],
+  'host-timezone': ['@deepseek-ai/dsh-client-locale', '@deepseek-ai/dsh-client-ui-settings', '@deepseek-ai/dsh-client-connection', '@deepseek-ai/dsh-client-modules', '@deepseek-ai/dsh-api-session-controller'],
+  'compact-context': ['@deepseek-ai/dsh-client-locale', '@deepseek-ai/dsh-client-ui-settings', '@deepseek-ai/dsh-api-remotes', '@deepseek-ai/dsh-api-workspace-controller'],
+  retry: ['@deepseek-ai/dsh-client-locale', '@deepseek-ai/dsh-client-ui-settings', '@deepseek-ai/dsh-api-remotes', '@deepseek-ai/dsh-api-session-controller'],
+  'model-policy': ['@deepseek-ai/dsh-client-locale', '@deepseek-ai/dsh-client-ui-settings', '@deepseek-ai/dsh-api-remotes', '@deepseek-ai/dsh-api-workspace-controller'],
   // Stock web loads status independently; Chime waits for the optional Cordis service, not bundle arrival.
-  chime: ['@deepseek-ai/dsh-api-session-controller', '@deepseek-ai/dsh-api-job-controller', '@deepseek-ai/dsh-api-remotes', '@deepseek-ai/dsh-client-locale', '@deepseek-ai/dsh-client-ui-session', '@deepseek-ai/dsh-client-ui-settings', '@deepseek-ai/dsh-client-ui-plugin-manager'],
-  goalWait: ['@deepseek-ai/dsh-client-locale', '@deepseek-ai/dsh-client-ui-settings', '@deepseek-ai/dsh-client-ui-plugin-manager'],
+  chime: ['@deepseek-ai/dsh-api-session-controller', '@deepseek-ai/dsh-api-job-controller', '@deepseek-ai/dsh-api-remotes', '@deepseek-ai/dsh-client-locale', '@deepseek-ai/dsh-client-ui-session', '@deepseek-ai/dsh-client-ui-settings'],
+  goalWait: ['@deepseek-ai/dsh-client-locale', '@deepseek-ai/dsh-client-ui-settings'],
 };

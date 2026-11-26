@@ -37,7 +37,9 @@ for(const {name,modules} of distributions) test('packed installable distribution
   assert.equal(pkg.dsh.client.platforms,undefined);assert.equal(pkg.dsh.bundle.patch,'cordis.patch.yml');
   assert.equal(pkg.dsh.client.inject.includes('@deepseek-ai/dsh-api-session-controller'), modules.includes('retry') || modules.includes('chime') || modules.includes('host-timezone'), 'selected session-controller dependency does not depend on chime transitively');
   assert.equal(pkg.dsh.client.inject.includes('@deepseek-ai/dsh-api-workspace-controller'), modules.includes('model-policy') || modules.includes('compact-context'), 'native workspace discovery dependency belongs only to workspace settings distributions');
-  assert.ok(!pkg.dsh.client.inject.includes('@deepseek-ai/dsh-client-ui-session-status'), 'optional session status must not block arrival of any Extras client');
+  for (const dependency of ['@deepseek-ai/dsh-client-ui-session-status', '@deepseek-ai/dsh-client-ui-plugin-manager']) {
+    assert.ok(!pkg.dsh.client.inject.includes(dependency), dependency + ' must not make optional session status a hard Extras dependency');
+  }
   const patch=await readFile(join(packageDir,'cordis.patch.yml'),'utf8');assert.ok(patch.includes('id: '+name));
   const listing=execFileSync('tar',['-tzf',archive],{encoding:'utf8'}).split('\n');
   assert.ok(!listing.some(file=>file.includes('node_modules/')||file.includes('.dsh-extras/')||file.includes('.env')));
