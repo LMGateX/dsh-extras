@@ -82,7 +82,7 @@ test('a conflicting peer blocks only its module while a disjoint requested sourc
   assert.ok((await f.manifest()).dsh.profile.bundles.includes(packages['compact-context'][0]));
 });
 
-for (const mutation of ['version', 'bundle config', 'profile config', 'HOME expression', 'launcher override', 'package identity', 'global ambiguity']) test('rollback retains owned disable switches after changed ' + mutation, async t => {
+for (const mutation of ['version', 'bundle config', 'profile config', 'HOME expression', 'package identity', 'global ambiguity']) test('rollback retains owned disable switches after changed ' + mutation, async t => {
   const f = await fixture(t), path = join(f.dir, 'node_modules', packages.retry[0]);
   if (mutation === 'version' || mutation === 'package identity') {
     const manifest = JSON.parse(await readFile(join(path, 'package.json'), 'utf8'));
@@ -92,14 +92,28 @@ for (const mutation of ['version', 'bundle config', 'profile config', 'HOME expr
   if (mutation === 'bundle config') await writeFile(join(path, 'cordis.patch.yml'), JSON.stringify([{ insert: [{ id: 'stream-retry', name: 'dsh-stream-retry', config: { providers: ['changed'] } }] }]));
   if (mutation === 'profile config') { const doc = parseDocument(await readFile(f.host.profileContext.patchPath, 'utf8')); doc.add({ id: 'stream-retry', config: { providers: ['changed'] } }); await writeFile(f.host.profileContext.patchPath, String(doc)); }
   if (mutation === 'HOME expression') await writeFile(join(f.host.profileContext.home, 'cordis.patch.yml'), '- id: stream-retry\n  disabled: !!js "false"\n');
-  if (mutation === 'launcher override') {
+  if (mutation === 'global ambiguity') { const manifest = await f.manifest(); manifest.dsh.profile.bundles.push('unresolvable-selected-owner'); await writeFile(join(f.dir, 'package.json'), JSON.stringify(manifest)); }
+  const report = await rollbackMigration(f.host, target, { operationId: f.operationId, modules: ['retry'] });
+  assert.equal(report.modules.retry?.phase, 'conflict'); assert.ok(report.modules.retry.reason); await f.assertBlocked('retry');
+});
+
+for (const missing of [false, true]) test('rollback refuses ' + (missing ? 'a legacy journal without launcher provenance' : 'a new launcher overlay overriding legacy ownership'), async t => {
+  const f = await fixture(t);
+  const paths = await profilePaths(f.host, target.rowId);
+  if (missing) {
+    const journal = JSON.parse(await readFile(paths.journal, 'utf8'));
+    delete journal.environment.launcherOverlays;
+    await writeFile(paths.journal, JSON.stringify(journal));
+  } else {
     const launcher = join(f.host.profileContext.home, 'launcher.patch.yml');
     await writeFile(launcher, JSON.stringify([{ id: 'stream-retry', disabled: false }]));
     f.host.profileContext.overlayPaths = [launcher];
   }
-  if (mutation === 'global ambiguity') { const manifest = await f.manifest(); manifest.dsh.profile.bundles.push('unresolvable-selected-owner'); await writeFile(join(f.dir, 'package.json'), JSON.stringify(manifest)); }
-  const report = await rollbackMigration(f.host, target, { operationId: f.operationId, modules: ['retry'] });
-  assert.equal(report.modules.retry?.phase, 'conflict'); assert.ok(report.modules.retry.reason); await f.assertBlocked('retry');
+  const snap = () => Promise.all([paths.patch, paths.manifest, paths.journal].map(file => readFile(file, 'utf8')));
+  const before = await snap();
+  await assert.rejects(rollbackMigration(f.host, target, { operationId: f.operationId, modules: ['retry'] }), /launcher overlay provenance/);
+  assert.deepEqual(await snap(), before);
+  await f.assertBlocked('retry');
 });
 
 async function interruptedRestore(f: Awaited<ReturnType<typeof fixture>>, modules: ('compact-context' | 'retry')[], patchAlreadyWritten: boolean) {
@@ -116,6 +130,22 @@ async function interruptedRestore(f: Awaited<ReturnType<typeof fixture>>, module
   await writeFile(paths.journal, JSON.stringify(journal));
   if (patchAlreadyWritten) await writeFile(paths.patch, String(doc));
 }
+
+test('interrupted rollback does not replay a write under different launcher layers', async t => {
+  const f = await fixture(t);
+  await interruptedRestore(f, ['retry'], false);
+  const paths = await profilePaths(f.host, target.rowId);
+  const snap = () => Promise.all([paths.patch, paths.manifest, paths.journal].map(file => readFile(file, 'utf8')));
+  const before = await snap();
+  const launcher = join(f.root, 'extra.patch.yml');
+  await writeFile(launcher, '[]\n');
+  f.host.profileContext.overlayPaths = [launcher];
+  await assert.rejects(rollbackMigration(f.host, target, { operationId: f.operationId, modules: ['retry'] }), /launcher overlay provenance changed/);
+  assert.deepEqual(await snap(), before);
+  await f.assertBlocked('retry');
+  f.host.profileContext.overlayPaths = [];
+  assert.equal((await rollbackMigration(f.host, target, { operationId: f.operationId, modules: ['retry'] })).modules.retry?.phase, 'rolled-back');
+});
 
 for (const partial of [false, true]) test('interrupted restoration replay revalidates new peers and resumes disjoint modules; patch written=' + partial, async t => {
   const f = await fixture(t, ['compact-context', 'retry']);

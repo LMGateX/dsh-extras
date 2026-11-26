@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, readFile, rm, readdir, stat } from 'node:fs/promises';
+import { link, mkdtemp, mkdir, writeFile, readFile, rm, readdir, stat, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
@@ -31,9 +31,56 @@ async function fixture(work: (f: {host: NativeMigrationHost; dir:string; root:st
   await writeFile(join(dir,'package.json'),JSON.stringify({dependencies:{'dsh-extras':'*',...(legacy?{'dsh-stream-retry':'*'}:{})},dsh:{profile:{bundles:['dsh-extras',...(legacy?['dsh-stream-retry']:[])]}}}));
   await writeFile(join(dir,'cordis.patch.yml'),'[]\n'.replace('\\n','\n'));
   const entries:LoaderEntry[]=[];
-  const host:NativeMigrationHost={profileContext:{dir,patchPath:join(dir,'cordis.patch.yml'),installAnchor:anchor,home},loader:{entries:()=>entries},get:()=>({}),handoverAcknowledged:()=>true};
+  const host:NativeMigrationHost={profileContext:{dir,patchPath:join(dir,'cordis.patch.yml'),installAnchor:anchor,home,overlayPaths:[]},loader:{entries:()=>entries},get:()=>({}),handoverAcknowledged:()=>true};
   try {await work({host,dir,root,entries});} finally {process.env.HOME=oldHome;process.env.DSH_HOME=oldDsh;await rm(root,{recursive:true,force:true});}
 }
+for (const alias of ['same path', 'symlink', 'hardlink', 'HOME symlink'] as const) test('migration refuses writable profile patch alias: ' + alias, async () => fixture(async ({ host, root, dir }) => {
+  const patch = host.profileContext.patchPath;
+  const overlay = alias === 'same path' ? patch : alias === 'HOME symlink' ? join(host.profileContext.home, 'cordis.patch.yml') : join(root, 'launcher.patch.yml');
+  if (alias === 'hardlink') await link(patch, overlay);
+  if (alias.endsWith('symlink')) await symlink(patch, overlay);
+  if (alias !== 'HOME symlink') host.profileContext.overlayPaths = [overlay];
+  const manifest = await readFile(join(dir, 'package.json'), 'utf8');
+  await assert.rejects(runMigration(host, target), /overlay.*aliases.*writable profile patch/i);
+  assert.equal(await readFile(patch, 'utf8'), '[]\n');
+  assert.equal(await readFile(overlay, 'utf8'), '[]\n');
+  assert.equal(await readFile(join(dir, 'package.json'), 'utf8'), manifest);
+  assert.ok(!(await readdir(dir)).includes('.dsh-extras'));
+}));
+
+test('write-time validation rejects an overlay relinked to the patch without a byte change', async () => fixture(async ({ host, dir, root }) => {
+  const patch = host.profileContext.patchPath, manifest = join(dir, 'package.json'), overlay = join(root, 'launcher.patch.yml');
+  const before = await readFile(manifest, 'utf8');
+  await writeFile(overlay, '[]\n');
+  host.profileContext.overlayPaths = [overlay];
+  await assert.rejects(runMigration(host, target, { checkpoint: async stage => {
+    if (stage !== 'before-target') return;
+    await rm(overlay);
+    await link(patch, overlay);
+  } }), /overlay.*aliases.*writable profile patch/i);
+  assert.equal(await readFile(patch, 'utf8'), '[]\n');
+  assert.equal(await readFile(overlay, 'utf8'), '[]\n');
+  assert.equal(await readFile(manifest, 'utf8'), before);
+}));
+
+test('unknown runtime overlay evidence cannot authorize migration or rollback writes', async () => fixture(async ({ host, dir }) => {
+  const patch = host.profileContext.patchPath, manifest = join(dir, 'package.json');
+  const inputs = async () => Promise.all([readFile(patch, 'utf8'), readFile(manifest, 'utf8')]);
+  const before = await inputs();
+  delete host.profileContext.overlayPaths;
+  await assert.rejects(runMigration(host, target), /launcher overlay.*unavailable/i);
+  assert.deepEqual(await inputs(), before);
+  assert.ok(!(await readdir(dir)).includes('.dsh-extras'));
+  host.profileContext.overlayPaths = [];
+  const applied = await runMigration(host, target);
+  const paths = await profilePaths(host, target.rowId);
+  const saved = await inputs(), journal = await readFile(paths.journal, 'utf8');
+  delete host.profileContext.overlayPaths;
+  await assert.rejects(rollbackMigration(host, target, { operationId: applied.operationId, modules: ['retry'] }), /launcher overlay.*unavailable/i);
+  assert.deepEqual(await inputs(), saved);
+  assert.equal(await readFile(paths.journal, 'utf8'), journal);
+}));
+
 test('saved four-module journal upgrades additive model policy without losing legacy recovery evidence',async()=>fixture(async({host,dir,entries})=>{
   const first = await runMigration(host,target);
   const paths = await profilePaths(host,target.rowId);

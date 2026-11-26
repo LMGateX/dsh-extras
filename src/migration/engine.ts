@@ -7,15 +7,15 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { NativeDiscoveryFacade } from './discovery.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { isMap, isSeq, parseDocument } from 'yaml';
-import { inspectMigration } from './discovery.ts';
+import { inspectMigration, MigrationOverlayError } from './discovery.ts';
 import { resolveCompactionReasoning } from '../modules/compact-context/reasoning-policy.ts';
 import { containsExpression, isRecord, planMigration, validateKnownConfig, LEGACY_PACKAGES, LEGACY_VERSIONS } from './planner.ts';
 import { digest, profilePaths, readOptional, withProfileLock, writePrivate } from './storage.ts';
-import type { Decision, Discovery, Distribution, MigrationPlan, MigrationReport, ModuleId, NativeMigrationHost, Values } from './types.ts';
+import type { Decision, Discovery, Distribution, LauncherOverlayInput, MigrationPlan, MigrationReport, ModuleId, NativeMigrationHost, Values } from './types.ts';
 import type { LegacyAdoptionReceipt } from '../types.ts';
 
 interface Step { kind: 'target' | 'disable' | 'bundles'; before: string; after: string; done: boolean }
-interface JournalEnvironment { identity: string; files: { path: string; hash: string | null }[]; paths: string[] }
+interface JournalEnvironment { identity: string; files: { path: string; hash: string | null }[]; paths: string[]; launcherOverlays?: readonly LauncherOverlayInput[] }
 interface RollbackEvidence { packageDir?: string; files?: { path: string; hash: string }[]; patchPaths?: string[]; problem?: string }
 interface Journal { nativeDriverVerifiedOrigin?: string; rollbackEvidence?: Partial<Record<ModuleId, RollbackEvidence>>; environment?: JournalEnvironment; ownershipVersion?: 1; owners?: Partial<Record<ModuleId, string[]>>; schemaVersion: 1; operationId: string; profileId: string; targetRowId: string; runtimeObserved?: boolean; browserFenceFinalized?: boolean; browserReloadAfter?: number; origin: string; phase: 'prepared' | 'saved'; plan: MigrationPlan; steps: Step[]; backup: string; previous: Partial<Record<ModuleId, unknown>>; rollback?: Partial<Record<ModuleId, { origin: string; done: boolean; conflict?: string }>>; recoveryWrites?: { patchBefore: string; patchAfter: string; manifestBefore: string; manifestAfter: string; restoreModules?: ModuleId[] } }
 /** Stable across HMR but different after a genuine process restart, without process-global state. */
@@ -88,15 +88,25 @@ async function loadJournal(host: NativeMigrationHost, target: Distribution): Pro
   return value;
 }
 function journalEnvironment(input: Discovery): JournalEnvironment {
-  if (!input.environmentIdentity || !input.inputFiles) throw new Error('immutable discovery input evidence unavailable');
+  if (!input.environmentIdentity || !input.inputFiles || !input.launcherOverlays) throw new Error('immutable discovery input evidence unavailable');
   const writable = new Set([join(input.profile.dir, 'package.json'), input.profile.patchPath]);
-  return { identity: input.environmentIdentity, files: input.inputFiles.filter(file => !writable.has(file.path)), paths: input.inputFiles.map(file => file.path) };
+  return { identity: input.environmentIdentity, files: input.inputFiles.filter(file => !writable.has(file.path)), paths: input.inputFiles.map(file => file.path), launcherOverlays: input.launcherOverlays };
+}
+function assertLauncherReplay(journal: Journal, current: Discovery): void {
+  const recorded = journal.environment?.launcherOverlays;
+  if (!Array.isArray(recorded) || !current.launcherOverlays) {
+    throw new MigrationOverlayError('launcher overlay provenance is missing; replay refused');
+  }
+  if (!isDeepStrictEqual(recorded, current.launcherOverlays)) {
+    throw new MigrationOverlayError('launcher overlay provenance changed; replay requires the same ordered input paths and bytes');
+  }
 }
 /** Validate every participating input, not merely the two profile documents we own. */
 async function validateJournalInputs(host: NativeMigrationHost, target: Distribution, journal: Journal): Promise<Discovery> {
   const current = await inspectMigration(host, target);
   const evidence = journal.environment;
   if (!evidence || !current.environmentIdentity || !current.inputFiles) throw new Error('journal has no immutable input evidence; unsafe retry refused');
+  assertLauncherReplay(journal, current);
   if (current.profileId !== journal.profileId || current.environmentIdentity !== evidence.identity) throw new Error('migration environment identity changed');
   const knownPaths = new Set(evidence.paths);
   if (current.inputFiles.some(file => !knownPaths.has(file.path))) throw new Error('migration input resolution changed');
@@ -258,6 +268,7 @@ export async function runMigration(host: NativeMigrationHost, target: Distributi
     let journal = await loadJournal(host, target);
     if (journal && journal.profileId !== input.profileId) throw new Error('journal belongs to another profile');
     if (journal?.phase === 'saved') {
+      if (options.retry) assertLauncherReplay(journal, input);
       // Completed older releases retain their exact import/recovery provenance. New
       // capabilities have no legacy owner: append only a safely validated fresh gate,
       // never replace the old operation, backup, input evidence or target identity.
@@ -474,6 +485,7 @@ function restoreIntent(journal: Journal): ModuleId[] {
 /** Rebase only exact owned restore deltas; never replay an old whole-profile enabling image. */
 async function rebaseRecovery(host: NativeMigrationHost, target: Distribution, journal: Journal, ids: ModuleId[]): Promise<void> {
   const current = await inspectMigration(host, target), old = journal.recoveryWrites!;
+  assertLauncherReplay(journal, current);
   const doc = document(current.patchText), manifest = structuredClone(current.manifest);
   const { config } = targetConfig(doc, target, {});
   const modules = isRecord(config.modules) ? config.modules : {};
@@ -520,8 +532,9 @@ async function finishRecovery(host: NativeMigrationHost, target: Distribution, j
   if (ids.length) await rebaseRecovery(host, target, journal, ids);
   const writes = journal.recoveryWrites!;
   for (const [path, before, after] of [[paths.patch, writes.patchBefore, writes.patchAfter], [paths.manifest, writes.manifestBefore, writes.manifestAfter]]) {
+    const fresh = await inspectMigration(host, target);
+    assertLauncherReplay(journal, fresh);
     if (ids.length) {
-      const fresh = await inspectMigration(host, target);
       let changed = false;
       for (const id of ids) if (journal.rollback?.[id]?.done) {
         const decision = journal.plan.decisions.find(value => value.moduleId === id)!;
@@ -552,6 +565,7 @@ export async function rollbackMigration(host: NativeMigrationHost, target: Distr
     if (!journal || journal.operationId !== options.operationId || journal.profileId !== input.profileId) throw new Error('unknown migration operation for this profile');
     if (journal.phase !== 'saved') throw new Error('finish or explicitly repair interrupted migration before selective rollback');
     if (journal.ownershipVersion !== 1) throw new Error('journal has no complete target owner registry; recovery refused');
+    assertLauncherReplay(journal, input);
     await observeOwners(host, journal, input);
     if (journal.recoveryWrites) { await finishRecovery(host, target, journal); return reportJournal(host, journal); }
     const paths = await profilePaths(host, target.rowId);

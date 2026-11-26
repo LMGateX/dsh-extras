@@ -167,7 +167,7 @@ test('bundle -> profile -> HOME -> launcher order and revision include every lay
   assert.notEqual(third.revision, fourth.revision);
   assert.deepEqual(fourth.sources[0].effective, { providers: ['home'] });
   await rm(launcher);
-  await assert.rejects(inspectMigration(f.host, target), /ENOENT/);
+  await assert.rejects(inspectMigration(f.host, target), /launcher overlay is missing/);
   f.host.profileContext.overlayPaths = ['relative.patch.yml'];
   await assert.rejects(inspectMigration(f.host, target), /must be absolute/);
   f.host.profileContext.overlayPaths = [];

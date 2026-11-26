@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp, mkdir, readFile, readdir, rm, writeFile, realpath} from 'node:fs/promises';
+import {link, mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile, realpath} from 'node:fs/promises';
 import {spawnSync} from 'node:child_process';
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
@@ -60,6 +60,7 @@ for(const {name} of distributions) test('standalone packed help without Cordis: 
     const output=succeeds(run(temp,command,args),'standalone --help must start without host peers');
     assert.match(output,/inspect\|dry-run\|apply\|retry\|rollback/);
     assert.match(output,/--profile-dir DIR/);
+    assert.match(output,/--overlay PATH/);
   }
   for(const setup of ['process.argv.length=1;', 'process.argv[1]=process.execPath;', 'process.argv[1]='+JSON.stringify(join(temp,'missing-argv-script'))+';']) {
     const imported=run(temp,process.execPath,['--input-type=module','-e',setup+'const entry=await import('+JSON.stringify(pathToFileURL(script).href)+');if(typeof entry.migrationMain!=="function")throw new Error("missing CLI function");']);
@@ -95,7 +96,7 @@ function flags(temp,name) {
   return ['--profile-dir',temp,'--dsh-home',environment(temp).DSH_HOME,'--install-anchor',anchor,'--distribution',name];
 }
 function publicAPI(temp,name,body) {
-  const profile={dir:temp,patchPath:join(temp,'cordis.patch.yml'),home:environment(temp).DSH_HOME,installAnchor:anchor};
+  const profile={dir:temp,patchPath:join(temp,'cordis.patch.yml'),home:environment(temp).DSH_HOME,installAnchor:anchor,overlayPaths:[]};
   const target=distributions.find(d=>d.name===name);
   return run(temp,process.execPath,['--input-type=module','-e',
     'import assert from "node:assert/strict";const api=await import('+JSON.stringify(name+'/migration')+');const host={profileContext:'+JSON.stringify(profile)+',loader:{entries:()=>[]}};const target='+JSON.stringify({rowId:name,packageName:name,moduleIds:target.modules})+';'+body]);
@@ -163,6 +164,64 @@ async function journal(temp) {
 function cliJSON(temp,bin,operation,name,extra=[]) {
   return JSON.parse(succeeds(run(temp,bin,[operation,...flags(temp,name),...extra]),operation+' through installed bin'));
 }
+test('packed overlay inputs follow launcher order and fence every recovery invocation',{timeout:180000},async t=>{
+  const name='dsh-extras-retry'; const {temp,bin}=await consumer(t,name);
+  await migrationProfile(temp,name);
+  const insert=join(temp,'insert.patch.yml'), disable=join(temp,'disable.patch.yml');
+  const insertText=JSON.stringify([{insert:[{id:'launcher-peer',name:'dsh-extras'}]}]);
+  await writeFile(insert,insertText);
+  await writeFile(disable,JSON.stringify([{id:'launcher-peer',disabled:true}]));
+  // Relative paths intentionally resolve against argv cwd, not the DSH home or install anchor.
+  const overlays=['--overlay','./insert.patch.yml','--overlay','./disable.patch.yml'];
+  const reversed=['--overlay','./disable.patch.yml','--overlay','./insert.patch.yml'];
+  const before=await inputs(temp);
+  for (const [makeAlias, path] of [[symlink,'symlink.patch.yml'],[link,'hardlink.patch.yml']]) {
+    await makeAlias(join(temp,'cordis.patch.yml'),join(temp,path));
+    const result=run(temp,bin,['apply',...flags(temp,name),'--overlay',path]);
+    assert.equal(result.status,1,result.stdout+result.stderr);
+    assert.match(result.stderr,/overlay aliases the writable profile patch/);
+    assert.deepEqual(await inputs(temp),before);
+    assert.ok(!(await readdir(temp)).includes('.dsh-extras'));
+  }
+  await link(join(temp,'package.json'),join(temp,'manifest-overlay.yml'));
+  const manifestAlias=run(temp,bin,['apply',...flags(temp,name),'--overlay','manifest-overlay.yml']);
+  assert.equal(manifestAlias.status,1,manifestAlias.stdout+manifestAlias.stderr);
+  assert.match(manifestAlias.stderr,/overlay aliases the writable profile manifest/);
+  const nativeFlag=run(temp,bin,['apply',...flags(temp,name),'--patch','./insert.patch.yml']);
+  assert.equal(nativeFlag.status,1,nativeFlag.stdout+nativeFlag.stderr);
+  assert.match(nativeFlag.stderr,/Use --overlay PATH/);
+  assert.deepEqual(await inputs(temp),before);
+  assert.ok(!(await readdir(temp)).includes('.dsh-extras'));
+  assert.equal(cliJSON(temp,bin,'dry-run',name,overlays).decisions[0].phase,'prepared');
+  const blocked=cliJSON(temp,bin,'inspect',name,reversed).decisions[0];
+  assert.equal(blocked.phase,'conflict'); assert.match(blocked.reason,/another Extras distribution/);
+  assert.deepEqual(await inputs(temp),before);
+  const applied=cliJSON(temp,bin,'apply',name,overlays);
+  assert.equal(applied.modules.retry.phase,'restart-required');
+  const saved=await inputs(temp);
+  const {path:journalPath}=await journal(temp);
+  const journalText=await readFile(journalPath,'utf8');
+  const recovery=['--operation',applied.operationId,'--modules','retry'];
+  const refuse=async (operation,extra,expectedJournal=journalText,expectedInputs=saved)=>{
+    const result=run(temp,bin,[operation,...flags(temp,name),...extra]);
+    assert.equal(result.status,1,result.stdout+result.stderr);
+    assert.match(result.stderr,/launcher overlay provenance/i);
+    assert.deepEqual(await inputs(temp),expectedInputs);
+    assert.equal(await readFile(journalPath,'utf8'),expectedJournal);
+  };
+  await refuse('retry',[]);
+  await refuse('rollback',recovery);
+  await refuse('rollback',[...recovery,...reversed]);
+  await writeFile(insert,insertText+'\n'); // Different bytes, same parsed patches.
+  await refuse('rollback',[...recovery,...overlays]);
+  await writeFile(insert,insertText);
+  assert.equal(cliJSON(temp,bin,'rollback',name,[...recovery,...overlays]).modules.retry.phase,'restart-required');
+  await refuse('rollback',recovery,await readFile(journalPath,'utf8'),await inputs(temp));
+  assert.equal(cliJSON(temp,bin,'rollback',name,[...recovery,...overlays]).modules.retry.phase,'rolled-back');
+  assert.equal(await readFile(insert,'utf8'),insertText);
+  assert.ok(JSON.parse(await readFile(join(temp,'package.json'),'utf8')).dsh.profile.bundles.includes('dsh-stream-retry'));
+});
+
 for(const name of ['dsh-extras','dsh-extras-retry']) test('packed apply retry and selective rollback preserve journal and later edits: '+name,{timeout:180000},async t=>{
   const {temp,bin,script}=await consumer(t,name);
   await migrationProfile(temp,name,{compact:true,goal:name==='dsh-extras'});
