@@ -35,6 +35,7 @@ test('native Loader toggles only selected feature scopes; policy writes retain r
   assert.equal(runtime.ctx.tools.get('compact_context'), undefined);
   assert.equal(live('extras-compact-context').length, 0);
   assert.equal(live('extras-retry').length, 1);
+  assert.equal(live('extras-retry')[0], retryFiber, 'sibling toggle with a retry policy reset preserves the exact existing child');
   await f.update(initial);
   await until(() => f.status(), state => state.modules['compact-context'].phase === 'active', 'context enabled again');
   assert.ok(runtime.ctx.tools.get('compact_context'));

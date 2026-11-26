@@ -7,6 +7,7 @@ import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
 import { parse, parseDocument } from 'yaml';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { writeFileSync } from 'node:fs';
 import { inspectMigration, dryRunMigration, runMigration, rollbackMigration, startAutomaticMigration } from '../../src/migration/index.ts';
 import { profilePaths, withProfileLock } from '../../src/migration/storage.ts';
 import type { Distribution, LoaderEntry, NativeMigrationHost } from '../../src/migration/types.ts';
@@ -581,6 +582,50 @@ test('true-to-true policy changes preserve ready while an ownership rescan waits
     unlock();await blocker;assert.equal((await controller.retry()).modules.retry?.ready,true);
   } finally {unlock();if(blocker)await blocker;controller.dispose();clearInterval(keep);}
 }));
+test('obsolete policy-only dry run cannot revoke a continuously enabled retry owner', { timeout: 5000 }, async () => fixture(async ({ host, dir }) => {
+  const retryTarget = { ...target, moduleIds: ['retry'] as const };
+  const patch = join(dir, 'cordis.patch.yml');
+  let values = { enabled: true, providers: ['first'], errorCodes: [] };
+  const save = () => writeFileSync(patch, JSON.stringify([{ id: target.rowId, config: { modules: { retry: values } } }]));
+  save();
+  const events = new Map<string, () => void>();
+  host.on = (name, listener) => { events.set(name, listener); return () => events.delete(name); };
+  let race = false;
+  host.moduleConfig = () => {
+    if (race) {
+      race = false;
+      values = { ...values, providers: ['second'] };
+      save();
+      events.get('loader/volatile-update')!();
+    }
+    return values;
+  };
+  const keep = setInterval(() => {}, 1000);
+  const controller = startAutomaticMigration(host, { ...retryTarget, auto: false });
+  try {
+    assert.equal((await controller.settled).modules.retry?.ready, true);
+    race = true;
+    const observed: unknown[] = [];
+    let stop = () => {};
+    const rescan = new Promise<void>(resolve => {
+      stop = controller.subscribe(state => {
+        observed.push(state.modules.retry);
+        if (observed.length === 2) resolve();
+      });
+    });
+    try {
+      const obsolete = await controller.retry();
+      assert.equal(obsolete.modules.retry?.ready, true, 'the obsolete policy cannot dispose the existing owner');
+      await rescan;
+      await controller.retry(); // Join completion after the subscriber sees the report.
+      assert.equal(controller.state().modules.retry?.ready, true);
+      values = { ...values, providers: ['different-without-a-volatile-event'] };
+      const current = await controller.retry();
+      assert.equal(current.modules.retry?.ready, false, 'a current mismatching scan still revokes admission');
+    } finally { stop(); }
+  } finally { controller.dispose(); clearInterval(keep); }
+}, false));
+
 test('auto=false preserves peer conflict diagnostics ahead of config adoption messages',async()=>fixture(async({host,dir})=>{
   const peer='dsh-extras-compact-context';const path=join(dir,'node_modules',peer);await mkdir(path,{recursive:true});
   await writeFile(join(path,'package.json'),JSON.stringify({name:peer,version:'0.1.0',dsh:{bundle:{patch:'./cordis.patch.yml'}}}));

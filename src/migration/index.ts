@@ -19,6 +19,8 @@ export function startAutomaticMigration(host: NativeMigrationHost, options: Boot
   nativeHost.handoverAcknowledged = (id, source) => host.handoverAcknowledged?.(id, source) ?? (acknowledged !== undefined && !acknowledged.some(entry => entry.fiber && (entry.name === (source.moduleName ?? source.packageName) || entry.id === source.rowId)));
   let active: Promise<MigrationReport> | undefined;
   let refreshRequested = false;
+  let volatileRevision = 0;
+  const plannedConfigNotAdopted = 'running Extras configuration has not adopted planned settings';
   const lastEnabled = new Map(options.moduleIds.map(id => [id, moduleConfigAdopted(host, options, id, { enabled: true })]));
   const enableRevision = new Map(options.moduleIds.map(id => [id, 0]));
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -61,19 +63,32 @@ export function startAutomaticMigration(host: NativeMigrationHost, options: Boot
   const execute = (retry = false) => {
     if (active) return active;
     const scannedEnableRevision = new Map(enableRevision);
+    const scannedVolatileRevision = volatileRevision;
     active = (options.auto === false ? dryRunMigration(host, options).then(plan => ({ schemaVersion: 1 as const, operationId: '', profileId: plan.profileId, targetRowId: options.rowId,
       modules: Object.fromEntries(plan.decisions.map(d => {
         const adopted = !!d.config && moduleConfigAdopted(host, options, d.moduleId, d.config);
         const ready = !d.source && d.phase !== 'conflict' && adopted;
-        return [d.moduleId, { phase: d.source ? 'pending' : d.phase === 'conflict' ? 'conflict' : ready ? d.phase : 'restart-required', ready, enabled: d.enabled, reason: d.phase === 'conflict' ? d.reason : d.source ? 'automatic migration disabled' : !adopted ? 'running Extras configuration has not adopted planned settings' : d.reason }];
+        return [d.moduleId, { phase: d.source ? 'pending' : d.phase === 'conflict' ? 'conflict' : ready ? d.phase : 'restart-required', ready, enabled: d.enabled, reason: d.phase === 'conflict' ? d.reason : d.source ? 'automatic migration disabled' : !adopted ? plannedConfigNotAdopted : d.reason }];
       })), problems: plan.problems })) : runMigration(nativeHost, options, { retry }))
       .then(report => {
         invalidateEnabledTransitions();
         const modules = { ...report.modules };
         for (const id of options.moduleIds) {
-          if (scannedEnableRevision.get(id) === enableRevision.get(id)) continue;
-          refreshRequested = true;
-          if (modules[id]?.ready) modules[id] = { ...modules[id]!, phase: 'pending', ready: false, reason: 'enabled target ownership registration pending' };
+          const next = modules[id], previous = state.modules[id];
+          if (scannedEnableRevision.get(id) !== enableRevision.get(id)) {
+            refreshRequested = true;
+            if (next?.ready) modules[id] = { ...next, phase: 'pending', ready: false, reason: 'enabled target ownership registration pending' };
+            continue;
+          }
+          // A newer volatile policy can overtake the scan's persisted snapshot.
+          // Keep only an existing, uninterrupted grant across that obsolete comparison;
+          // a conflict, real mismatch or new enable never inherits readiness.
+          if (options.auto === false && scannedVolatileRevision !== volatileRevision &&
+              previous?.ready && previous.enabled && lastEnabled.get(id) && next?.enabled &&
+              next.phase === 'restart-required' && next.reason === plannedConfigNotAdopted) {
+            refreshRequested = true;
+            modules[id] = previous;
+          }
         }
         return publish({ ...report, modules });
       }).catch(() => { host.logger?.warn('Extras automatic migration failed closed; inspect and retry'); return publish(failure()); }).finally(() => { active = undefined; if (refreshRequested && !closed) { refreshRequested = false; queueMicrotask(() => { void execute(); }); } });
@@ -100,6 +115,7 @@ export function startAutomaticMigration(host: NativeMigrationHost, options: Boot
     invalidateEnabledTransitions(); refresh();
   });
   const unvolatile = host.on?.('loader/volatile-update', () => {
+    volatileRevision++;
     invalidateEnabledTransitions(); refresh();
   });
   const unready = host.appReady?.onReady(launch);
