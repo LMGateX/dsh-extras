@@ -4,6 +4,12 @@ Changes must cite the observed host/source constraint, explain the trade-off, an
 
 No amendments at the original specification freeze. Later approved amendments follow.
 
+## 2026-11-26 — Fence launcher evidence and keep Chime optional in alpha.2
+
+Independent reviews of `9839b1e` found that offline migration could omit runtime overlay provenance, a launcher file could alias the writable profile patch, and an awaited client manifest edge could block unrelated features when the advertised status bundle failed. [Alpha.2 ProfileContext](https://github.com/deepseek-ai/deepseek-harness/blob/4b399c39a6d1479cd84ca591b4d7c88e24d38a96/packages/boot/app-boot/src/profile-context.ts) exposes the launcher paths only in the running invocation; [the client module loader](https://github.com/deepseek-ai/deepseek-harness/blob/4b399c39a6d1479cd84ca591b4d7c88e24d38a96/packages/client/modules/src/client/system.ts) awaits advertised manifest dependencies before loading the client.
+
+Retain native dynamic Chime injection, with no hard client manifest edge for session status. For offline migration, explicit repeated `--overlay PATH` arguments mirror the original launcher order and are resolved from the invocation directory; omitting them declares a no-overlay invocation, not proof about any live process. Require actual ordered overlay evidence for runtime writes and reject paths that alias the writable profile patch. Journal the immutable ordered input set and verify it before interrupted apply or selective recovery; missing/changed evidence cannot permit replay. Cover ordered composition, aliases, omitted and changed evidence in source/packed migration tests, and independent client activation without the optional service. Refresh both packed host-timezone notices to the observed alpha.2 pins. Rebuild and repeat final validation; earlier binaries are not release candidates.
+
 ## 2026-11-26 — Adapt and release for exact DSH 0.2.3-alpha.2
 
 The user requests local checkout of the upstream tag, compatibility adaptation, push and release without installing into the machine’s DSH. The [alpha.2 contract](DSH_ALPHA2_080.md) records the observed Node, Cordis and Goal driver facts, exact-host scope and final-artifact/remote gates. No policy or safety waiver, personal-profile inspection, Actions or Extras npm publication.
