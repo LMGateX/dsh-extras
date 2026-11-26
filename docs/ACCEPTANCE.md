@@ -1,5 +1,7 @@
 # Release acceptance matrix
 
+For Extras 0.8.0 execute A2-S/D/P/R/SAFE from the [exact alpha.2 contract](DSH_ALPHA2_080.md), retaining all applicable prior native, browser, migration and ownership gates. No production installation is authorized.
+
 For 0.7.0 execute HTZ-01 through HTZ-06 in the [privacy scope](TIMEZONE_POLICY.md#5-收窄后的验收) plus the [implementation/release contract](HOST_TIMEZONE_070.md), retaining every applicable native/packed/browser/ownership gate. Seven synchronized archives and independently verified actual wire fields are required. The latest explicit local-install exception applies only after isolated and remote verification; documentation/characterization alone is not completion.
 
 For the unreleased 0.7.1 / rc.4 check, apply RC4-S/D/P/R/SAFE from the [rc.4 check contract](<DSH_RC4_071.md>) in addition to all applicable earlier safety gates. The check did not authorize publication. The subsequent [publication contract](<DSH_RC4_RELEASE_071.md>) authorizes final 0.7.1 push/release and requires final-artifact/remote gates; production operations remain excluded. Native CONTENT_REFUSED must remain permanent in both retry and compaction classification, and exact rc.4 guards must retain rc.3/unknown/foreign refusal.

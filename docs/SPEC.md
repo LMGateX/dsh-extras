@@ -20,6 +20,8 @@ The latest user scope correction fixes the [browser-zone privacy contract](TIMEZ
 
 For the unreleased rc.4 compatibility check, apply the [exact rc.4 check contract](<DSH_RC4_071.md>). The check prepares seven synchronized 0.7.1 candidate distributions for exact DSH 0.2.2-rc.4 and treats native CONTENT_REFUSED as permanent. The subsequent [publication contract](<DSH_RC4_RELEASE_071.md>) authorizes final 0.7.1 push/release only. Production operations remain excluded; historical 0.7.0/rc.3 evidence stays historical.
 
+For Extras 0.8.0 apply the [exact alpha.2 compatibility and publication contract](DSH_ALPHA2_080.md). The user authorizes local upstream source checkout, push and GitHub release, not production installation. Historical compatibility evidence remains version-specific.
+
 ## Required deliverables
 
 1. One combined installable distribution, dsh-extras, one plugin card and unified settings grouped into four independently enabled modules.

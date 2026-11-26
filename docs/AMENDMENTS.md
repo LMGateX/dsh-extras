@@ -4,6 +4,10 @@ Changes must cite the observed host/source constraint, explain the trade-off, an
 
 No amendments at the original specification freeze. Later approved amendments follow.
 
+## 2026-11-26 — Adapt and release for exact DSH 0.2.3-alpha.2
+
+The user requests local checkout of the upstream tag, compatibility adaptation, push and release without installing into the machine’s DSH. The [alpha.2 contract](DSH_ALPHA2_080.md) records the observed Node, Cordis and Goal driver facts, exact-host scope and final-artifact/remote gates. No policy or safety waiver, personal-profile inspection, Actions or Extras npm publication.
+
 ## 2026-11-18 — Authorize final 0.7.1 push/release without local installation
 
 After completed rc.4 checking, the user requests “push、发版”. The [publication contract](<DSH_RC4_RELEASE_071.md>) fixes final README/release identity, seven-archive rebuild, full final source and packed/native/browser acceptance, independent Standards/Spec reviews, atomic main plus annotated tag push, a GitHub Release and fresh remote-asset/download verification before those actions. No runtime contract changes, Actions, Extras npm publication or production operation. The prior check's unresolved profile hash equality is not relabeled as passed; this follow-up uses the explicit disposable-operation boundary and does not reopen personal-profile inspection.
