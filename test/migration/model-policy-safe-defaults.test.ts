@@ -4,7 +4,7 @@ import { planMigration, LEGACY_DEFAULTS, LEGACY_PACKAGES } from '../../src/migra
 import type { Discovery } from '../../src/migration/types.ts';
 
 function snapshot(legacyMode = false): Discovery {
-  return {profileId:'fixture', profile:{dir:'/disposable/profile',patchPath:'/disposable/profile/cordis.patch.yml',home:'/disposable/home',installAnchor:'/disposable/dsh/package.json'},revision:'one',manifest:{},patchText:'[]',manifestText:'{}',rows:[],sources:[],target:{rowId:'dsh-extras-model-policy',moduleIds:['model-policy']},explicit:{},peers:{},problems:[],legacyMode};
+  return {profileId:'fixture', profile:{dir:'/disposable/profile',patchPath:'/disposable/profile/cordis.patch.yml',home:'/disposable/home',installAnchor:'/disposable/dsh/package.json',overlayPaths:[]},revision:'one',manifest:{},patchText:'[]',manifestText:'{}',rows:[],sources:[],target:{rowId:'dsh-extras-model-policy',moduleIds:['model-policy']},explicit:{},peers:{},problems:[],legacyMode};
 }
 test('new capabilities remain off without invented predecessors on fresh and legacy upgrades', () => {
   for (const id of ['model-policy', 'host-timezone'] as const) {

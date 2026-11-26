@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { planMigration, LEGACY_DEFAULTS, LEGACY_PACKAGES, mergeValues } from '../../src/migration/planner.ts';
 import { LEGACY_MODULE_IDS, type Discovery, type LegacyModuleId } from '../../src/migration/types.ts';
 function snapshot(): Discovery {
-  return {profileId:'fixture',profile:{dir:'/disposable/profile',patchPath:'/disposable/profile/cordis.patch.yml',home:'/disposable/home',installAnchor:'/disposable/dsh/package.json'},revision:'one',manifest:{},patchText:'[]',manifestText:'{}',rows:[],target:{rowId:'dsh-extras',moduleIds:LEGACY_MODULE_IDS},explicit:{},peers:{},problems:[],legacyMode:true,
+  return {profileId:'fixture',profile:{dir:'/disposable/profile',patchPath:'/disposable/profile/cordis.patch.yml',home:'/disposable/home',installAnchor:'/disposable/dsh/package.json',overlayPaths:[]},revision:'one',manifest:{},patchText:'[]',manifestText:'{}',rows:[],target:{rowId:'dsh-extras',moduleIds:LEGACY_MODULE_IDS},explicit:{},peers:{},problems:[],legacyMode:true,
     sources:LEGACY_MODULE_IDS.map(id=>({moduleId:id,packageName:LEGACY_PACKAGES[id],version:({'compact-context':'0.4.7',retry:'0.1.9',chime:'0.6.0',goalWait:'0.3.0'} as Record<LegacyModuleId,string>)[id],rowId:'custom-'+id,raw:{},effective:{},disabled:false,active:false,bundleSelected:true}))};
 }
 test('all four current versions import exact known defaults without mutating input',()=>{
