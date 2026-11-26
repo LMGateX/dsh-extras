@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { lstat, readFile, realpath, stat } from 'node:fs/promises';
+import { readFile, realpath } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -7,6 +7,7 @@ import type { Discovery, Distribution, LauncherOverlayInput, ModuleId, LegacyMod
 import { LEGACY_VERSIONS } from './planner.ts';
 import { moduleDefaultEnabled } from '../types.ts';
 import { inspectNativeGoalOwner } from './native-owner.ts';
+import { assertSeparateOverlays, launcherOverlayPaths, MigrationOverlayError } from './storage.ts';
 
 /** Only these read-only native operations are admitted. Never load legacy plugin code. */
 export interface NativeDiscoveryFacade {
@@ -74,44 +75,10 @@ function overrideConfig(patches: unknown[], rowId: string, name?: string): unkno
 }
 function errorCode(error: unknown): string | undefined { return (error as NodeJS.ErrnoException)?.code; }
 
-/** Bounded, path-free overlay diagnostics that the standalone CLI can display. */
-export class MigrationOverlayError extends Error {}
-
-async function patchIdentity(path: string) {
-  try { return await stat(path, { bigint: true }); }
-  catch (error) {
-    if (errorCode(error) !== 'ENOENT') throw error;
-    // A dangling HOME symlink is not an absent optional file: creating the
-    // writable patch could turn the link into a higher-priority alias.
-    const entry = await lstat(path).catch(error => { if (errorCode(error) !== 'ENOENT') throw error; });
-    if (entry) throw new MigrationOverlayError('patch or overlay filesystem identity cannot be verified');
-    return undefined;
-  }
-}
-
-async function assertSeparateOverlays(patchPath: string, manifestPath: string, overlays: Set<string>): Promise<void> {
-  const writable = await Promise.all([
-    { path: patchPath, name: 'profile patch' }, { path: manifestPath, name: 'profile manifest' },
-  ].map(async file => ({ ...file, identity: await patchIdentity(file.path) })));
-  for (const path of overlays) {
-    const overlay = await patchIdentity(path), absolute = resolve(path);
-    const alias = writable.find(({ path, identity }) => path === absolute ||
-      identity && overlay && identity.dev === overlay.dev && identity.ino === overlay.ino);
-    if (alias) throw new MigrationOverlayError('read-only overlay aliases the writable ' + alias.name);
-  }
-}
-
 /** Inspect only the active profile. All configuration remains inert, detached raw data. */
 export async function inspectMigration(host: NativeMigrationHost, target: Distribution): Promise<Discovery> {
   const input = host.profileContext;
-  // Alpha.2 supplies paths in argv order, never a startup patch snapshot.
-  if (Object.hasOwn(input, 'overlays')) throw new MigrationOverlayError('legacy launcher overlay snapshot is not native alpha.2 profile evidence');
-  const paths = input.overlayPaths;
-  if (paths === undefined) throw new MigrationOverlayError('launcher overlay evidence unavailable; use a native profile or explicitly supply the invocation overlays');
-  if (!Array.isArray(paths) || [...paths].some(path => typeof path !== 'string' || !isAbsolute(path))) {
-    throw new MigrationOverlayError('launcher overlay paths must be absolute native profile inputs');
-  }
-  const overlayPaths = [...paths];
+  const overlayPaths = launcherOverlayPaths(input);
   const profile = { ...input, overlayPaths, dir: await realpath(input.dir), patchPath: resolve(input.patchPath),
     installAnchor: await realpath(input.installAnchor), home: await realpath(input.home) };
   const homePath = join(profile.home, 'cordis.patch.yml');
@@ -134,7 +101,7 @@ export async function inspectMigration(host: NativeMigrationHost, target: Distri
     return value;
   };
   const manifestPath = join(profile.dir, 'package.json');
-  await assertSeparateOverlays(profile.patchPath, manifestPath, readOnlyPatches);
+  await assertSeparateOverlays(profile.dir, profile.patchPath, readOnlyPatches);
   const manifestText = await text(manifestPath);
   const manifest = await json(manifestPath);
   const patchText = await text(profile.patchPath, true);
@@ -348,7 +315,7 @@ export async function inspectMigration(host: NativeMigrationHost, target: Distri
     if (row.value.name !== expected && info?.manifest.name !== expected) addProblem(target.moduleIds, 'target row package identity does not match the requested distribution');
   }
   if (targetRows.length > 1) addProblem(target.moduleIds, 'multiple target instances require explicit recovery');
-  await assertSeparateOverlays(profile.patchPath, manifestPath, readOnlyPatches);
+  await assertSeparateOverlays(profile.dir, profile.patchPath, readOnlyPatches);
   const revision = createHash('sha256').update(JSON.stringify({ profileId, installAnchor: profile.installAnchor,
     files: [...texts].sort(([a], [b]) => a.localeCompare(b)), launcherOverlays, overlays: launcherPatches,
     target: { rowId: target.rowId, packageName: target.packageName, moduleIds: target.moduleIds }, startupOwner: host.startupOwner ?? null,

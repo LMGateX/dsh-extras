@@ -3,7 +3,7 @@ import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { realpathSync } from 'node:fs';
 import { dryRunMigration, rollbackMigration, runMigration } from './engine.ts';
-import { MigrationOverlayError } from './discovery.ts';
+import { MigrationOverlayError } from './storage.ts';
 import { MODULE_IDS, type Distribution, type ModuleId, type NativeMigrationHost } from './types.ts';
 
 class MigrationUsageError extends Error {}

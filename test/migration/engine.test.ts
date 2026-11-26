@@ -48,6 +48,36 @@ for (const alias of ['same path', 'symlink', 'hardlink', 'HOME symlink'] as cons
   assert.ok(!(await readdir(dir)).includes('.dsh-extras'));
 }));
 
+for (const mode of ['direct report', 'symlink to report', 'hardlink to report', 'stale lock', 'native claim'] as const) test('migration reserves output namespace before writes: ' + mode, async () => fixture(async ({ host, root, dir }) => {
+  const manifest = join(dir, 'package.json'), patch = host.profileContext.patchPath;
+  const outputs = join(dir, '.dsh-extras');
+  const output = mode === 'stale lock' ? manifest + '.lock' : mode === 'native claim' ? manifest + '.lock.takeover-placeholder' : join(outputs, target.rowId + '.report.json');
+  const bytes = mode === 'stale lock' ? '2147483647\n' : '[]\n';
+  if (output.startsWith(outputs + '/')) await mkdir(outputs);
+  await writeFile(output, bytes);
+  const overlay = mode.includes('link to') ? join(root, 'alias.yml') : output;
+  if (mode === 'symlink to report') await symlink(output, overlay);
+  if (mode === 'hardlink to report') await link(output, overlay);
+  host.profileContext.overlayPaths = [overlay];
+  const before = await readFile(manifest, 'utf8');
+  await assert.rejects(runMigration(host, target), /overlay.*reserved.*(?:storage|lock)/i);
+  assert.equal(await readFile(output, 'utf8'), bytes);
+  assert.equal(await readFile(overlay, 'utf8'), bytes);
+  assert.equal(await readFile(patch, 'utf8'), '[]\n');
+  assert.equal(await readFile(manifest, 'utf8'), before);
+}));
+
+test('migration refuses a symlinked private storage root before profile writes', async () => fixture(async ({ host, root, dir }) => {
+  const outside = join(root, 'foreign-storage');
+  await mkdir(outside);
+  await symlink(outside, join(dir, '.dsh-extras'));
+  const before = await readFile(join(dir, 'package.json'), 'utf8');
+  await assert.rejects(runMigration(host, target), /private migration storage.*non-symlink directory/i);
+  assert.deepEqual(await readdir(outside), []);
+  assert.equal(await readFile(host.profileContext.patchPath, 'utf8'), '[]\n');
+  assert.equal(await readFile(join(dir, 'package.json'), 'utf8'), before);
+}));
+
 test('write-time validation rejects an overlay relinked to the patch without a byte change', async () => fixture(async ({ host, dir, root }) => {
   const patch = host.profileContext.patchPath, manifest = join(dir, 'package.json'), overlay = join(root, 'launcher.patch.yml');
   const before = await readFile(manifest, 'utf8');
@@ -67,7 +97,7 @@ test('unknown runtime overlay evidence cannot authorize migration or rollback wr
   const patch = host.profileContext.patchPath, manifest = join(dir, 'package.json');
   const inputs = async () => Promise.all([readFile(patch, 'utf8'), readFile(manifest, 'utf8')]);
   const before = await inputs();
-  delete host.profileContext.overlayPaths;
+  Reflect.deleteProperty(host.profileContext, 'overlayPaths');
   await assert.rejects(runMigration(host, target), /launcher overlay.*unavailable/i);
   assert.deepEqual(await inputs(), before);
   assert.ok(!(await readdir(dir)).includes('.dsh-extras'));
@@ -75,7 +105,7 @@ test('unknown runtime overlay evidence cannot authorize migration or rollback wr
   const applied = await runMigration(host, target);
   const paths = await profilePaths(host, target.rowId);
   const saved = await inputs(), journal = await readFile(paths.journal, 'utf8');
-  delete host.profileContext.overlayPaths;
+  Reflect.deleteProperty(host.profileContext, 'overlayPaths');
   await assert.rejects(rollbackMigration(host, target, { operationId: applied.operationId, modules: ['retry'] }), /launcher overlay.*unavailable/i);
   assert.deepEqual(await inputs(), saved);
   assert.equal(await readFile(paths.journal, 'utf8'), journal);

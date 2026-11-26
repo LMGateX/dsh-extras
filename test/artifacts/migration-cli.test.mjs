@@ -192,6 +192,18 @@ test('packed overlay inputs follow launcher order and fence every recovery invoc
   assert.match(nativeFlag.stderr,/Use --overlay PATH/);
   assert.deepEqual(await inputs(temp),before);
   assert.ok(!(await readdir(temp)).includes('.dsh-extras'));
+  const outputs=join(temp,'.dsh-extras'), report=join(outputs,name+'.report.json');
+  await mkdir(outputs);
+  await writeFile(report,'[]\n');
+  await link(report,join(temp,'report-overlay.yml'));
+  for (const path of ['.dsh-extras/'+name+'.report.json','report-overlay.yml']) {
+    const result=run(temp,bin,['apply',...flags(temp,name),'--overlay',path]);
+    assert.equal(result.status,1,result.stdout+result.stderr);
+    assert.match(result.stderr,/overlay overlaps reserved private migration storage/);
+    assert.equal(await readFile(report,'utf8'),'[]\n');
+    assert.deepEqual(await readdir(outputs),[name+'.report.json']);
+    assert.deepEqual(await inputs(temp),before);
+  }
   assert.equal(cliJSON(temp,bin,'dry-run',name,overlays).decisions[0].phase,'prepared');
   const blocked=cliJSON(temp,bin,'inspect',name,reversed).decisions[0];
   assert.equal(blocked.phase,'conflict'); assert.match(blocked.reason,/another Extras distribution/);

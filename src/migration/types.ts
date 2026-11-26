@@ -8,7 +8,7 @@ export interface Distribution { rowId: string; packageName?: string; moduleIds: 
 export interface ProfileFacts {
   dir: string; patchPath: string; installAnchor: string; home: string; name?: string;
   /** Native launcher order. An explicit [] means no overlays; omission is unknown, not writable. */
-  overlayPaths?: readonly string[];
+  overlayPaths: readonly string[];
 }
 export interface LauncherOverlayInput { path: string; hash: string }
 export interface LoaderEntry { id: string; options: { id: string; name: string; config?: unknown; disabled?: unknown; group?: unknown }; disabled?: boolean; fiber?: { state?: number; inertia?: Promise<unknown>; effectiveConfig?: unknown; ctx?: Context }; moduleNamespace?: { apply?: unknown }; parent?: unknown }

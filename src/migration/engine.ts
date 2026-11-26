@@ -7,10 +7,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { NativeDiscoveryFacade } from './discovery.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { isMap, isSeq, parseDocument } from 'yaml';
-import { inspectMigration, MigrationOverlayError } from './discovery.ts';
+import { inspectMigration } from './discovery.ts';
 import { resolveCompactionReasoning } from '../modules/compact-context/reasoning-policy.ts';
 import { containsExpression, isRecord, planMigration, validateKnownConfig, LEGACY_PACKAGES, LEGACY_VERSIONS } from './planner.ts';
-import { digest, profilePaths, readOptional, withProfileLock, writePrivate } from './storage.ts';
+import { digest, MigrationOverlayError, profilePaths, readOptional, withProfileLock, writePrivate } from './storage.ts';
 import type { Decision, Discovery, Distribution, LauncherOverlayInput, MigrationPlan, MigrationReport, ModuleId, NativeMigrationHost, Values } from './types.ts';
 import type { LegacyAdoptionReceipt } from '../types.ts';
 
