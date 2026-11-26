@@ -44,7 +44,7 @@ async function consumer() {
   const manifestBefore=await readFile(join(dir,'package.json'),'utf8');
   const patchPath=join(dir,'cordis.patch.yml'); await writeFile(patchPath,'[]\n');
   const ctx=new Context();
-  const host={profileContext:{dir,home,patchPath,installAnchor:anchor},loader:{entries:()=>[]},continuationContext:ctx};
+  const host={profileContext:{dir,home,patchPath,installAnchor:anchor,overlayPaths:[]},loader:{entries:()=>[]},continuationContext:ctx};
   const inspect=()=>api.inspectMigration(host,target);
   const refusal=async pattern=>{
     const input=await inspect();

@@ -30,7 +30,7 @@ async function nativeProofFixture(t: TestContext, loaderProof?: {version?: strin
   await ctx.loader.create({id:'goal-round-driver',name:'@deepseek-ai/dsh-goal-round-driver'}); await ctx.loader.await();
   const stock = ctx.loader.resolve('goal-round-driver');
   assert.equal(stock.fiber.state, 2);
-  const host: NativeMigrationHost = {profileContext:{dir,home,patchPath,installAnchor:anchor},loader:ctx.loader,continuationContext:ctx,nativeMigration:await load('@deepseek-ai/dsh-app-boot')};
+  const host: NativeMigrationHost = {profileContext:{dir,home,patchPath,installAnchor:anchor,overlayPaths:[]},loader:ctx.loader,continuationContext:ctx,nativeMigration:await load('@deepseek-ai/dsh-app-boot')};
   const inspect = () => inspectMigration(host, {...target,moduleIds:[...target.moduleIds]});
   assert.deepEqual((await inspect()).goalOwner, {verified:true,stockActive:true});
   const fakeAnchor = join(root, 'anchor', 'package.json');
@@ -104,7 +104,7 @@ test('public inspection accepts the exact alpha.2 Cordis root and refuses histor
   const {Context} = await load('@deepseek-ai/cordis');
   const ctx = new Context(); t.after(() => ctx.fiber.dispose());
   const host: NativeMigrationHost = {
-    profileContext:{dir,home,patchPath:join(dir,'cordis.patch.yml'),installAnchor:anchor},
+    profileContext:{dir,home,patchPath:join(dir,'cordis.patch.yml'),installAnchor:anchor,overlayPaths:[]},
     loader:{entries:()=>[]}, continuationContext:ctx,
     nativeMigration:await load('@deepseek-ai/dsh-app-boot'),
   };
@@ -140,7 +140,7 @@ test('public inspection refuses unavailable anchored Cordis even with a genuine 
   // Discovery uses the actual audited read-only facade so this public call reaches
   // runtime proof even when the deliberately incomplete anchor has no app-boot.
   const host: NativeMigrationHost & {nativeMigration: unknown} = {
-    profileContext:{dir,home,patchPath:join(dir,'cordis.patch.yml'),installAnchor:emptyAnchor},
+    profileContext:{dir,home,patchPath:join(dir,'cordis.patch.yml'),installAnchor:emptyAnchor,overlayPaths:[]},
     loader:{entries:()=>[]}, continuationContext:ctx,
     nativeMigration:await load('@deepseek-ai/dsh-app-boot'),
   };

@@ -18,7 +18,7 @@ async function fixture(t: TestContext) {
   const root=await mkdtemp(join(tmpdir(),'ex-goal-'));
   const home=join(root,'home'),dir=join(root,'profile');
   await mkdir(home,{recursive:true}); await mkdir(dir,{recursive:true});
-  const host: NativeMigrationHost={profileContext:{dir,patchPath:join(dir,'cordis.patch.yml'),home,installAnchor:anchor},loader:{entries:()=>[]}};
+  const host: NativeMigrationHost={profileContext:{dir,patchPath:join(dir,'cordis.patch.yml'),home,installAnchor:anchor,overlayPaths:[]},loader:{entries:()=>[]}};
   const pkg=async(name:string,version:string,patches:unknown[])=>{
     const path=join(dir,'node_modules',name); await mkdir(path,{recursive:true});
     await writeFile(join(path,'package.json'),JSON.stringify({name,version,type:'module',exports:'./index.js',dsh:{bundle:{patch:'./cordis.patch.yml'}}}));
