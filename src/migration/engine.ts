@@ -17,7 +17,9 @@ import type { LegacyAdoptionReceipt } from '../types.ts';
 interface Step { kind: 'target' | 'disable' | 'bundles'; before: string; after: string; done: boolean }
 interface JournalEnvironment { identity: string; files: { path: string; hash: string | null }[]; paths: string[]; launcherOverlays?: readonly LauncherOverlayInput[] }
 interface RollbackEvidence { packageDir?: string; files?: { path: string; hash: string }[]; patchPaths?: string[]; problem?: string }
-interface Journal { nativeDriverVerifiedOrigin?: string; rollbackEvidence?: Partial<Record<ModuleId, RollbackEvidence>>; environment?: JournalEnvironment; ownershipVersion?: 1; owners?: Partial<Record<ModuleId, string[]>>; schemaVersion: 1; operationId: string; profileId: string; targetRowId: string; runtimeObserved?: boolean; browserFenceFinalized?: boolean; browserReloadAfter?: number; origin: string; phase: 'prepared' | 'saved'; plan: MigrationPlan; steps: Step[]; backup: string; previous: Partial<Record<ModuleId, unknown>>; rollback?: Partial<Record<ModuleId, { origin: string; done: boolean; conflict?: string }>>; recoveryWrites?: { patchBefore: string; patchAfter: string; manifestBefore: string; manifestAfter: string; restoreModules?: ModuleId[] } }
+interface Journal { nativeDriverVerifiedOrigin?: string; rollbackEvidence?: Partial<Record<ModuleId, RollbackEvidence>>; environment?: JournalEnvironment; ownershipVersion?: 1; owners?: Partial<Record<ModuleId, string[]>>; schemaVersion: 1; operationId: string; profileId: string; targetRowId: string; runtimeObserved?: boolean; browserFenceFinalized?: boolean; browserReloadAfter?: number; origin: string; phase: 'prepared' | 'saved'; plan: MigrationPlan; steps: Step[]; backup: string; previous: Partial<Record<ModuleId, unknown>>; rollback?: Partial<Record<ModuleId, { origin: string; done: boolean; conflict?: string }>>; recoveryWrites?: { patchBefore: string; patchAfter: string; manifestBefore: string; manifestAfter: string; restoreModules?: ModuleId[]; selectedModules: ModuleId[] } }
+
+export class RecoverySelectionError extends Error {}
 /** Stable across HMR but different after a genuine process restart, without process-global state. */
 const processOrigin = () => process.pid + ':' + performance.timeOrigin;
 // Durable process evidence is diagnostic, not a transferable root-realm grant.
@@ -523,7 +525,7 @@ async function rebaseRecovery(host: NativeMigrationHost, target: Distribution, j
   doc.setIn([targetIndex(doc, target), 'config'], config);
   profile.bundles = bundles; dsh.profile = profile; manifest.dsh = dsh;
   journal.recoveryWrites = { patchBefore: current.patchText, patchAfter: String(doc), manifestBefore: current.manifestText,
-    manifestAfter: JSON.stringify(manifest, null, 2) + '\n', restoreModules: ids };
+    manifestAfter: JSON.stringify(manifest, null, 2) + '\n', restoreModules: ids, selectedModules: old.selectedModules };
   const paths = await profilePaths(host, target.rowId);
   await writePrivate(paths.journal, JSON.stringify(journal) + '\n');
 }
@@ -559,6 +561,8 @@ function originExited(origin: string): boolean {
 }
 /** Selective two-stage recovery. New ownership is disabled before any old owner may return. */
 export async function rollbackMigration(host: NativeMigrationHost, target: Distribution, options: { operationId: string; modules: readonly ModuleId[] }): Promise<MigrationReport> {
+  const selectedModules = [...new Set(options.modules)];
+  if (!selectedModules.length) throw new RecoverySelectionError('select at least one rollback module');
   return withProfileLock(host, async () => {
     const journal = await loadJournal(host, target);
     const input = await inspectMigration(host, target);
@@ -566,6 +570,12 @@ export async function rollbackMigration(host: NativeMigrationHost, target: Distr
     if (journal.phase !== 'saved') throw new Error('finish or explicitly repair interrupted migration before selective rollback');
     if (journal.ownershipVersion !== 1) throw new Error('journal has no complete target owner registry; recovery refused');
     assertLauncherReplay(journal, input);
+    if (journal.recoveryWrites) {
+      const recorded = journal.recoveryWrites.selectedModules;
+      if (!Array.isArray(recorded) || !isDeepStrictEqual(new Set(recorded), new Set(selectedModules))) {
+        throw new RecoverySelectionError('interrupted rollback requires the same selected modules as the original request; replay refused');
+      }
+    }
     await observeOwners(host, journal, input);
     if (journal.recoveryWrites) { await finishRecovery(host, target, journal); return reportJournal(host, journal); }
     const paths = await profilePaths(host, target.rowId);
@@ -573,7 +583,7 @@ export async function rollbackMigration(host: NativeMigrationHost, target: Distr
     const { index, config } = targetConfig(doc, target, {});
     const values = isRecord(config.modules) ? config.modules : {};
     journal.rollback ??= {};
-    for (const id of options.modules) {
+    for (const id of selectedModules) {
       const decision = journal.plan.decisions.find(d => d.moduleId === id);
       if (!decision?.config || decision.phase === 'conflict') throw new Error('module was not imported by this operation');
       const pending = journal.rollback[id];
@@ -608,12 +618,12 @@ export async function rollbackMigration(host: NativeMigrationHost, target: Distr
     const dsh = isRecord(manifest.dsh) ? manifest.dsh : {};
     const profile = isRecord(dsh.profile) ? dsh.profile : {};
     const bundles = Array.isArray(profile.bundles) ? profile.bundles : [];
-    for (const id of options.modules) {
+    for (const id of selectedModules) {
       const decision = journal.plan.decisions.find(d => d.moduleId === id);
       if (journal.rollback[id]?.done && decision?.source?.bundleSelected && !bundles.includes(decision.source.bundleName ?? decision.source.packageName)) bundles.push(decision.source.bundleName ?? decision.source.packageName);
     }
     profile.bundles = bundles; dsh.profile = profile; manifest.dsh = dsh;
-    journal.recoveryWrites = { patchBefore: input.patchText, patchAfter: String(doc), manifestBefore, manifestAfter: JSON.stringify(manifest, null, 2) + '\n', restoreModules: options.modules.filter(id => journal.rollback?.[id]?.done) };
+    journal.recoveryWrites = { patchBefore: input.patchText, patchAfter: String(doc), manifestBefore, manifestAfter: JSON.stringify(manifest, null, 2) + '\n', restoreModules: selectedModules.filter(id => journal.rollback?.[id]?.done), selectedModules };
     await writePrivate(paths.journal, JSON.stringify(journal) + '\n');
     await finishRecovery(host, target, journal);
     return reportJournal(host, journal);

@@ -2,7 +2,7 @@
 import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { realpathSync } from 'node:fs';
-import { dryRunMigration, rollbackMigration, runMigration } from './engine.ts';
+import { dryRunMigration, RecoverySelectionError, rollbackMigration, runMigration } from './engine.ts';
 import { MigrationOverlayError } from './storage.ts';
 import { MODULE_IDS, type Distribution, type ModuleId, type NativeMigrationHost } from './types.ts';
 
@@ -59,7 +59,7 @@ function isDirectEntry(): boolean {
 if (isDirectEntry()) {
   migrationMain().catch(error => {
     console.error('Migration refused or failed; no unsafe overwrite was attempted. Inspect the private profile journal and retry.');
-    if (error instanceof MigrationOverlayError || error instanceof MigrationUsageError) console.error(error.message);
+    if (error instanceof MigrationOverlayError || error instanceof MigrationUsageError || error instanceof RecoverySelectionError) console.error(error.message);
     process.exitCode = 1;
   });
 }

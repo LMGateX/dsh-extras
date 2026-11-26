@@ -126,7 +126,7 @@ async function interruptedRestore(f: Awaited<ReturnType<typeof fixture>>, module
     assert.ok(index >= 0); doc.deleteIn([index]);
     manifest.dsh.profile.bundles.push(packages[id][0]); journal.rollback[id].done = true;
   }
-  journal.recoveryWrites = { patchBefore, patchAfter: String(doc), manifestBefore, manifestAfter: JSON.stringify(manifest), restoreModules: modules };
+  journal.recoveryWrites = { patchBefore, patchAfter: String(doc), manifestBefore, manifestAfter: JSON.stringify(manifest), restoreModules: modules, selectedModules: modules };
   await writeFile(paths.journal, JSON.stringify(journal));
   if (patchAlreadyWritten) await writeFile(paths.patch, String(doc));
 }
@@ -145,6 +145,19 @@ test('interrupted rollback does not replay a write under different launcher laye
   await f.assertBlocked('retry');
   f.host.profileContext.overlayPaths = [];
   assert.equal((await rollbackMigration(f.host, target, { operationId: f.operationId, modules: ['retry'] })).modules.retry?.phase, 'rolled-back');
+});
+
+test('interrupted rollback requires the original selected modules without considering their order', async t => {
+  const f = await fixture(t, ['compact-context', 'retry']);
+  await interruptedRestore(f, ['retry', 'compact-context'], false);
+  const paths = await profilePaths(f.host, target.rowId);
+  const snapshot = () => Promise.all([paths.patch, paths.manifest, paths.journal].map(file => readFile(file, 'utf8')));
+  const before = await snapshot();
+  await assert.rejects(rollbackMigration(f.host, target, { operationId: f.operationId, modules: ['retry'] }), /same selected modules/);
+  assert.deepEqual(await snapshot(), before);
+  const report = await rollbackMigration(f.host, target, { operationId: f.operationId, modules: ['compact-context', 'retry'] });
+  assert.equal(report.modules.retry?.phase, 'rolled-back');
+  assert.equal(report.modules['compact-context']?.phase, 'rolled-back');
 });
 
 for (const partial of [false, true]) test('interrupted restoration replay revalidates new peers and resumes disjoint modules; patch written=' + partial, async t => {
