@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { dryRunMigration, moduleConfigAdopted, rollbackMigration, runMigration } from './engine.ts';
 import type { BootstrapOptions, MigrationController, MigrationReport, MigrationState, NativeMigrationHost } from './types.ts';
 export * from './types.ts';
@@ -19,7 +20,11 @@ export function startAutomaticMigration(host: NativeMigrationHost, options: Boot
   nativeHost.handoverAcknowledged = (id, source) => host.handoverAcknowledged?.(id, source) ?? (acknowledged !== undefined && !acknowledged.some(entry => entry.fiber && (entry.name === (source.moduleName ?? source.packageName) || entry.id === source.rowId)));
   let active: Promise<MigrationReport> | undefined;
   let refreshRequested = false;
-  let volatileRevision = 0;
+  const policySnapshot = (id: BootstrapOptions['moduleIds'][number]) => {
+    try { return structuredClone(host.moduleConfig?.(id)); } catch { return undefined; }
+  };
+  const seenPolicies = new Map(options.auto === false ? options.moduleIds.map(id => [id, policySnapshot(id)] as const) : []);
+  const policyRevisions = new Map(options.moduleIds.map(id => [id, 0]));
   const plannedConfigNotAdopted = 'running Extras configuration has not adopted planned settings';
   const lastEnabled = new Map(options.moduleIds.map(id => [id, moduleConfigAdopted(host, options, id, { enabled: true })]));
   const enableRevision = new Map(options.moduleIds.map(id => [id, 0]));
@@ -63,7 +68,7 @@ export function startAutomaticMigration(host: NativeMigrationHost, options: Boot
   const execute = (retry = false) => {
     if (active) return active;
     const scannedEnableRevision = new Map(enableRevision);
-    const scannedVolatileRevision = volatileRevision;
+    const scannedPolicyRevisions = new Map(policyRevisions);
     active = (options.auto === false ? dryRunMigration(host, options).then(plan => ({ schemaVersion: 1 as const, operationId: '', profileId: plan.profileId, targetRowId: options.rowId,
       modules: Object.fromEntries(plan.decisions.map(d => {
         const adopted = !!d.config && moduleConfigAdopted(host, options, d.moduleId, d.config);
@@ -83,7 +88,7 @@ export function startAutomaticMigration(host: NativeMigrationHost, options: Boot
           // A newer volatile policy can overtake the scan's persisted snapshot.
           // Keep only an existing, uninterrupted grant across that obsolete comparison;
           // a conflict, real mismatch or new enable never inherits readiness.
-          if (options.auto === false && scannedVolatileRevision !== volatileRevision &&
+          if (options.auto === false && scannedPolicyRevisions.get(id) !== policyRevisions.get(id) &&
               previous?.ready && previous.enabled && lastEnabled.get(id) && next?.enabled &&
               next.phase === 'restart-required' && next.reason === plannedConfigNotAdopted) {
             refreshRequested = true;
@@ -115,7 +120,11 @@ export function startAutomaticMigration(host: NativeMigrationHost, options: Boot
     invalidateEnabledTransitions(); refresh();
   });
   const unvolatile = host.on?.('loader/volatile-update', () => {
-    volatileRevision++;
+    if (options.auto === false) for (const id of options.moduleIds) {
+      const previous = seenPolicies.get(id), next = policySnapshot(id);
+      seenPolicies.set(id, next);
+      if (previous && next && !isDeepStrictEqual(previous, next)) policyRevisions.set(id, policyRevisions.get(id)! + 1);
+    }
     invalidateEnabledTransitions(); refresh();
   });
   const unready = host.appReady?.onReady(launch);

@@ -590,13 +590,13 @@ test('obsolete policy-only dry run cannot revoke a continuously enabled retry ow
   save();
   const events = new Map<string, () => void>();
   host.on = (name, listener) => { events.set(name, listener); return () => events.delete(name); };
-  let race = false;
+  let race: 'retry' | 'unrelated' | undefined;
   host.moduleConfig = () => {
     if (race) {
-      race = false;
-      values = { ...values, providers: ['second'] };
-      save();
-      events.get('loader/volatile-update')!();
+      const which = race; race = undefined;
+      if (which === 'unrelated') events.get('loader/volatile-update')!();
+      values = { ...values, providers: [which === 'retry' ? 'second' : 'third'] };
+      if (which === 'retry') { save(); events.get('loader/volatile-update')!(); }
     }
     return values;
   };
@@ -604,7 +604,7 @@ test('obsolete policy-only dry run cannot revoke a continuously enabled retry ow
   const controller = startAutomaticMigration(host, { ...retryTarget, auto: false });
   try {
     assert.equal((await controller.settled).modules.retry?.ready, true);
-    race = true;
+    race = 'retry';
     const observed: unknown[] = [];
     let stop = () => {};
     const rescan = new Promise<void>(resolve => {
@@ -619,9 +619,10 @@ test('obsolete policy-only dry run cannot revoke a continuously enabled retry ow
       await rescan;
       await controller.retry(); // Join completion after the subscriber sees the report.
       assert.equal(controller.state().modules.retry?.ready, true);
-      values = { ...values, providers: ['different-without-a-volatile-event'] };
+      race = 'unrelated';
       const current = await controller.retry();
-      assert.equal(current.modules.retry?.ready, false, 'a current mismatching scan still revokes admission');
+      assert.equal(current.modules.retry?.ready, false, 'an unrelated volatile event cannot preserve a mismatching retry grant');
+      await controller.retry();
     } finally { stop(); }
   } finally { controller.dispose(); clearInterval(keep); }
 }, false));
