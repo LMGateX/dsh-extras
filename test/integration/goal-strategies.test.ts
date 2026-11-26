@@ -526,7 +526,10 @@ test('ordinary module replacement uses the pinned port, retains armed authority 
   const { ctx, runtime } = f
   const state = await until(() => goalWait.runtimeStatus(f.fiber.ctx), value => value.capabilities.continuation.phase !== 'unavailable' || !!value.details.goalWait.fallback, 'replacement mount')
   assert.equal(state.details.goalWait.mounted, 'replacement-port', JSON.stringify(state))
-  assert.equal(state.details.goalWait.host?.distribution, '0.2.2-rc.4')
+  assert.deepEqual(state.details.goalWait.host, {
+    distribution: '0.2.3-alpha.2', cordis: '4.2.0-alpha.1',
+    driverSha256: '8c56696eaac68e61a38b1068ea0f0dff976440e72b49ef4814fbea93c8b48b0c',
+  })
   const handle = await runtime.createAgent({ sessionId: 'parity-goal-port' })
   let finish!: (value: { status: string }) => void
   const done = new Promise<{ status: string }>(resolve => { finish = resolve })
@@ -546,7 +549,7 @@ test('ordinary module replacement uses the pinned port, retains armed authority 
   assert.equal(handle.state.requests.length, 1)
 })
 
-for (const strategy of ['native', 'replacement']) test(`rc.4 `+strategy+' joins the whole root tree but does not block a member goal on its grandchild', { timeout: 15000 }, async t => {
+for (const strategy of ['native', 'replacement']) test(`alpha.2 `+strategy+' joins the whole root tree but does not block a member goal on its grandchild', { timeout: 15000 }, async t => {
   const f = await createGoalRuntime(t, { subagents: true, config: { strategy } })
   await until(f.status, state => state.capabilities.continuation.phase === 'active', strategy+' tree owner')
   const root = await f.createAgent({ sessionId: 'tree-root-'+strategy, route: 'tree-root-route-'+strategy })

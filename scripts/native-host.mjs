@@ -5,7 +5,9 @@ import {pathToFileURL} from 'node:url';
 import {createRequire} from 'node:module';
 import {createHash} from 'node:crypto';
 
-const VERSION = '0.2.2-rc.4';
+const VERSION = '0.2.3-alpha.2';
+const CORDIS = '4.2.0-alpha.1';
+const LOADER = '1.2.0-alpha.1';
 // Independently observed published npm bytes; not an authorization for product owner guards.
 const DRIVER = '8c56696eaac68e61a38b1068ea0f0dff976440e72b49ef4814fbea93c8b48b0c';
 const native = name => name.startsWith('@deepseek-ai/');
@@ -82,7 +84,7 @@ export async function checkNativeHost(root) {
     const manifest = await json(join(target, 'package.json'));
     const entry = lock.packages['node_modules/' + name];
     const version = short === 'dsh' || short.startsWith('dsh-') ? VERSION :
-      ({cordis: '4.1.0', schemastery: '3.19.0', cosmokit: '1.9.0'})[short];
+      ({cordis: CORDIS, 'cordis-plugin-loader': LOADER, schemastery: '3.20.0-alpha.1', cosmokit: '1.10.0-alpha.1'})[short];
     if (!entry || manifest.name !== name || manifest.version !== entry.version || (version && manifest.version !== version)) {
       throw new Error('Wrong native version or unlocked identity: ' + name);
     }
@@ -128,7 +130,7 @@ export async function checkNativeHost(root) {
   const driverSha256 = createHash('sha256').update(await readFile(join(driver, 'lib/index.js'))).digest('hex');
   if (driverSha256 !== DRIVER) throw new Error('Unrecognized npm Goal driver hash.');
   await checkSelectors(anchor);
-  return {nativeVersion: VERSION, cordisVersion: '4.1.0', driverSha256, packageCount: packages.size, owner, anchor};
+  return {nativeVersion: VERSION, cordisVersion: CORDIS, driverSha256, packageCount: packages.size, owner, anchor};
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

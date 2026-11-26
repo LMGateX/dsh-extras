@@ -1,4 +1,4 @@
-/** Exact rc.4 official npm artifact, independently compared with the official tag; see provenance. */
+/** Exact alpha.2 official npm artifact, independently compared with the official tag; see provenance. */
 import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
@@ -13,8 +13,8 @@ export interface HostProfile {
   /** Exact runtime artifact; used only by the temporary lifecycle authority observer. */
   artifactPath: string
 }
-const version = '0.2.2-rc.4'
-const cordis = '4.1.0'
+const version = '0.2.3-alpha.2'
+const cordis = '4.2.0-alpha.1'
 const digest = '8c56696eaac68e61a38b1068ea0f0dff976440e72b49ef4814fbea93c8b48b0c'
 const packages = ['dsh', 'dsh-agent', 'dsh-agent-loop', 'dsh-goal', 'dsh-goal-round-driver', 'dsh-session', 'dsh-session-projection', 'dsh-llm', 'dsh-system-prompt', 'dsh-tools', 'dsh-tool-goal', 'dsh-jobs', 'dsh-jobs-local', 'dsh-tool-jobs', 'dsh-scope']
 
@@ -27,8 +27,11 @@ export function hostRequire(ctx: Context): NodeJS.Require {
 }
 
 export async function assertHostVersion(ctx: Context): Promise<HostProfile> {
-  const [major, minor] = process.versions.node.split('.').map(Number)
-  if (major < 24 || (major === 24 && minor < 9)) throw new Error('Goal replacement requires Node >=24.9')
+  const [major, minor, patch] = process.versions.node.split('.').map(Number)
+  const atLeast = (min: number, fix: number) => minor > min || (minor === min && patch >= fix)
+  if (!(major === 24 && atLeast(22, 3) || major === 26 && atLeast(13, 1) || major > 26)) {
+    throw new Error('Goal replacement requires Node ^24.22.3 || >=26.13.1')
+  }
   const requireHost = hostRequire(ctx)
   const participating = [...packages]
   if (ctx.get('subagents')) participating.push('dsh-subagent', 'dsh-subagent-spawn-in-process', 'dsh-subagent-fork-in-process', 'dsh-tool-subagent')

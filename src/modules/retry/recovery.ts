@@ -26,7 +26,7 @@ export function acceptRecoveryView(raw:unknown,sessionId:string):RecoveryView {
 }
 /** Root mount; caller supplies accepted module participation, not browser intent. */
 export function mountRequestRecovery(ctx:Context,distribution:string,isEnabled:()=>boolean=()=>false):void {
- ctx.inject(['webServer','connection','agents'],scope=>{
+ ctx.inject(['webServer','connection','connection.authentication','agents'],scope=>{
   const services=scope as any;let live=true;scope.effect(()=>()=>{live=false;});
   const handler=async(req:IncomingMessage,res:ServerResponse)=>{
    const reply=(status:number,body:unknown)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(body));};

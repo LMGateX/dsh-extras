@@ -1,4 +1,4 @@
-import type { Fiber } from '@deepseek-ai/cordis';
+import type { Context, Fiber } from '@deepseek-ai/cordis';
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
@@ -24,23 +24,29 @@ export async function inspectNativeGoalOwner(host: NativeMigrationHost, target: 
   if (!ctx) return {verified:false,stockActive:false,reason:'programmatic goal continuation ownership cannot be verified offline; restart with native runtime verification required'};
   // Standalone migration has no host peer loader. The explicit installation
   // anchor, never consumer-local resolution, supplies the audited runtime proof.
+  let root: Context;
+  let rootKey: typeof Context.root;
   let rootLifetime: object;
   try {
     const anchored = createRequire(host.profileContext.installAnchor);
     const manifest = JSON.parse(await readFile(anchored.resolve('@deepseek-ai/cordis/package.json'), 'utf8')) as {name?: unknown; version?: unknown};
-    if (manifest.name !== '@deepseek-ai/cordis' || manifest.version !== '4.1.0') return {verified:false,stockActive:false,reason:'unsupported anchored Cordis version; supported native runtime verification required'};
+    if (manifest.name !== '@deepseek-ai/cordis' || manifest.version !== '4.2.0-alpha.1') return {verified:false,stockActive:false,reason:'unsupported anchored Cordis version; supported native runtime verification required'};
     const { Context } = await import(pathToFileURL(anchored.resolve('@deepseek-ai/cordis')).href) as typeof import('@deepseek-ai/cordis');
-    const root = ctx.root;
-    if (typeof Context !== 'function' || typeof Context.isolate !== 'symbol' || !(ctx instanceof Context) || !(root instanceof Context) ||
-      root.root !== root || root.fiber?.ctx?.root !== root || typeof ctx.get !== 'function' || typeof ctx.registry?.values !== 'function' ||
-      !root[Context.isolate] || typeof root[Context.isolate] !== 'object') return {verified:false,stockActive:false,reason:'anchored Cordis Context/root shape cannot be verified; supported native runtime verification required'};
+    const incompatible = {verified:false,stockActive:false,reason:'anchored Cordis Context/root shape cannot be verified; supported native runtime verification required'};
+    // Context.is intentionally accepts other physical copies; verify this anchored runtime instead.
+    if (typeof Context !== 'function' || typeof Context.root !== 'symbol' || typeof Context.isolate !== 'symbol' || !(ctx instanceof Context)) return incompatible;
+    rootKey = Context.root;
+    root = ctx[rootKey];
+    if (!(root instanceof Context) || root[rootKey] !== root || root.fiber?.ctx?.[rootKey] !== root ||
+      typeof ctx.get !== 'function' || typeof ctx.registry?.values !== 'function' ||
+      !root[Context.isolate] || typeof root[Context.isolate] !== 'object') return incompatible;
     rootLifetime = root[Context.isolate];
   } catch { return {verified:false,stockActive:false,reason:'anchored Cordis runtime unavailable; verify the explicit host installation and restart with native runtime verification'}; }
   let nativeLoader: {entries(): Iterable<unknown>} | undefined;
   try {
     const anchored = createRequire(host.profileContext.installAnchor);
     const manifest = JSON.parse(await readFile(anchored.resolve('@deepseek-ai/cordis-plugin-loader/package.json'), 'utf8')) as {name?: unknown; version?: unknown};
-    if (manifest.name !== '@deepseek-ai/cordis-plugin-loader' || manifest.version !== '1.1.0') return {verified:false,stockActive:false,reason:'unsupported anchored Loader version; supported native runtime verification required'};
+    if (manifest.name !== '@deepseek-ai/cordis-plugin-loader' || manifest.version !== '1.2.0-alpha.1') return {verified:false,stockActive:false,reason:'unsupported anchored Loader version; supported native runtime verification required'};
     const {default: Loader} = await import(pathToFileURL(anchored.resolve('@deepseek-ai/cordis-plugin-loader')).href) as typeof import('@deepseek-ai/cordis-plugin-loader');
     nativeLoader = ctx.get('loader');
     if (typeof Loader !== 'function' || nativeLoader !== undefined && (!(nativeLoader instanceof Loader) || typeof nativeLoader.entries !== 'function')) return {verified:false,stockActive:false,reason:'anchored Loader runtime identity cannot be verified'};
@@ -53,7 +59,7 @@ export async function inspectNativeGoalOwner(host: NativeMigrationHost, target: 
   try {
     const anchored = createRequire(host.profileContext.installAnchor);
     const manifest = JSON.parse(await readFile(anchored.resolve('@deepseek-ai/dsh-goal-round-driver/package.json'), 'utf8')) as {name?: unknown; version?: unknown};
-    if (manifest.name !== '@deepseek-ai/dsh-goal-round-driver' || manifest.version !== '0.2.2-rc.4') return {verified:false,stockActive:false,reason:'unsupported anchored native driver version; supported native runtime verification required'};
+    if (manifest.name !== '@deepseek-ai/dsh-goal-round-driver' || manifest.version !== '0.2.3-alpha.2') return {verified:false,stockActive:false,reason:'unsupported anchored native driver version; supported native runtime verification required'};
     const path = anchored.resolve('@deepseek-ai/dsh-goal-round-driver');
     if (createHash('sha256').update(await readFile(path)).digest('hex') !== '8c56696eaac68e61a38b1068ea0f0dff976440e72b49ef4814fbea93c8b48b0c') return {verified:false,stockActive:false,reason:'anchored native driver source fingerprint mismatch; supported native runtime verification required'};
     originalNative = (await import(pathToFileURL(path).href)).apply;
@@ -72,7 +78,7 @@ export async function inspectNativeGoalOwner(host: NativeMigrationHost, target: 
   const nativeFibers = new Set([...ctx.registry.values()].filter(runtime => runtime.callback === originalNative).flatMap(runtime => [...runtime.fibers]));
   const stockTupleMatches = (fiber: Fiber | undefined): boolean => !!fiber && !!stockEntry && nativeInventory.has(stockEntry) &&
     stockEntry.moduleNamespace?.apply === originalNative && stockEntry.fiber?.ctx?.fiber === fiber && fiber.runtime?.callback === originalNative &&
-    fiber.ctx.root === ctx.root && (fiber as Fiber & {entry?: unknown}).entry === stockEntry &&
+    fiber.ctx[rootKey] === root && (fiber as Fiber & {entry?: unknown}).entry === stockEntry &&
     !!stockRow && stockRow.value.name === '@deepseek-ai/dsh-goal-round-driver' && !stockRow.disabled && !stockRow.dynamic;
   const stockMatches = (fiber: Fiber | undefined): boolean => !!fiber && stockTupleMatches(fiber) && fiber.uid !== null && nativeFibers.has(fiber);
   const stockRaw = stockEntry?.fiber?.ctx?.fiber;
@@ -83,7 +89,7 @@ export async function inspectNativeGoalOwner(host: NativeMigrationHost, target: 
   if (nativeEntries.length > 1 || nativeEntries.some(entry => !!entry.fiber) && !stockMatches(stockRaw) && !retiredStock) return mismatch();
   const ownsLoaderEntry = (entry: LoaderEntry): boolean => {
     const raw = entry.fiber?.ctx?.fiber;
-    return !!raw && nativeInventory.has(entry) && raw.ctx.root === ctx.root && (raw as Fiber & {entry?: unknown}).entry === entry;
+    return !!raw && nativeInventory.has(entry) && raw.ctx[rootKey] === root && (raw as Fiber & {entry?: unknown}).entry === entry;
   };
   const allowed = entries.filter(entry => ownsLoaderEntry(entry) && (entry.options.id === target.rowId && entry.options.name === (target.packageName ?? target.rowId) || sources.some(source => source.moduleId === 'goalWait' && !source.problem && source.rowId === entry.options.id && (source.moduleName ?? source.packageName) === entry.options.name)));
   for (const runtime of ctx.registry.values()) {

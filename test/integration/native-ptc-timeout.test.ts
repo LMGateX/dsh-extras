@@ -13,7 +13,7 @@ const savedEnv = new Map<string, string | undefined>();
 before(async () => {
   disposable = await mkdtemp('/tmp/ex-ptc-');
   for (const [key, path] of Object.entries({ HOME: join(disposable, 'home'), DSH_HOME: join(disposable, 'dsh'), TMPDIR: disposable,
-    XDG_CONFIG_HOME: join(disposable, 'config'), XDG_CACHE_HOME: join(disposable, 'cache'), XDG_DATA_HOME: join(disposable, 'data') })) {
+    XDG_CONFIG_HOME: join(disposable, 'config'), XDG_CACHE_HOME: join(disposable, 'cache'), XDG_DATA_HOME: join(disposable, 'data'), XDG_STATE_HOME: join(disposable, 'state') })) {
     savedEnv.set(key, process.env[key]); process.env[key] = path; await mkdir(path, { recursive: true });
   }
 });
@@ -24,7 +24,7 @@ after(async () => {
 });
 
 async function fixture(t: TestContext, config: Record<string, unknown> = {}, loader = false) {
-  assert.equal(runtimeVersion, '0.2.2-rc.4');
+  assert.equal(runtimeVersion, '0.2.3-alpha.2');
   const runtime = await createRuntime({ product: false, retry: false });
   t.after(() => runtime.dispose());
   const ctx = runtime.ctx;
@@ -43,7 +43,7 @@ async function fixture(t: TestContext, config: Record<string, unknown> = {}, loa
     const ptc = scope.get('ptcRuntime'); assert.ok(ptc instanceof NodePtcRuntime);
     return { ptc, fiber };
   };
-  const request = (extra = {}) => ({ program: 'return 42;', bindings: [], cwd: process.env.HOME, ...extra });
+  const request = (extra = {}) => ({ program: '42;', bindings: [], cwd: process.env.HOME, ...extra });
   return { runtime, ctx, plugin, mount, request, loaded };
 }
 
@@ -128,7 +128,7 @@ test('native run_code transport dispatches nested tools under the configured PTC
   const handle = await f.runtime.createAgent({ sessionId: 'ptc-transport' });
   let nestedCalls = 0;
   f.ctx.tools.register({ name: 'ptc_probe', description: 'Synthetic offline evidence.', parameters: { type: 'object', properties: {} }, output: { schema: { type: 'object', properties: { evidence: { type: 'string' } }, required: ['evidence'] }, render: (_args: unknown, value: unknown) => [{ type: 'text', text: JSON.stringify(value) }] }, execute: async () => { nestedCalls++; return { evidence: 'native-nested-call' }; } });
-  const result = await executor.execute({ agent: handle.agent, signal: new AbortController().signal, calls: [{ type: 'tool-call', id: 'synthetic-ptc-call', name: 'run_code', arguments: JSON.stringify({ code: 'return await tools.ptc_probe({});', description: 'Synthetic native PTC dispatch evidence' }) }] });
+  const result = await executor.execute({ agent: handle.agent, signal: new AbortController().signal, calls: [{ type: 'tool-call', id: 'synthetic-ptc-call', name: 'run_code', arguments: JSON.stringify({ code: 'inspect(await tools.ptc_probe({}));', description: 'Synthetic native PTC dispatch evidence' }) }] });
   assert.equal(nestedCalls, 1, JSON.stringify(result));
   assert.equal(resolved.length, 1);
   assert.equal(resolved[0].request.stateOwner, handle.agent);

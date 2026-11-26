@@ -1,5 +1,5 @@
 /** Strategy lifecycle; native ownership is exclusively delegated to host-owner. */
-import type { Context, Fiber } from '@deepseek-ai/cordis'
+import { Context, type Fiber } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { ResolvedConfig, Strategy } from './config.ts'
 import { GoalWaitGate } from './gate.ts'
@@ -141,7 +141,7 @@ export function createGoalMode(ctx: Context, policy: () => ResolvedConfig) {
         const closing = owner.close()
         await queue
         const state = await closing
-        const reason = authority?.finish(ctx.root.fiber.state === 2 && state.phase === 'active' && state.effective === 'stock')
+        const reason = authority?.finish(ctx[Context.root].fiber.state === 2 && state.phase === 'active' && state.effective === 'stock')
         if (reason) fault = reason
       } finally { authority?.finish(false); authority = undefined }
     },

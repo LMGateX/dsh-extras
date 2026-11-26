@@ -30,7 +30,7 @@ export async function nativeProfileFixture(t: TestContext, options: { home?: str
         name: profile.name, dir: profile.dir, patchPath: profile.patchPath, home,
         installAnchor: nativeProfileAnchor, cwd: process.cwd(),
         startedBundles: profile.layers.map((layer: { packageName: string }) => layer.packageName),
-        overlays: [], telemetryDisabledEnv: '1',
+        overlayPaths: [], telemetryDisabledEnv: '1',
     };
     return { boot, profile, context, provide(ctx: Context) { ctx.provide('profileContext', context); } };
 }

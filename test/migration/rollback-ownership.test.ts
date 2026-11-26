@@ -26,7 +26,7 @@ async function fixture(t: TestContext, modules: ('compact-context' | 'retry')[] 
     await rm(root, { recursive: true, force: true });
   });
   const entries: LoaderEntry[] = [];
-  const host: NativeMigrationHost = { profileContext: { dir, patchPath: join(dir, 'cordis.patch.yml'), installAnchor: anchor, home: dshHome, overlays: [] }, loader: { entries: () => entries } };
+  const host: NativeMigrationHost = { profileContext: { dir, patchPath: join(dir, 'cordis.patch.yml'), installAnchor: anchor, home: dshHome, overlayPaths: [] }, loader: { entries: () => entries } };
   const pkg = async (name: string, version: string, row: object) => {
     const path = join(dir, 'node_modules', name); await mkdir(path, { recursive: true });
     await writeFile(join(path, 'package.json'), JSON.stringify({ name, version, type: 'module', exports: './index.js', dsh: { bundle: { patch: './cordis.patch.yml' } } }));
@@ -92,7 +92,11 @@ for (const mutation of ['version', 'bundle config', 'profile config', 'HOME expr
   if (mutation === 'bundle config') await writeFile(join(path, 'cordis.patch.yml'), JSON.stringify([{ insert: [{ id: 'stream-retry', name: 'dsh-stream-retry', config: { providers: ['changed'] } }] }]));
   if (mutation === 'profile config') { const doc = parseDocument(await readFile(f.host.profileContext.patchPath, 'utf8')); doc.add({ id: 'stream-retry', config: { providers: ['changed'] } }); await writeFile(f.host.profileContext.patchPath, String(doc)); }
   if (mutation === 'HOME expression') await writeFile(join(f.host.profileContext.home, 'cordis.patch.yml'), '- id: stream-retry\n  disabled: !!js "false"\n');
-  if (mutation === 'launcher override') f.host.profileContext.overlays = [{ id: 'stream-retry', disabled: false }];
+  if (mutation === 'launcher override') {
+    const launcher = join(f.host.profileContext.home, 'launcher.patch.yml');
+    await writeFile(launcher, JSON.stringify([{ id: 'stream-retry', disabled: false }]));
+    f.host.profileContext.overlayPaths = [launcher];
+  }
   if (mutation === 'global ambiguity') { const manifest = await f.manifest(); manifest.dsh.profile.bundles.push('unresolvable-selected-owner'); await writeFile(join(f.dir, 'package.json'), JSON.stringify(manifest)); }
   const report = await rollbackMigration(f.host, target, { operationId: f.operationId, modules: ['retry'] });
   assert.equal(report.modules.retry?.phase, 'conflict'); assert.ok(report.modules.retry.reason); await f.assertBlocked('retry');

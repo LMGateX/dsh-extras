@@ -51,7 +51,7 @@ async function nativeProofFixture(t: TestContext, loaderProof?: {version?: strin
   return {root,ctx,stock,host,inspect,fakeAnchor,scope,driverDir,patchPath};
 }
 
-for (const version of ['0.2.2-rc.1', '0.2.2-rc.2', '0.2.2-rc.3', '99.0.0']) test('public inspection refuses historical or unknown anchored driver '+version+' despite an exact live native Loader tuple', async t => {
+for (const version of ['0.2.2-rc.1', '0.2.2-rc.2', '0.2.2-rc.3', '0.2.2-rc.4', '0.2.3-alpha.1', '99.0.0']) test('public inspection refuses historical or unknown anchored driver '+version+' despite an exact live native Loader tuple', async t => {
   const f = await nativeProofFixture(t);
   await writeFile(join(f.driverDir,'package.json'), JSON.stringify({name:'@deepseek-ai/dsh-goal-round-driver',version,type:'module',exports:{'.':'./index.js','./package.json':'./package.json'}}));
   await writeFile(join(f.driverDir,'index.js'), 'export * from '+JSON.stringify(pathToFileURL(hostRequire.resolve('@deepseek-ai/dsh-goal-round-driver')).href)+';');
@@ -66,9 +66,9 @@ for (const version of ['0.2.2-rc.1', '0.2.2-rc.2', '0.2.2-rc.3', '99.0.0']) test
   assert.equal(f.stock.options.disabled,undefined);
 });
 
-test('public inspection rejects changed rc driver bytes before evaluating an identity-preserving replacement module', async t => {
+test('public inspection rejects changed alpha.2 driver bytes before evaluating an identity-preserving replacement module', async t => {
   const f = await nativeProofFixture(t);
-  await writeFile(join(f.driverDir,'package.json'), JSON.stringify({name:'@deepseek-ai/dsh-goal-round-driver',version:'0.2.2-rc.4',type:'module',exports:{'.':'./index.js','./package.json':'./package.json'}}));
+  await writeFile(join(f.driverDir,'package.json'), JSON.stringify({name:'@deepseek-ai/dsh-goal-round-driver',version:'0.2.3-alpha.2',type:'module',exports:{'.':'./index.js','./package.json':'./package.json'}}));
   const marker = Symbol.for('dsh-extras.test.unverified-driver-evaluated');
   const globals = globalThis as unknown as Record<symbol, unknown>;
   delete globals[marker]; t.after(() => {delete globals[marker];});
@@ -82,7 +82,7 @@ test('public inspection rejects changed rc driver bytes before evaluating an ide
 });
 
 test('public inspection refuses missing, historical or foreign anchored Loader proof despite an exact native tuple', async t => {
-  for (const proof of [{}, {version:'1.0.7-alpha.2'}, {version:'99.0.0'}, {version:'1.1.0',foreignClass:true}]) await t.test(JSON.stringify(proof), async t => {
+  for (const proof of [{}, {version:'1.1.0'}, {version:'99.0.0'}, {version:'1.2.0-alpha.1',foreignClass:true}]) await t.test(JSON.stringify(proof), async t => {
     const f = await nativeProofFixture(t,proof);
     f.host.profileContext.installAnchor = f.fakeAnchor;
     const denied = (await f.inspect()).goalOwner;
@@ -92,9 +92,9 @@ test('public inspection refuses missing, historical or foreign anchored Loader p
   });
 });
 
-test('public inspection accepts the exact rc Cordis root and refuses historical or unknown anchored versions', async t => {
-  assert.equal(hostRequire('@deepseek-ai/dsh/package.json').version, '0.2.2-rc.4');
-  assert.equal(hostRequire('@deepseek-ai/cordis/package.json').version, '4.1.0');
+test('public inspection accepts the exact alpha.2 Cordis root and refuses historical or unknown anchored versions', async t => {
+  assert.equal(hostRequire('@deepseek-ai/dsh/package.json').version, '0.2.3-alpha.2');
+  assert.equal(hostRequire('@deepseek-ai/cordis/package.json').version, '4.2.0-alpha.1');
   const root = await mkdtemp(join(tmpdir(), 'ex-owner-rc-'));
   t.after(async () => { assert.ok(root.startsWith(join(tmpdir(), 'ex-owner-rc-'))); await rm(root, {recursive:true,force:true}); });
   const dir = join(root, 'profile'), home = join(root, 'home');
@@ -109,7 +109,7 @@ test('public inspection accepts the exact rc Cordis root and refuses historical 
     nativeMigration:await load('@deepseek-ai/dsh-app-boot'),
   };
   assert.deepEqual((await inspectMigration(host, {...target,moduleIds:[...target.moduleIds]})).goalOwner, {verified:true,stockActive:false}, 'a genuine empty root is verified absence, not an active stock grant');
-  for (const version of ['4.0.6-alpha.2', '99.0.0']) {
+  for (const version of ['4.1.0', '99.0.0']) {
     const shadow = join(root, version, 'package.json');
     const cordisDir = join(dirname(shadow), 'node_modules', '@deepseek-ai', 'cordis');
     await mkdir(cordisDir, {recursive:true});

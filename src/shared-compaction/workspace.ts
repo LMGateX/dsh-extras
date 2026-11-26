@@ -1,5 +1,5 @@
 /** Native immutable provenance, not mutable working-directory state or path prefixes.
- * rc.2 stamps origin/parentSession before awaited agent/created, while managed
+ * The native host stamps origin/parentSession before awaited agent/created, while managed
  * Subagent.rootOf() membership publishes later. Creation defaults and cold-session
  * compaction therefore use these public durable creator facts, not live ownership.
  */

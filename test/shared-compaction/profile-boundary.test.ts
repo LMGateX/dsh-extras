@@ -54,7 +54,7 @@ test('native CLI profiles sharing one stock backend retain independent canonical
     await firstA.store.write({ expectedRevision: 0, defaults: fixed('a'), workspaceOverrides: { sameWorkspace: fixed('a-workspace') } });
     await firstA.ctx.fiber.dispose();
     const firstB = await mount(b);
-    assert.notEqual(firstA.ctx.root, firstB.ctx.root);
+    assert.notEqual(firstA.ctx[Context.root], firstB.ctx[Context.root]);
     assert.deepEqual(firstB.store.read(), { revision: 0, defaults: { enabled: false, rules: [{ scope: 'all', mode: 'inherit' }] }, workspaceOverrides: {} }, 'fresh B must not read A canonical authority');
     await firstB.store.write({ expectedRevision: 0, defaults: fixed('b'), workspaceOverrides: { sameWorkspace: fixed('b-workspace') } });
     await firstB.ctx.fiber.dispose();

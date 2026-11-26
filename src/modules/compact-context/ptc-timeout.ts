@@ -104,8 +104,8 @@ export function installPtcTimeoutOverride(ctx: Context, config: ResolvedConfig):
   if (ctx instanceof Context) {
     const reconcile = (extra?: unknown): void => {
       const required = new Set<PtcRuntimeLike>();
-      for (const key of Reflect.ownKeys(ctx.root.reflect.store)) {
-        const entry = ctx.root.reflect.store[key as symbol];
+      for (const key of Reflect.ownKeys(ctx[Context.root].reflect.store)) {
+        const entry = ctx[Context.root].reflect.store[key as symbol];
         if (entry?.name === 'ptcRuntime') { const value = raw(entry.value); if (value) required.add(value); }
       }
       const value = raw(extra); if (value) required.add(value);

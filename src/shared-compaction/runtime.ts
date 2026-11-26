@@ -13,10 +13,10 @@ class CompatibilityError extends Error {
 }
 function unsupported(reason: string): never { throw new CompatibilityError(reason); }
 function baseline(ctx: Context): void {
-    if (requireHost('@deepseek-ai/dsh-llm/package.json').version !== '0.2.2-rc.4'
-        || requireHost('@deepseek-ai/cordis/package.json').version !== '4.1.0')
+    if (requireHost('@deepseek-ai/dsh-llm/package.json').version !== '0.2.3-alpha.2'
+        || requireHost('@deepseek-ai/cordis/package.json').version !== '4.2.0-alpha.1')
         unsupported('unverified host version');
-    if (!(ctx instanceof Context) || !ctx.root?.reflect?.store || typeof ctx.on !== 'function')
+    if (!(ctx instanceof Context) || !ctx[Context.root]?.reflect?.store || typeof ctx.on !== 'function')
         unsupported('unverified Cordis reflection shape');
 }
 /** Verify only the audited top-level envelope; native owns nested payloads and value validation. */
@@ -129,7 +129,7 @@ export function installCompactionReasoning(ctx: Context, policy: CompactionReaso
                         if (!sameDescriptor(Object.getOwnPropertyDescriptor(raw, 'stream'), record.descriptor))
                             unsupported('stream descriptor ownership changed');
                         const callCtx = this.ctx;
-                        if (!(this instanceof LlmRuntime) || !(callCtx instanceof Context) || callCtx.root !== ctx.root
+                        if (!(this instanceof LlmRuntime) || !(callCtx instanceof Context) || callCtx[Context.root] !== ctx[Context.root]
                             || typeof callCtx.get !== 'function')
                             unsupported('unverified incoming LLM context');
                         verifyEnvelope(options);
@@ -173,8 +173,8 @@ export function installCompactionReasoning(ctx: Context, policy: CompactionReaso
             return;
         try {
             const required = new Set<unknown>();
-            for (const key of Reflect.ownKeys(ctx.root.reflect.store)) {
-                const impl = ctx.root.reflect.store[key as symbol];
+            for (const key of Reflect.ownKeys(ctx[Context.root].reflect.store)) {
+                const impl = ctx[Context.root].reflect.store[key as symbol];
                 if (impl?.name === 'llm' && impl.value != null)
                     required.add(rawService(impl.value));
             }

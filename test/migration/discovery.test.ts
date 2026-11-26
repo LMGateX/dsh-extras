@@ -58,7 +58,7 @@ async function fixture(t: TestContext) {
   });
   const manifest: Values = { name: 'disposable-profile', dependencies: {}, dsh: { profile: { bundles: [] } } };
   const patchPath = join(dir, 'cordis.patch.yml');
-  const host: NativeMigrationHost = { profileContext: { dir, patchPath, installAnchor, home: dshHome, overlays: [] }, nativeMigration: facade, loader: { entries: () => [] } };
+  const host: NativeMigrationHost = { profileContext: { dir, patchPath, installAnchor, home: dshHome, overlayPaths: [] }, nativeMigration: facade, loader: { entries: () => [] } };
   const save = async () => writeFile(join(dir, 'package.json'), JSON.stringify(manifest, null, 2) + '\n');
   const patch = async (patches: unknown[]) => writeFile(patchPath, JSON.stringify(patches, null, 2) + '\n');
   const pkg = async (name: string, version: string, patches: unknown[] = [], options: { identity?: string; installed?: boolean; selected?: boolean; installation?: boolean } = {}) => {
@@ -151,7 +151,9 @@ test('bundle -> profile -> HOME -> launcher order and revision include every lay
   await f.patch([{ insert: [targetRow] }, { id: 'stream-retry', config: { providers: ['profile'] } }]);
   const homePatch = join(f.dshHome, 'cordis.patch.yml');
   await writeFile(homePatch, JSON.stringify([{ id: 'stream-retry', config: { providers: ['home'] } }]));
-  f.host.profileContext.overlays = [{ id: 'stream-retry', config: { providers: ['launcher'] } }];
+  const launcher = join(f.dshHome, 'launcher.patch.yml');
+  await writeFile(launcher, JSON.stringify([{ id: 'stream-retry', config: { providers: ['launcher'] } }]));
+  f.host.profileContext.overlayPaths = [launcher];
   const first = await inspectMigration(f.host, target);
   assert.deepEqual(first.sources[0].effective, { providers: ['launcher'] });
   assert.match(first.sources[0].problem ?? '', /higher-priority/);
@@ -160,7 +162,17 @@ test('bundle -> profile -> HOME -> launcher order and revision include every lay
   const second = await inspectMigration(f.host, target); assert.notEqual(first.revision, second.revision);
   const path = join(packageDir, 'package.json'); const pkg = JSON.parse(await readFile(path, 'utf8')); pkg.version = '0.1.99'; await writeFile(path, JSON.stringify(pkg));
   const third = await inspectMigration(f.host, target); assert.notEqual(second.revision, third.revision); assert.match(third.sources[0].problem ?? '', /unsupported legacy version/);
-  f.host.profileContext.overlays = []; const fourth = await inspectMigration(f.host, target); assert.notEqual(third.revision, fourth.revision);
+  await writeFile(launcher, '[]');
+  const fourth = await inspectMigration(f.host, target);
+  assert.notEqual(third.revision, fourth.revision);
+  assert.deepEqual(fourth.sources[0].effective, { providers: ['home'] });
+  await rm(launcher);
+  await assert.rejects(inspectMigration(f.host, target), /ENOENT/);
+  f.host.profileContext.overlayPaths = ['relative.patch.yml'];
+  await assert.rejects(inspectMigration(f.host, target), /must be absolute/);
+  f.host.profileContext.overlayPaths = [];
+  Object.assign(f.host.profileContext, {overlays: [{id: 'stream-retry', disabled: false}]});
+  await assert.rejects(inspectMigration(f.host, target), /legacy launcher overlay snapshot/);
 });
 
 test('installed but deselected packages migrate disabled raw overrides; row ids alone never identify packages', async t => {

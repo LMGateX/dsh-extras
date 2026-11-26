@@ -5,7 +5,7 @@ import type { ModuleId, LegacyModuleId, LegacyAdoptionReceipt } from '../types.t
 export type { ModuleId, LegacyModuleId } from '../types.ts';
 export type Values = Record<string, unknown>;
 export interface Distribution { rowId: string; packageName?: string; moduleIds: readonly ModuleId[]; validateModule?: (id: ModuleId, value: Values) => void }
-export interface ProfileFacts { dir: string; patchPath: string; installAnchor: string; home: string; overlays?: readonly unknown[]; name?: string }
+export interface ProfileFacts { dir: string; patchPath: string; installAnchor: string; home: string; overlayPaths?: readonly string[]; name?: string }
 export interface LoaderEntry { id: string; options: { id: string; name: string; config?: unknown; disabled?: unknown; group?: unknown }; disabled?: boolean; fiber?: { state?: number; inertia?: Promise<unknown>; effectiveConfig?: unknown; ctx?: Context }; moduleNamespace?: { apply?: unknown }; parent?: unknown }
 export interface NativeMigrationHost {
   profileContext: ProfileFacts;
@@ -35,6 +35,7 @@ export interface Discovery {
   /** Detached immutable input evidence, including absent optional files. */
   inputFiles?: { path: string; hash: string | null }[];
   environmentIdentity?: string;
+  launcherPatches?: readonly unknown[];
   rows: Values[]; sources: Source[]; target: Distribution; explicit: Partial<Record<ModuleId, Values>>;
   peers: Partial<Record<ModuleId, string[]>>; problems: string[]; legacyMode: boolean;
 }

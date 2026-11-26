@@ -13,7 +13,9 @@ import { chromium, expect } from '@playwright/test';
 const root = resolve(import.meta.dirname, '../..');
 const require = createRequire(join(root, 'package.json'));
 const manifest = require.resolve('@deepseek-ai/dsh/package.json');
-const cli = join(dirname(manifest), JSON.parse(await readFile(manifest, 'utf8')).bin.dsh);
+const cliPackage = JSON.parse(await readFile(manifest, 'utf8'));
+const nativeVersion = '0.2.3-alpha.2';
+const cli = join(dirname(manifest), cliPackage.bin.dsh);
 const artifacts = resolve(process.env.DSH_EXTRAS_ARTIFACT_DIR ?? join(root, 'artifacts'));
 const sandbox = resolve(process.env.DSH_EXTRAS_TIMEZONE_ROOT ?? tmpdir());
 const run = promisify(execFile);
@@ -133,6 +135,7 @@ async function fixture(t: TestContext, name: string, browserZone: string, unsupp
   let host = await startHost('0', hostZone);
   const url = host.url;
   const clean = () => host.clean();
+  assert.equal(cliPackage.version, nativeVersion, 'the launcher is from the exact alpha.2 package');
   assert.notEqual(new URL(url).port, '3080');
   browser = await chromium.launch({ executablePath: process.env.DSH_EXTRAS_CHROMIUM, headless: true, args: ['--no-sandbox'], env: env as Record<string, string> });
   const page = await browser.newPage({ timezoneId: browserZone }); page.setDefaultTimeout(10000);
@@ -145,6 +148,7 @@ async function fixture(t: TestContext, name: string, browserZone: string, unsupp
     wires.push({ channel: String(value.channel ?? value.method ?? '').replaceAll('/', '.'), body, value });
   });
   await page.goto(url); await page.waitForFunction(() => Boolean((globalThis as any).__DSH_BOOT__));
+  assert.equal(await page.evaluate(() => (globalThis as any).__DSH_BOOT__.release.version), nativeVersion);
   try {
     await page.getByRole('button', { name: 'Continue', exact: true }).click();
     await page.waitForFunction(() => Boolean((globalThis as any).__HTZ_NATIVE__));
@@ -298,10 +302,15 @@ for (const [name, browserZone] of [['dsh-extras', 'America/New_York'], ['dsh-ext
       const denied = await f.page.request.get(new URL(entry.url, f.page.url()).href);
       assert.equal(denied.status(), 503, 'enabled adapter refuses native immutable target URL to prevent HMR bypass');
       assert.match(denied.headers()['cache-control'] ?? '', /no-store/);
+      const direct = await f.page.request.get(new URL('plugins/' + entry.id + '/client.js?rev=' + entry.rev, f.page.url()).href);
+      assert.equal(direct.status(), 404, 'alpha.2 does not serve the target entry as a package-local chunk alias');
     }
     const unrelated = nativeBoot.entries.find((entry: any) => entry.id === '@deepseek-ai/dsh-client-locale');
     assert.ok(unrelated);
-    assert.equal((await f.page.request.get(new URL(unrelated.url, f.page.url()).href)).status(), 200, 'non-target native resource passes through');
+    const anonymous = await fetch(new URL(unrelated.url, f.page.url()));
+    assert.equal(anonymous.status, 200, 'non-target native resource preserves anonymous bundle admission');
+    assert.match(anonymous.headers.get('cache-control') ?? '', /immutable/);
+    await anonymous.body?.cancel();
     for (const mode of ['queue', 'steer'] as const) {
       await promptWire(f, hostZone, mode);
       await promptWire(f, hostZone, mode, true);

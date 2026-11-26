@@ -1,4 +1,4 @@
-/** Exact served-web rc.4 page admission. No browser-zone sampling or payload rewriting. */
+/** Exact served-web alpha.2 page admission. No browser-zone sampling or payload rewriting. */
 import { disposeHandle } from './scope.ts';
 import { useSettingsText, type SettingsLocale } from './settings-ui.ts';
 
@@ -22,10 +22,10 @@ const PAGE = '__DSH_EXTRAS_HOST_TIMEZONE_PAGE__';
 const LATCH = '__DSH_EXTRAS_HOST_TIMEZONE_GUARD_V1__';
 const TARGETS = ['@deepseek-ai/dsh-api-session-controller', '@deepseek-ai/dsh-client-ui-schedule'];
 const FAILURE = 'host-timezone: reload this page before sending time-bearing requests';
-// rc.4 browser artifact 5f6107953fa764c80b6c06aa161be318ffa0b71e565ac81536fc4267d5d62412.
-// Actual installConnection callable SHA-256 e9f0a1690441d6b00726bc296ad541776a9b711717e5ed3f72dc7375d35ee51b.
+// alpha.2 browser artifact 891f407ee38416678095cd9d9fac867b1ad60e5c7fb01f3798518e8693dc76a1.
+// Actual installConnection callable SHA-256 cdc2f2cf439765f8fb5e6d100d54a4cd9cdf2d34fc174801d39800f05e244b55.
 // Exact native callable source, not a name/arity assertion or a caller-owned toString method.
-const STOCK_CALL = "async call(channel,endpoint,payload,signal){assertTarget(channel,endpoint);const rpcId=RpcId(randomUuid());const message={type:`client-request`,rpcId,method:endpoint,payload};const response=await send(`${channel}/${endpoint}`.slice(1),{method:`POST`,headers:{\"content-type\":`application/json`},body:JSON.stringify(message),...signal===void 0?{}:{signal}});if(!response.ok)throw new Error(`transport failure for ${channel}/${endpoint}: HTTP ${response.status}`);const full=response.headers.get(`content-type`)?.split(`;`,1)[0]?.trim().toLowerCase()===`multipart/form-data`?await parseBinaryResponse(response):parseConnectionResponse(await response.json());signal?.throwIfAborted();if(full.rpcId!==rpcId)throw new Error(`rpcId mismatch for ${endpoint}: sent ${rpcId}, got ${full.rpcId}`);return full.result}";
+const STOCK_CALL = "async call(channel,endpoint,payload,signal){assertTarget(channel,endpoint);const rpcId=brandString(randomUuid());const message={type:`client-request`,rpcId,method:endpoint,payload};const response=await send(`${channel}/${endpoint}`.slice(1),{method:`POST`,headers:{\"content-type\":`application/json`},body:JSON.stringify(message),...signal===void 0?{}:{signal}});if(!response.ok)throw new Error(`transport failure for ${channel}/${endpoint}: HTTP ${response.status}`);const full=response.headers.get(`content-type`)?.split(`;`,1)[0]?.trim().toLowerCase()===`multipart/form-data`?await parseBinaryResponse(response):parseConnectionResponse(await response.json());signal?.throwIfAborted();if(full.rpcId!==rpcId)throw new Error(`rpcId mismatch for ${endpoint}: sent ${rpcId}, got ${full.rpcId}`);return full.result}";
 const callableSource = Function.prototype.toString;
 
 function pageProof(raw: any): PageProof | undefined {
@@ -68,7 +68,7 @@ function installRefusal(connection: any, rpc: any): boolean {
     }
     const owner = Object.getOwnPropertyDescriptor(connection, 'rpc');
     if (!owner || !('value' in owner) || owner.value !== rpc || !owner.writable && !owner.configurable) return false;
-    // Native rc.4 Connection owns a replaceable data field. Do not mutate frozen foreign RPCs.
+    // Native alpha.2 Connection owns a replaceable data field. Do not mutate frozen foreign RPCs.
     const descriptors = Object.getOwnPropertyDescriptors(rpc);
     descriptors.call = { value: refusal, enumerable: descriptor?.enumerable ?? true, configurable: false, writable: false };
     shadow = Object.create(Object.getPrototypeOf(rpc), descriptors);
@@ -191,7 +191,7 @@ export function createHostTimezoneAdapter(React: any) {
         }
         if (entryState.syncing) { latch.publish('waiting', 'Native module synchronization is in progress.'); return false; }
         const manifest = b.modules.manifest;
-        if (manifest?.release?.version !== '0.2.2-rc.4' || !Array.isArray(manifest.modules)) {
+        if (manifest?.release?.version !== '0.2.3-alpha.2' || !Array.isArray(manifest.modules)) {
           close('Unsupported native client version.', 'unavailable'); return false;
         }
         const present = manifest.modules.filter((row: any) => TARGETS.includes(row?.id)).map((row: any) => row.id);
@@ -203,7 +203,7 @@ export function createHostTimezoneAdapter(React: any) {
           const record = b.modules.loadCache.get(id);
           const descriptor = record && Object.getOwnPropertyDescriptor(record.exports ?? {}, '__dshExtrasHostTimezoneSource');
           const marker = descriptor?.value;
-          if (!record || record.id !== id || !Array.isArray(record.styles) || !(record.edges instanceof Set)
+          if (!record || record.id !== id || record.ownerId !== id || !(record.edges instanceof Set)
             || !descriptor || descriptor.enumerable || descriptor.configurable || descriptor.writable
             || !Object.isFrozen(marker) || marker?.protocol !== PROTOCOL || marker?.epoch !== proof.epoch) {
             close('Protected source provenance is unavailable; reload this page.', 'unavailable'); return false;

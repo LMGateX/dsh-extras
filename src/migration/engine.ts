@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { Context } from '@deepseek-ai/cordis';
 import { dirname, isAbsolute, join } from 'node:path';
 import { realpath } from 'node:fs/promises';
 import { createRequire } from 'node:module';
@@ -21,8 +22,11 @@ interface Journal { nativeDriverVerifiedOrigin?: string; rollbackEvidence?: Part
 const processOrigin = () => process.pid + ':' + performance.timeOrigin;
 // Durable process evidence is diagnostic, not a transferable root-realm grant.
 const nativeDriverVerifications = new WeakMap<object, Set<string>>();
+// Exact Cordis alpha adapter: mirror Context.root without loading an optional
+// host peer at standalone startup. This key is not runtime ownership proof.
+const cordisRoot: typeof Context.root = Symbol.for('cordis.root') as typeof Context.root;
 function verifiedStockInRoot(host: NativeMigrationHost, journal: Journal): boolean {
-  const root = host.continuationContext?.root;
+  const root = host.continuationContext?.[cordisRoot];
   return !!root && journal.nativeDriverVerifiedOrigin === processOrigin() && nativeDriverVerifications.get(root)?.has(journal.operationId) === true;
 }
 const document = (text: string) => {
@@ -167,7 +171,7 @@ async function observeOwners(host: NativeMigrationHost, journal: Journal, curren
   if (!target?.fiber) return; // A CLI process is not a target runtime owner.
   let changed = journal.runtimeObserved !== true;
   if (journal.plan.decisions.some(decision => decision.source?.moduleId === 'goalWait' && decision.source.version === '0.4.23' && !liveLegacy(host, decision)) && current.goalOwner?.verified && current.goalOwner.stockActive) {
-    const root = host.continuationContext?.root;
+    const root = host.continuationContext?.[cordisRoot];
     if (root) {
       let operations = nativeDriverVerifications.get(root);
       if (!operations) nativeDriverVerifications.set(root, operations = new Set());
@@ -431,7 +435,7 @@ async function rollbackConflict(host: NativeMigrationHost, target: Distribution,
     const profile = native.loadOverlayPatches('dsh-extras rollback', current.profile.patchPath);
     const homePath = join(current.profile.home, 'cordis.patch.yml');
     const home = await readOptional(homePath) === null ? [] : native.loadOverlayPatches('dsh-extras rollback', homePath);
-    const higher = [...home, ...current.profile.overlays ?? []];
+    const higher = [...home, ...current.launcherPatches ?? []];
     let base: unknown[] = current.rows;
     if (source.bundleSelected) {
       const patches = evidence.patchPaths.flatMap(path => native.loadOverlayPatches('dsh-extras rollback', path));

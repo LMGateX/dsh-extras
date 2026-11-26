@@ -72,59 +72,67 @@ async function consumer() {
     // A consumer-visible package must never replace the explicit host's Cordis.
     const shadow=join(process.cwd(),'node_modules','@deepseek-ai','cordis');
     await mkdir(shadow,{recursive:true});
-    await writeFile(join(shadow,'package.json'),JSON.stringify({name:'@deepseek-ai/cordis',version:'4.1.0',type:'module',exports:'./index.js'}));
+    await writeFile(join(shadow,'package.json'),JSON.stringify({name:'@deepseek-ai/cordis',version:'4.2.0-alpha.1',type:'module',exports:'./index.js'}));
     await writeFile(join(shadow,'index.js'),"throw new Error('consumer shadow Cordis must not execute');");
     assert.equal(local.resolve('@deepseek-ai/cordis'),join(shadow,'index.js'));
     assert.deepEqual((await inspect()).goalOwner,{verified:true,stockActive:true});
     console.log('PASS consumer-local shadow ignored');
 
-    const isolate=Object.getOwnPropertyDescriptor(ctx.root,Context.isolate);
-    Object.defineProperty(ctx.root,Context.isolate,{...isolate,value:undefined});
-    try {await refusal(/Cordis.*root|root.*Cordis/);} finally {Object.defineProperty(ctx.root,Context.isolate,isolate);}
-    console.log('PASS unavailable actual root isolation evidence refused');
+    const root=ctx[Context.root];
+    const isolate=Object.getOwnPropertyDescriptor(root,Context.isolate);
+    Object.defineProperty(root,Context.isolate,{...isolate,value:undefined});
+    try {await refusal(/Cordis.*root|root.*Cordis/);} finally {Object.defineProperty(root,Context.isolate,isolate);}
+    host.continuationContext=ctx.extend({[Context.root]:undefined});
+    try {await refusal(/anchored Cordis Context\/root shape/);} finally {host.continuationContext=ctx;}
+    console.log('PASS missing actual root symbol or isolation evidence refused');
 
     // The real audited facade is used solely to reach ownership inspection for
     // intentionally missing/incompatible anchors; no replacement owner internals.
     host.nativeMigration=native;
     const savedAnchor=host.profileContext.installAnchor;
-    for(const kind of ['missing','unsupported-version','unsupported-isolate','foreign-context']) {
+    for(const kind of ['missing','unsupported-version','prior-cordis','unsupported-root','unsupported-isolate','foreign-context']) {
       const out=join(process.cwd(),'anchors',kind); await mkdir(out,{recursive:true});
       const fakeAnchor=join(out,'package.json'); await writeFile(fakeAnchor,JSON.stringify({name:'incompatible-host',type:'module'}));
       const scope=join(out,'node_modules','@deepseek-ai'); await mkdir(scope,{recursive:true});
       await symlink(dirname(hostRequire.resolve('@deepseek-ai/dsh-goal-round-driver/package.json')),join(scope,'dsh-goal-round-driver'),'dir');
       if(kind!=='missing') {
         const cordis=join(scope,'cordis');await mkdir(cordis,{recursive:true});
-        await writeFile(join(cordis,'package.json'),JSON.stringify({name:'@deepseek-ai/cordis',version:kind==='unsupported-version'?'99.0.0':'4.1.0',type:'module',exports:{'.':'./index.js','./package.json':'./package.json'}}));
-        await writeFile(join(cordis,'index.js'),kind==='unsupported-isolate'?'export class Context {static isolate="unsupported"}':"export class Context {static isolate=Symbol.for('cordis.isolate')}");
+        await writeFile(join(cordis,'package.json'),JSON.stringify({name:'@deepseek-ai/cordis',version:kind==='unsupported-version'?'99.0.0':kind==='prior-cordis'?'4.1.0':'4.2.0-alpha.1',type:'module',exports:{'.':'./index.js','./package.json':'./package.json'}}));
+        const root=kind==='unsupported-root'?'undefined':'Symbol.for("cordis.root")';
+        const isolate=kind==='unsupported-isolate'?'undefined':'Symbol.for("cordis.isolate")';
+        await writeFile(join(cordis,'index.js'),`export class Context {static root=${root};static isolate=${isolate}}`);
       }
       host.profileContext.installAnchor=fakeAnchor;
-      await refusal(kind==='missing' ? /anchored Cordis runtime unavailable/ : kind==='unsupported-version' ? /unsupported anchored Cordis version/ : /anchored Cordis Context\/root shape/);
+      await refusal(kind==='missing' ? /anchored Cordis runtime unavailable/ : kind==='unsupported-version'||kind==='prior-cordis' ? /unsupported anchored Cordis version/ : /anchored Cordis Context\/root shape/);
     }
     host.profileContext.installAnchor=savedAnchor; delete host.nativeMigration;
     assert.deepEqual((await inspect()).goalOwner,{verified:true,stockActive:true});
     console.log('PASS missing, unsupported version/isolate, and foreign anchored Context refused');
 
     host.nativeMigration=native;
-    for(const kind of ['driver-version','driver-previous-version','driver-bytes','loader-version','loader-missing','loader-foreign']) {
+    for(const kind of ['driver-version','driver-previous-rc','driver-previous-alpha','driver-bytes','loader-version','loader-prior','loader-missing','loader-foreign']) {
       const out=join(process.cwd(),'anchors',kind), scope=join(out,'node_modules','@deepseek-ai');
       await mkdir(scope,{recursive:true});
       const fakeAnchor=join(out,'package.json');await writeFile(fakeAnchor,JSON.stringify({name:'unverified-artifact-host',type:'module'}));
       await symlink(dirname(hostRequire.resolve('@deepseek-ai/cordis/package.json')),join(scope,'cordis'),'dir');
+      const wrongDriverVersion=kind==='driver-version'||kind.startsWith('driver-previous-');
       if(kind.startsWith('driver-')) {
         await symlink(dirname(hostRequire.resolve('@deepseek-ai/cordis-plugin-loader/package.json')),join(scope,'cordis-plugin-loader'),'dir');
         const dir=join(scope,'dsh-goal-round-driver');await mkdir(dir);
-        await writeFile(join(dir,'package.json'),JSON.stringify({name:'@deepseek-ai/dsh-goal-round-driver',version:kind==='driver-version'?'99.0.0':kind==='driver-previous-version'?'0.2.2-rc.3':'0.2.2-rc.4',type:'module',exports:{'.':'./index.js','./package.json':'./package.json'}}));
-        await writeFile(join(dir,'index.js'),'globalThis[Symbol.for("unverified-packed-driver-evaluated")]=true;export * from '+JSON.stringify(pathToFileURL(hostRequire.resolve('@deepseek-ai/dsh-goal-round-driver')).href)+';');
+        await writeFile(join(dir,'package.json'),JSON.stringify({name:'@deepseek-ai/dsh-goal-round-driver',version:kind==='driver-version'?'99.0.0':kind==='driver-previous-rc'?'0.2.2-rc.4':kind==='driver-previous-alpha'?'0.2.3-alpha.1':'0.2.3-alpha.2',type:'module',exports:{'.':'./index.js','./package.json':'./package.json'}}));
+        const path=hostRequire.resolve('@deepseek-ai/dsh-goal-round-driver');
+        await writeFile(join(dir,'index.js'),wrongDriverVersion ? await readFile(path) :
+          'globalThis[Symbol.for("unverified-packed-driver-evaluated")]=true;export * from '+JSON.stringify(pathToFileURL(path).href)+';');
       } else {
         await symlink(dirname(hostRequire.resolve('@deepseek-ai/dsh-goal-round-driver/package.json')),join(scope,'dsh-goal-round-driver'),'dir');
         if(kind!=='loader-missing') {
           const dir=join(scope,'cordis-plugin-loader');await mkdir(dir);
-          await writeFile(join(dir,'package.json'),JSON.stringify({name:'@deepseek-ai/cordis-plugin-loader',version:kind==='loader-version'?'99.0.0':'1.1.0',type:'module',exports:{'.':'./index.js','./package.json':'./package.json'}}));
+          await writeFile(join(dir,'package.json'),JSON.stringify({name:'@deepseek-ai/cordis-plugin-loader',version:kind==='loader-version'?'99.0.0':kind==='loader-prior'?'1.1.0':'1.2.0-alpha.1',type:'module',exports:{'.':'./index.js','./package.json':'./package.json'}}));
           await writeFile(join(dir,'index.js'),kind==='loader-foreign'?'export default class Loader {}':'export {default} from '+JSON.stringify(pathToFileURL(hostRequire.resolve('@deepseek-ai/cordis-plugin-loader')).href)+';');
         }
       }
       host.profileContext.installAnchor=fakeAnchor;
-      await refusal(kind==='driver-version'||kind==='driver-previous-version'?/unsupported anchored native driver version/:kind==='driver-bytes'?/anchored native driver.*fingerprint/:/anchored.*Loader/);
+      await refusal(wrongDriverVersion?/unsupported anchored native driver version/:kind==='driver-bytes'?/anchored native driver.*fingerprint/:/anchored.*Loader/);
       assert.equal(globalThis[Symbol.for('unverified-packed-driver-evaluated')],undefined,'unverified driver is rejected before evaluation');
       assert.equal(stock.fiber.state,2);assert.equal(stock.options.disabled,undefined);
     }
@@ -142,9 +150,9 @@ async function consumer() {
     console.log('PASS foreign root, programmatic official callback, and namespace mismatch refused');
 
     const key=Symbol.for('goal-wait-startup.root-lifetime.v1');
-    const leases=globalThis[key]??=new WeakMap();leases.set(ctx.root[Context.isolate],{});
+    const leases=globalThis[key]??=new WeakMap();leases.set(root[Context.isolate],{});
     host.startupOwner='native';
-    try {await refusal(/startup.*lifetime/);} finally {leases.delete(ctx.root[Context.isolate]);}
+    try {await refusal(/startup.*lifetime/);} finally {leases.delete(root[Context.isolate]);}
     function apply(){}
     Object.defineProperty(apply,Symbol.for('goal-wait-startup.owner-callback.v1'),{value:true});
     const marked=ctx.plugin({name:'cooperating-startup',apply});await marked.await();

@@ -31,7 +31,7 @@ test('host timezone has a default-off switch and explicit full-page reload limit
 });
 
 test('host adapter readiness explicitly reports reload-required rather than protection of the loaded page', () => {
-  const status = {getSnapshot:()=>({modules:{'host-timezone':{phase:'active',ready:true,enabled:true,capabilities:{hostTimezone:{phase:'standby' as const}},details:{hostTimezone:{requested:true,status:'needs-full-reload' as const,timeZone:'Asia/Singapore',adapterVersion:'0.2.2-rc.4' as const}}}}}),subscribe:()=>()=>{}};
+  const status = {getSnapshot:()=>({modules:{'host-timezone':{phase:'active',ready:true,enabled:true,capabilities:{hostTimezone:{phase:'standby' as const}},details:{hostTimezone:{requested:true,status:'needs-full-reload' as const,timeZone:'Asia/Singapore',adapterVersion:'0.2.3-alpha.2' as const}}}}}),subscribe:()=>()=>{}};
   const View = createSettingsView(React,{rowId:'dsh-extras-host-timezone',packageName:'dsh-extras-host-timezone',moduleIds:['host-timezone']},undefined,status);
   const html = renderToStaticMarkup(React.createElement(View as any,{configForm:form}));
   assert.match(html,/重载状态：需要刷新页面/);

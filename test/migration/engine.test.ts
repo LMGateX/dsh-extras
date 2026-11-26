@@ -275,11 +275,16 @@ test('chime reload timestamp finalizes only after fresh host and remains stable'
 },false));
 for (const interrupted of ['after-journal','after-target','after-disable']) for (const mutation of ['HOME overlay', 'launcher overlay', 'source version', 'source config']) {
   test('retry refuses changed immutable environment at '+interrupted+': ' + mutation, async () => fixture(async ({host, dir}) => {
+    const launcher = join(dir, 'launcher.patch.yml');
+    if (mutation === 'launcher overlay') {
+      await writeFile(launcher, '[]');
+      host.profileContext.overlayPaths = [launcher];
+    }
     await assert.rejects(runMigration(host, target, {checkpoint: stage => {if(stage === interrupted) throw new Error('crash before commit');}}));
     const patch = await readFile(join(dir, 'cordis.patch.yml'), 'utf8');
     const manifest = await readFile(join(dir, 'package.json'), 'utf8');
     if (mutation === 'HOME overlay') await writeFile(join(host.profileContext.home, 'cordis.patch.yml'), JSON.stringify([{id:'stream-retry',config:{retryEmptyResponse:true}}]));
-    if (mutation === 'launcher overlay') host.profileContext.overlays = [{id:'stream-retry',disabled:false}];
+    if (mutation === 'launcher overlay') await writeFile(launcher, JSON.stringify([{id:'stream-retry',disabled:false}]));
     if (mutation === 'source version') {
       const path=join(dir,'node_modules','dsh-stream-retry','package.json');
       const value=JSON.parse(await readFile(path,'utf8')); value.version='0.1.8'; await writeFile(path,JSON.stringify(value));

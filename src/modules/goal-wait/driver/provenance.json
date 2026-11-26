@@ -134,9 +134,32 @@
         "compiledByteIdenticalToRecordedRc3": true
       },
       "sourceBasis": "One complete official Git clone and local rc.3..rc.4 source-tree comparison; independently downloaded actual rc.4 npm archive and fresh npm graph. Compiled digest, shipped source/prompt hashes and lifecycle observer94/mount357/unload363 coordinates are unchanged; a file-by-file archive comparison shows only package.json differs. Source comparison and npm byte equality are separate observations, not npm authentication of a Git revision."
+    },
+    {
+      "package": "@deepseek-ai/dsh-goal-round-driver",
+      "version": "0.2.3-alpha.2",
+      "license": "MIT",
+      "copyright": "Copyright (c) 2026 DeepSeek",
+      "repository": "https://github.com/deepseek-ai/deepseek-harness",
+      "repositoryDirectory": "packages/goal/goal-round-driver",
+      "repositoryCommit": "4b399c39a6d1479cd84ca591b4d7c88e24d38a96",
+      "artifact": "lib/index.js",
+      "sha256": "8c56696eaac68e61a38b1068ea0f0dff976440e72b49ef4814fbea93c8b48b0c",
+      "companion": null,
+      "sourceArtifact": "src/index.ts",
+      "sourceSha256": "fd7a5e4c436f951ca5d236df83a7b0dd662c2ebbffffe49a30714fe55ce4bfe7",
+      "behavior": "The alpha.2 Goal driver and prompt are byte-identical to rc.4. Tree-root progressing-work joins, queued settlement, cancellation, disposal behavior and the exact lifecycle frames are unchanged. Cordis 4.2.0-alpha.1 instead exposes the root by symbol; Loader 1.2.0-alpha.1 retains the audited ownership hooks.",
+      "publishedArtifact": {
+        "observedDate": "2026-11-26",
+        "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh-goal-round-driver/-/dsh-goal-round-driver-0.2.3-alpha.2.tgz",
+        "integrity": "sha512-CmcRWOz8RqXV3+u8g5U73RfH61PB8Y0ltphld97rvv58XCyiTPPasOLBbbHSDXJlvUb7Qru7IunPw9PAgIlANw==",
+        "archiveSha256": "3e0f8a3d5caac3575984a239075132104575e1c5132f9c88f9f556cf17e763b3",
+        "compiledByteIdenticalToRecordedRc4": true
+      },
+      "sourceBasis": "Compared the official rc.4 and alpha.2 tagged source trees and independently verified the exact published npm archive. Compiled digest, shipped source/prompt hashes and observer94/mount357/unload363 coordinates are unchanged; npm byte equality does not authenticate a Git revision."
     }
   ],
-  "selection": "The current port admits exact rc.4 plus the unchanged audited compiled digest only. Earlier source/npm observations are historical, not alternate accepted runtime versions. Unknown or changed bytes are refused before driver mounting.",
+  "selection": "The current port admits exact 0.2.3-alpha.2 plus the unchanged audited compiled digest only. Earlier source/npm observations are historical, not alternate accepted runtime versions. Unknown or changed bytes are refused before driver mounting.",
   "derivedFiles": [
     "native-driver.ts",
     "prompt.ts"
@@ -158,7 +181,7 @@
     "sourcePackage": "dsh-goal-wait-gate",
     "sourceVersion": "0.4.23",
     "sourceCommit": "cbd86273660893336afaee31794b5fd76487db78",
-    "supportedHost": "0.2.2-rc.4",
+    "supportedHost": "0.2.3-alpha.2",
     "adaptations": [
       "Ordinary Config/apply/runtimeStatus interface; stock ownership is managed separately without unconditional bundle suppression.",
       "Only mount/teardown disarm calls carry a consumed-once lifecycle mark for the temporary exact-ref transition authority observer.",

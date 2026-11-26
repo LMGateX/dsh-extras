@@ -1,4 +1,4 @@
-/** Exact rc.4 served-artifact adapter. Native files and global browser APIs stay untouched. */
+/** Exact alpha.2 served-artifact adapter. Native files and global browser APIs stay untouched. */
 import { createHash } from 'node:crypto';
 
 export const HOST_TIMEZONE_TARGET_IDS = [
@@ -39,12 +39,12 @@ function requireHostTimeZone(timeZone: string): void {
 
 /** Prepare only an audited native artifact using a host-derived zone, never a user fixed-zone setting. */
 export function prepareArtifact(id: string, source: string, version: string, timeZone: string, sourceEpoch: string): PreparedArtifact {
-  if (version !== '0.2.2-rc.4') throw new Error('host-timezone: unsupported native version');
+  if (version !== '0.2.3-alpha.2') throw new Error('host-timezone: unsupported native version');
   const isSession = id === HOST_TIMEZONE_TARGET_IDS[0];
   if (!isSession && id !== HOST_TIMEZONE_TARGET_IDS[1]) throw new Error('host-timezone: unsupported native artifact');
   const fingerprint = isSession
-    ? 'e9af25a01168a8405730c107471cbd6befccfab3294e793b10e1467c57255852'
-    : 'b8dda300c8f835d825c8cbc23e56d66ffb4167d9c072f30468897611a9f34379';
+    ? '5e999335e66010345637bb533b8e1c67a3602e56f0cbb3bcfbc0d764e80248f2'
+    : 'adf0906b9c61521766b942cdbaa678bb58d32540177bf19a9a9d1c5214b2fd5f';
   if (createHash('sha256').update(source, 'utf8').digest('hex') !== fingerprint) {
     throw new Error('host-timezone: native artifact fingerprint mismatch');
   }

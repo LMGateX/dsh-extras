@@ -1,5 +1,5 @@
 /** Owner-only config-form-compatible port. Native Connection owns authentication and origin admission. */
-import type { Context } from '@deepseek-ai/cordis';
+import { Context } from '@deepseek-ai/cordis';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { openSharedCompactionStore, type SharedCompactionWrite } from './store.ts';
 import { prepareLegacyCompactionSeeds, legacyCompactionSeedStatus } from './legacy-seed.ts';
@@ -10,11 +10,11 @@ interface RouteRecord {
     off: () => unknown;
 }
 /** Native roots never silently execute legacy config when canonical persistence is unavailable. */
-export function canonicalCompactionRequired(ctx: Context): boolean { return !!(ctx.root as unknown as Record<symbol, unknown>)[REQUIRED]; }
+export function canonicalCompactionRequired(ctx: Context): boolean { return !!(ctx[Context.root] as unknown as Record<symbol, unknown>)[REQUIRED]; }
 export function mountSharedCompactionRoutes(ctx: Context, path: string): void {
-    Object.defineProperty(ctx.root, REQUIRED, { value: true, configurable: true });
-    ctx.inject(['webServer', 'connection'], routeCtx => {
-        const root = routeCtx.root as Context & {
+    Object.defineProperty(ctx[Context.root], REQUIRED, { value: true, configurable: true });
+    ctx.inject(['webServer', 'connection', 'connection.authentication'], routeCtx => {
+        const root = routeCtx[Context.root] as Context & {
             [KEY]?: Map<string, RouteRecord>;
         };
         if (!root[KEY])

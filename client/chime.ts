@@ -503,7 +503,7 @@ export function createChimeAdapter(React: ReactRuntime) {
       /**
        * Adopt the optional session UI status source.
        *
-       * Bound through `ctx.inject(['uiSession'], …)`, so it works when the UI
+       * Bound through `ctx.inject(['uiSession.sessionStatus'], …)`, so it works when the UI
        * bundle mounts after this one. The returned handle unsubscribes and
        * re-arms the silent baseline for a replacement service.
        */
@@ -1880,9 +1880,9 @@ export function createChimeAdapter(React: ReactRuntime) {
       // deployment without them stays silent for exactly that signal instead of
       // failing activation. The callbacks return the attach handles so Cordis
       // disposes them with this fiber.
-      ctx.inject(['uiSession'], (scope) => {
+      ctx.inject(['uiSession.sessionStatus'], (scope) => {
         const uiSession = scope.uiSession
-        if (uiSession === undefined) return undefined
+        if (!uiSession?.sessionStatus) return undefined
         return watcher.attachUiSession(uiSession)
       })
       ctx.inject(['remote'], (scope) => {

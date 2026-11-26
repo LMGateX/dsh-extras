@@ -27,8 +27,8 @@ const PROTECTED = new Set([
   'AUTHENTICATION_ERROR', 'PERMISSION_DENIED', 'INSUFFICIENT_QUOTA',
   'QUOTA_EXCEEDED', 'INVALID_REQUEST_ERROR', 'CONTEXT_LENGTH_EXCEEDED',
   'BILLING_HARD_LIMIT_REACHED',
-  // rc.4 reports a provider content refusal as CONTENT_REFUSED. It is a
-  // deterministic refusal, never transient transport, so it stays permanent.
+  // Native DeepSeek content refusal remains deterministic in alpha.2. Never
+  // convert it into transient transport; provider retry execution stays native.
   'CONTENT_REFUSED',
   // Audited rc.2 native configuration/auth/model/registration failures. Do not
   // let custom compatibility markers replace their native machine authority.

@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
 import { realpath, stat } from 'node:fs/promises';
 import { basename, dirname, isAbsolute } from 'node:path';
-import type { Context } from '@deepseek-ai/cordis';
+import { Context } from '@deepseek-ai/cordis';
 import { defineDomain, type DomainFacility } from '@deepseek-ai/dsh-storage-domain';
 import { resolveCompactionReasoning, validateCompactionReasoning, type CompactionReasoningPolicy } from '../modules/compact-context/reasoning-policy.ts';
 const requireHost = createRequire(import.meta.url);
@@ -152,7 +152,7 @@ interface StoreSlot {
 }
 /** All bundled copies in a service root share the exact same domain and CAS chain. */
 export function openSharedCompactionStore(ctx: Context): Promise<SharedCompactionStore> {
-    const root = ctx.root as Context & {
+    const root = ctx[Context.root] as Context & {
         [KEY]?: StoreSlot;
     };
     const facility = ctx.get('storageDomain') as DomainFacility | undefined;

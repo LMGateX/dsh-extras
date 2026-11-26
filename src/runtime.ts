@@ -193,7 +193,7 @@ export function createExtrasPlugin(distribution: Distribution) {
         };
       };
       // Native Connection admission applies owner authentication and Host/Origin fences.
-      ctx.inject(['webServer', 'connection'], routeCtx => {
+      ctx.inject(['webServer', 'connection', 'connection.authentication'], routeCtx => {
         const services = routeCtx as unknown as Record<string, any>;
         const handler = (req: IncomingMessage, res: ServerResponse) => {
           const admission = services.connection.admit(req);

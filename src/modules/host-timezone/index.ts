@@ -4,6 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join } from 'node:path';
 import { createRequire } from 'node:module';
+import { isDeepStrictEqual } from 'node:util';
 import { HOST_TIMEZONE_TARGET_IDS, prepareArtifact, applyArtifactPatches, type PreparedArtifact } from './artifacts.ts';
 
 /** The only user policy is opt-in: there is deliberately no fixed zone input. */
@@ -11,7 +12,7 @@ export interface Config { enabled: boolean }
 export const Config: Schemastery<any, any, any> = z.object({ enabled: z.boolean().default(false).volatile() });
 export const name = 'extras-host-timezone';
 export const inject = ['clientModules', 'webServer', 'profileContext'];
-const VERSION = '0.2.2-rc.4';
+const VERSION = '0.2.3-alpha.2';
 const PREFIX = '/extras/host-timezone';
 const TARGETS = new Set<string>(HOST_TIMEZONE_TARGET_IDS);
 
@@ -22,7 +23,7 @@ interface State { capabilities: { hostTimezone: Capability }; details: { hostTim
 interface Entry { id: string; url: string; rev: string; [key: string]: unknown }
 interface Batch { url: string; rev: string; entries: string[]; [key: string]: unknown }
 interface Graph { rev: string; release?: { version: string }; entries: Entry[]; batches: Batch[]; [key: string]: unknown }
-interface ClientModules { graph(): Graph; clientPath(id: string): string | undefined; fetchBundle(request: Request): Promise<Response>; onGraphChanged(listener: () => void): () => void; onRebuilt(listener: (id: string, rev: string) => void): () => void }
+interface ClientModules { graph(): Graph; graphFor(principal: unknown): Graph; clientPath(id: string): string | undefined; fetchBundle(request: Request): Promise<Response>; onGraphChanged(listener: () => void): () => void; onRebuilt(listener: (id: string, rev: string) => void): () => void }
 interface Artifact { readonly id: string; readonly source: string; readonly prepared: PreparedArtifact; readonly fingerprint: string }
 interface Mapping { readonly source: string; readonly targetIds: readonly string[] }
 interface SourceGeneration {
@@ -93,7 +94,7 @@ async function verifyHost(anchor: unknown): Promise<void> {
     if (id === '@deepseek-ai/dsh-client-connection') {
       // Verify the unmodified browser implementation and its closed-over support, not a transformed target.
       const source = await readFile(join(dirname(manifestPath), 'lib/client.browser.js'));
-      if (createHash('sha256').update(source).digest('hex') !== '5f6107953fa764c80b6c06aa161be318ffa0b71e565ac81536fc4267d5d62412') throw new Error('unsupported-native-connection-artifact');
+      if (createHash('sha256').update(source).digest('hex') !== '891f407ee38416678095cd9d9fac867b1ad60e5c7fb01f3798518e8693dc76a1') throw new Error('unsupported-native-connection-artifact');
     }
   }
 }
@@ -169,7 +170,7 @@ export async function apply(ctx: Context, config: Partial<Config> = {}): Promise
     unavailable(state, 'initializing-needs-full-reload');
     const native = c.get('clientModules') as ClientModules | undefined;
     const server = c.get('webServer') as { register(route: unknown): () => void } | undefined;
-    if (!native?.graph || !native.clientPath || !native.fetchBundle || !native.onGraphChanged || !native.onRebuilt || !server?.register) { unavailable(state, 'native-resource-seam-unavailable'); return; }
+    if (!native?.graph || !native.graphFor || !native.clientPath || !native.fetchBundle || !native.onGraphChanged || !native.onRebuilt || !server?.register) { unavailable(state, 'native-resource-seam-unavailable'); return; }
     const mount: Mount = { active: false, artifacts: [] };
     try {
       await verifyHost(c.get('profileContext')?.installAnchor);
@@ -250,13 +251,15 @@ export async function apply(ctx: Context, config: Partial<Config> = {}): Promise
           return reply(503);
         }
       };
-      const listener = (table: any[]) => {
+      const listener = (table: any[], peer: { principal: unknown }) => {
         if (!mount.active || mounted !== mount || !requested(config)) return;
         try {
           const rows = table.filter(row => row?.kind === 'global' && row.name === '__DSH_BOOT__');
           if (rows.length !== 1 || table.some(row => row?.kind === 'global' && row.name === PAGE_DESCRIPTOR)) throw new Error('unsupported-native-boot-table');
           const sourceGraph = graphOf(rows[0].value);
-          if (sourceGraph !== native.graph()) throw new Error('foreign-native-boot-graph');
+          // The owner and other peers may receive different synced config. Verify
+          // this peer's projection; clone the admitted row without substituting graph().
+          if (!peer?.principal || !isDeepStrictEqual(sourceGraph, native.graphFor(peer.principal))) throw new Error('foreign-native-boot-graph');
           const generation = ensureGeneration(sourceGraph);
           const graphCopy = structuredClone(sourceGraph);
           for (const entry of graphCopy.entries) if (TARGETS.has(entry.id)) entry.url = generation.references.get(entry.url)!;
@@ -278,7 +281,7 @@ export async function apply(ctx: Context, config: Partial<Config> = {}): Promise
       const release = () => { if (!released) { released = true; for (const dispose of releases.reverse()) dispose(); } };
       try {
         releases.push(server.register({ kind: 'prefix', path: PREFIX, resource }));
-        releases.push(server.register({ kind: 'exact', path: '/plugins/', resource: (request: Request) => {
+        releases.push(server.register({ kind: 'exact', path: '/plugins/', auth: 'anonymous', resource: (request: Request) => {
           if (!mount.active || mounted !== mount || !requested(config)) return Promise.resolve(reply(503));
           const url = new URL(request.url);
           if (HOST_TIMEZONE_TARGET_IDS.some(id => url.search.includes(id + '/'))) return Promise.resolve(reply(503));

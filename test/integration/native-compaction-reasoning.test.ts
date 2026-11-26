@@ -1,4 +1,4 @@
-/** Native 0.2.2-rc.4 entry acceptance; synthetic data and offline adapters only. */
+/** Native 0.2.3-alpha.2 entry acceptance; synthetic data and offline adapters only. */
 import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import * as compactContext from '../../src/modules/compact-context/index.ts';
@@ -54,7 +54,7 @@ class CaptureAdapter extends llm.LlmAdapter {
 }
 
 async function fixture(t: TestContext, options: Record<string, any> = {}) {
-  assert.equal(runtimeVersion, '0.2.2-rc.4');
+  assert.equal(runtimeVersion, '0.2.3-alpha.2');
   const runtime = await createRuntime({ product: false, retry: false, persistent: true });
   t.after(() => runtime.dispose());
   const ctx = runtime.ctx;
@@ -94,6 +94,23 @@ function assertTransaction(f: any, afterSeq: number, generation: number) {
   assert.ok(f.agent.session.surface.replaceGeneration > generation);
   return { start: starts[0], summary: summaries[0], end: ends[0] };
 }
+
+test('native prompt admission retires compact guidance after unload without rewriting history', async t => {
+  const f = await fixture(t, { plugin: { compactTool: true, guidance: true } });
+  const name = 'tool-compact-context:guidance';
+  await runTurn(f.turns, 'Synthetic prompt while compaction is available.');
+  const admitted = f.events().find((event: any) => event.type === 'system/message'
+    && event.data.message.source.sections?.some((section: any) => section.name === name && section.state === 'active'));
+  assert.ok(admitted, 'native request preparation admits the visible Extras guidance');
+  await f.plugin.dispose();
+  assert.equal(f.ctx.tools.get('compact_context', f.agent), undefined);
+  await runTurn(f.turns, 'Synthetic prompt after compaction tool unload.');
+  const later = f.events().filter((event: any) => event.seq > admitted.seq && event.type === 'system/message');
+  assert.ok(later.some((event: any) => event.data.message.source.sections?.some((section: any) => section.name === name && section.state === 'retired')),
+    'native prompt admission retires instructions for the absent tool');
+  assert.ok(f.agent.session.surface.nodes.includes(admitted.seq), 'native retirement appends a notice instead of rewriting the earlier prompt');
+  assert.equal(f.adapter.calls.length, 2);
+});
 
 test('native /compact applies inherited reasoning with compactTool=false', async t => {
   const f = await fixture(t);
@@ -157,7 +174,31 @@ test('native overflow recovery applies inherited reasoning with compactTool=fals
   assert.ok(assistant.data.message.content.some((block: any) => block.type === 'text' && block.text === 'Synthetic response.'));
 });
 
-test('native model switch summarizes the old durable route and effort before committing the new header', async t => {
+test('native summary route uses the last answer while inheritance uses the latest durable request', async t => {
+  const f = await fixture(t, { providers: ['synthetic-new-route'], plugin: {
+    compactionReasoning: { enabled: true, rules: [
+      { scope: 'all', mode: 'fixed', effort: 'low' },
+      { scope: 'provider-model', provider: 'synthetic-native', model: 'large-model', mode: 'inherit' },
+    ] },
+  } });
+  await runTurn(f.turns, history); await runTurn(f.turns, history);
+  const original = f.agent.session.requestHeader();
+  f.agent.session.append('request/header', { header: { ...original, config: { ...original.config,
+    provider: 'synthetic-new-route', model: 'unanswered-model', reasoningEffort: 'high' } }, reason: 'change' });
+  const seq = f.events().at(-1).seq;
+  const generation = f.agent.session.surface.replaceGeneration;
+  const before = f.adapter.calls.length;
+  const result = await f.ctx.commands.execute(f.agent, '/compact', [], signal());
+  assert.equal(result.result.kind, 'success', JSON.stringify(result));
+  const transaction = assertTransaction(f, seq, generation);
+  assert.equal(f.adapter.calls.length - before, 1);
+  assert.deepEqual(f.summaries().map(call => [call.provider, call.model, call.reasoningEffort]), [['synthetic-native', 'large-model', 'high']]);
+  assert.equal(transaction.summary.data.provider, 'synthetic-native');
+  assert.equal(transaction.summary.data.model, 'large-model');
+  assert.equal(f.agent.session.requestHeader().config.provider, 'synthetic-new-route');
+});
+
+test('native model switch summarizes the old answered route and durable effort before committing the new header', async t => {
   const f = await fixture(t, { native: { auto: true }, windows: { 'small-model': 10000 } });
   await runTurn(f.turns, history); await runTurn(f.turns, history);
   assert.equal(f.summaries().length, 0);

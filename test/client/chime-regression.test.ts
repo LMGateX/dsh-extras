@@ -867,6 +867,8 @@ test('apply adopts the optional session UI and Remote services when they arrive'
     const ui = fakeUiSession();
     ui.set({});
     h.provide('uiSession', ui.service);
+    assert.equal(ui.listeners.size, 0, 'base UI service is not the status capability');
+    h.provide('uiSession.sessionStatus', ui.service.sessionStatus);
     assert.equal(ui.listeners.size, 1, 'the UI status source is adopted through ctx.inject');
     ui.set({ a: { key: 'q1', kind: 'question' } });
     assert.equal(decoded, 1, 'a pending question rings through the attached UI service');

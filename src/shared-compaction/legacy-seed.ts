@@ -1,5 +1,5 @@
 /** Accepted root configuration is the only seed input. Never infer raw/profile provenance. */
-import type { Context } from '@deepseek-ai/cordis';
+import { Context } from '@deepseek-ai/cordis';
 import { resolveCompactionReasoning, type CompactionReasoningPolicy } from '../modules/compact-context/reasoning-policy.ts';
 import { openSharedCompactionStore, type SharedCompactionSnapshot, type LegacyBootstrapSnapshot } from './store.ts';
 type Module = 'compact-context' | 'model-policy';
@@ -24,7 +24,7 @@ export async function adoptLegacyCompactionSeed(ctx: Context, module: Module, co
     const generation = state.generation;
     const admitted = () => { retireInactive(state); return ownerActive(entry) && entry.owner === ctx.fiber && state.entries.has(entry) && state.generation === generation; };
     if (!admitted()) throw new Error('legacy adoption owner disposed');
-    const store = await openSharedCompactionStore(ctx.root);
+    const store = await openSharedCompactionStore(ctx[Context.root]);
     const result = await store.adoptLegacyReceipt(source, module, policy, admitted, state.diagnostic.phase !== 'conflict',
         completion => registerCommit([entry], completion));
     if (result === 'cancelled') throw new Error('legacy adoption owner disposed before global-write admission');
@@ -81,7 +81,7 @@ function registerCommit(entries: Entry[], completion: Promise<void>): void {
 const PRESERVED = 'canonical authority already won global-write admission; subsequent legacy input is backed up, and accepted policy is preserved';
 const KEY = Symbol.for('dsh-extras.shared-compaction.legacy-seeds.v1');
 function registry(ctx: Context, create = false): Registry | undefined {
-    const root = ctx.root as Context & {
+    const root = ctx[Context.root] as Context & {
         [KEY]?: Registry;
     };
     if (!root[KEY] && create)
@@ -138,7 +138,7 @@ export function prepareLegacyCompactionSeeds(ctx: Context): Promise<void> {
             const sources: LegacySeedDiagnostic['sources'] = [];
             const placeholder = JSON.stringify(resolveCompactionReasoning());
             let consumedNondefault = false;
-            const store = await openSharedCompactionStore(ctx.root);
+            const store = await openSharedCompactionStore(ctx[Context.root]);
             const sourceKey = (entry: Entry) => JSON.stringify(['bootstrap', entry.distribution, entry.module]);
             const complete = async () => { for (const entry of entries) await store.completeLegacyBootstrap(sourceKey(entry), admitted); };
             for (const entry of entries) {
@@ -206,7 +206,7 @@ export function prepareLegacyCompactionSeeds(ctx: Context): Promise<void> {
         } while (state.entries.size > 0 && state.generation !== processedGeneration);
     }).finally(() => { state.pending = undefined; }).then(() => {
         // Catch an enrollment between batch completion and this promise turn.
-        if (state.entries.size > 0 && state.generation !== processedGeneration) return prepareLegacyCompactionSeeds(ctx.root);
+        if (state.entries.size > 0 && state.generation !== processedGeneration) return prepareLegacyCompactionSeeds(ctx[Context.root]);
     });
     return state.pending;
 }

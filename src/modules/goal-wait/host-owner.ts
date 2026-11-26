@@ -53,6 +53,7 @@ function sameDescriptor(left: PropertyDescriptor | undefined, right: PropertyDes
  * Unmanaged/manual compositions fail unavailable rather than mutating strangers.
  */
 export function createHostDriverOwner(ctx: Context, options: HostDriverOwnerOptions = {}): HostDriverOwner {
+  const root = ctx[Context.root];
   let state: DriverOwnerSnapshot = { requested: 'native', effective: 'unknown', phase: 'switching' };
   let queue = Promise.resolve();
   let closing = false;
@@ -143,7 +144,7 @@ export function createHostDriverOwner(ctx: Context, options: HostDriverOwnerOpti
     if (record.before) Object.defineProperty(record.entry, 'disabled', record.before);
     else Reflect.deleteProperty(record.entry, 'disabled');
   };
-  const canRestore = () => currentEntry() && !disabledDescriptorIssue() && !nativeDisabled() && ctx.root.fiber.state === 2
+  const canRestore = () => currentEntry() && !disabledDescriptorIssue() && !nativeDisabled() && root.fiber.state === 2
     && stock!.parent.ctx.fiber.uid !== null && stock!.parent.ctx.fiber.state !== 4;
   const drain = async () => {
     let failed = false;
@@ -201,7 +202,7 @@ export function createHostDriverOwner(ctx: Context, options: HostDriverOwnerOpti
     // stock/foreign fiber. Detach before dispose to avoid Loader's self-disable
     // commit. Never registry.delete(callback): foreign fibers may share it.
     if (!restoreTicket || fiber !== restoreTicket.candidate || !live(fiber) || fiber.state !== 0) return;
-    // Loader 1.1.0 lib/index.js:765-781 otherwise reattaches entry during dispose.
+    // Loader 1.2.0-alpha.1 lib/index.js:1049-1065 otherwise reattaches entry during dispose.
     // Isolate only this candidate's public parent metadata; the original context
     // and every active/foreign fiber remain untouched.
     fiber.parent = fiber.parent.extend({ [Entry.key]: undefined });
@@ -224,9 +225,9 @@ export function createHostDriverOwner(ctx: Context, options: HostDriverOwnerOpti
     // Prefer the native profile's installation anchor, not a possibly shadowed peer tree.
     const profile = ctx.get('profileContext') as { installAnchor?: string } | undefined;
     const requireHost = createRequire(profile?.installAnchor ?? requireExtras.resolve('@deepseek-ai/dsh/package.json'));
-    if (requireHost(nativeName + '/package.json').version !== '0.2.2-rc.4'
-      || requireHost('@deepseek-ai/cordis/package.json').version !== '4.1.0'
-      || requireHost('@deepseek-ai/cordis-plugin-loader/package.json').version !== '1.1.0'
+    if (requireHost(nativeName + '/package.json').version !== '0.2.3-alpha.2'
+      || requireHost('@deepseek-ai/cordis/package.json').version !== '4.2.0-alpha.1'
+      || requireHost('@deepseek-ai/cordis-plugin-loader/package.json').version !== '1.2.0-alpha.1'
       || createHash('sha256').update(readFileSync(requireHost.resolve(nativeName))).digest('hex') !== driverDigest) {
       throw new Error('Unavailable: unverified native driver/Cordis artifact');
     }
@@ -260,7 +261,7 @@ export function createHostDriverOwner(ctx: Context, options: HostDriverOwnerOpti
     return false;
   };
   const ensureGuard = () => {
-    offGuard ??= ctx.root.on('internal/plugin', fiber => {
+    offGuard ??= root.on('internal/plugin', fiber => {
       if (!claimed || !live(fiber)) return;
       checkOwnership();
       if (fiber === owned?.rawFiber || fiber === pendingOwned) return;
@@ -342,9 +343,9 @@ export function createHostDriverOwner(ctx: Context, options: HostDriverOwnerOpti
       publish({ phase: 'switching' });
       await discover();
       if (closing || epoch !== generation) return snapshot();
-      const existing = claims.get(ctx.root);
+      const existing = claims.get(root);
       if (existing && existing !== claimToken) { conflicted = 'Another Extras distribution already owns the native driver lease'; return publish({ phase: 'conflict', reason: conflicted }); }
-      claims.set(ctx.root, claimToken); claimed = true; ensureGuard();
+      claims.set(root, claimToken); claimed = true; ensureGuard();
       if (request.strategy === 'activation' || request.strategy === 'native') return restore(epoch);
       if (nativeDisabled()) throw new Error('Unavailable: stock native entry is explicitly disabled');
       await stopOwned();
@@ -392,21 +393,21 @@ export function createHostDriverOwner(ctx: Context, options: HostDriverOwnerOpti
           releaseDisabledView();
           offGuard?.(); offGuard = undefined; offStatus();
           for (const off of checkpointOff.splice(0)) off();
-          if (claims.get(ctx.root) === claimToken) claims.delete(ctx.root);
+          if (claims.get(root) === claimToken) claims.delete(root);
           claimed = false;
         }
       }
     });
     return closeTask;
   };
-  offStatus = ctx.root.on('internal/status', fiber => {
+  offStatus = root.on('internal/status', fiber => {
     if (!closing) checkOwnership();
     if (closing || conflicted || fiber !== owned?.rawFiber || (state.phase !== 'active' && state.phase !== 'missing-dependency')) return;
     const actual = snapshot();
     if (actual.phase !== state.phase || actual.effective !== state.effective) publish({ phase: actual.phase, effective: actual.effective });
   }, { global: true });
   const onCheckpoint = (event: string, listener: (...args: any[]) => unknown) => {
-    checkpointOff.push((ctx.root.on as any)(event, listener, { global: true, prepend: true }));
+    checkpointOff.push((root.on as any)(event, listener, { global: true, prepend: true }));
   };
   for (const event of ['loader/config-update', 'goal/changed', 'agent/status', 'agent/turn-stopping']) {
     onCheckpoint(event, () => { checkOwnership(); });

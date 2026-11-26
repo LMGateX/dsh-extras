@@ -55,8 +55,8 @@ async function fixture(t: TestContext, options: HostDriverOwnerOptions = {}, bef
   return { runtime, ctx, loader, entry, commits, owner: owner!, row, live, native, blockImport };
 }
 
-test('unverified native version or changed rc driver bytes never acquire the stock slot', async t => {
-  for (const kind of ['previous-version', 'unknown-version', 'changed-artifact']) await t.test(kind, async t => {
+test('unverified native version or changed alpha.2 driver bytes never acquire the stock slot', async t => {
+  for (const kind of ['prior-rc-version', 'prior-alpha-version', 'unknown-version', 'changed-artifact']) await t.test(kind, async t => {
     const root = await mkdtemp(join(tmpdir(), 'ex-owner-refusal-'));
     t.after(async () => { assert.ok(root.startsWith(join(tmpdir(), 'ex-owner-refusal-'))); await rm(root, {recursive:true,force:true}); });
     const anchor = join(root, 'package.json');
@@ -66,8 +66,9 @@ test('unverified native version or changed rc driver bytes never acquire the sto
     for (const name of ['cordis', 'cordis-plugin-loader']) await symlink(dirname(requireHost.resolve('@deepseek-ai/' + name + '/package.json')), join(scope, name), 'dir');
     const driver = join(scope, 'dsh-goal-round-driver');
     await mkdir(driver);
-    await writeFile(join(driver, 'package.json'), JSON.stringify({name:'@deepseek-ai/dsh-goal-round-driver',version:kind === 'unknown-version' ? '99.0.0' : kind === 'previous-version' ? '0.2.2-rc.3' : '0.2.2-rc.4',type:'module',exports:{'.':'./index.js','./package.json':'./package.json'}}));
-    await writeFile(join(driver, 'index.js'), 'export function apply() {}\n');
+    await writeFile(join(driver, 'package.json'), JSON.stringify({name:'@deepseek-ai/dsh-goal-round-driver',version:kind === 'unknown-version' ? '99.0.0' : kind === 'prior-rc-version' ? '0.2.2-rc.4' : kind === 'prior-alpha-version' ? '0.2.3-alpha.1' : '0.2.3-alpha.2',type:'module',exports:{'.':'./index.js','./package.json':'./package.json'}}));
+    const published = await readFile(requireHost.resolve('@deepseek-ai/dsh-goal-round-driver'));
+    await writeFile(join(driver, 'index.js'), kind === 'changed-artifact' ? 'export function apply() {}\n' : published);
     const f = await fixture(t, {}, ctx => { ctx.reflect.provide('profileContext', {installAnchor:anchor}); return () => {}; });
     const original = f.entry.fiber!.ctx.fiber;
     const options = structuredClone(f.entry.options);

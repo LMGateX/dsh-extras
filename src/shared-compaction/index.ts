@@ -1,4 +1,4 @@
-import type { Context } from '@deepseek-ai/cordis';
+import { Context } from '@deepseek-ai/cordis';
 import type { GenerateOptions } from '@deepseek-ai/dsh-llm';
 import { installCompactionReasoning, type ReasoningCapability } from './runtime.ts';
 import { resolveCompactionReasoning, type CompactionReasoningPolicy } from '../modules/compact-context/reasoning-policy.ts';
@@ -50,7 +50,7 @@ function ambiguousSeeds(state: Coordinator): boolean {
     return policies.some(p => JSON.stringify(p) !== JSON.stringify(policies[0]));
 }
 function coordinator(ctx: Context): Coordinator {
-    const root = ctx.root as Context & {
+    const root = ctx[Context.root] as Context & {
         [KEY]?: Coordinator;
     };
     if (root[KEY])

@@ -86,7 +86,7 @@ test('rc2 permanent machine failures and their carrier identifiers retain native
   }
 });
 
-test('rc4 content refusal stays permanent even when explicitly configured as retryable', async () => {
+test('native content refusal stays permanent even when explicitly configured as a mapping', async () => {
   for (const input of [
     failure('CONTENT_REFUSED', 'stream_timeout: refusal explanation'),
     failure('PI_AI_ERROR', 'CONTENT_REFUSED'),

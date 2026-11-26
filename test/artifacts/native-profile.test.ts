@@ -57,7 +57,9 @@ test('native CLI installs packed combined distribution into isolated web profile
   });
   assert.notEqual(new URL(url).port,'3080');
   browser=await chromium.launch({executablePath:process.env.DSH_EXTRAS_CHROMIUM,headless:true,args:['--no-sandbox'],env:environment(temp) as Record<string,string>});
-  const page=await browser.newPage();page.setDefaultTimeout(5000);const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));page.on('console',message=>{if(message.type()==='error')errors.push(message.text().split('\n')[0]!.slice(0,500));});
+  const page=await browser.newPage();page.setDefaultTimeout(5000);const errors:string[]=[];
+  page.on('pageerror',error=>errors.push(error.message));
+  page.on('console',message=>{if(message.type()==='error')errors.push((message.location().url ? new URL(message.location().url).pathname + ': ' : '') + message.text().split('\n')[0]!.slice(0,500));});
   await page.goto(url);await page.waitForFunction(()=>Boolean((globalThis as any).__DSH_BOOT__));
   const entry=await page.evaluate(()=>((globalThis as any).__DSH_BOOT__.entries as any[]).find(entry=>entry.id==='dsh-extras'));
   assert.ok(entry);assert.equal(entry.inject.includes('@deepseek-ai/dsh-client-ui-settings'),true);

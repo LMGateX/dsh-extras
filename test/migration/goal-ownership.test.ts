@@ -195,7 +195,7 @@ test('latest recovery restores only owned bundle delta and cannot claim live suc
     const nativeEntry=[...ctx.loader.entries()].find((entry:any)=>entry.options.id==='goal-round-driver');
     const official=await load('@deepseek-ai/dsh-goal-round-driver');
     const raw=nativeEntry?.fiber?.ctx.fiber;
-    t.diagnostic(JSON.stringify({loaderIdentity:f.host.loader===ctx.get('loader'),namespace:nativeEntry?.moduleNamespace?.apply===official.apply,entryIdentity:raw?.entry===nativeEntry,rootIdentity:raw?.ctx.root===ctx.root,state:raw?.state,publicGoalOwner:(await inspectMigration(f.host,split)).goalOwner}));
+    t.diagnostic(JSON.stringify({loaderIdentity:f.host.loader===ctx.get('loader'),namespace:nativeEntry?.moduleNamespace?.apply===official.apply,entryIdentity:raw?.entry===nativeEntry,rootIdentity:raw?.ctx[Context.root]===ctx[Context.root],state:raw?.state,publicGoalOwner:(await inspectMigration(f.host,split)).goalOwner}));
     const applied=await runMigration(f.host,split);
     assert.equal(applied.modules.goalWait?.ready,true,JSON.stringify(applied.modules.goalWait));
     assert.equal([...ctx.loader.entries()].find((entry:any)=>entry.options.id==='goal-wait-gate')?.fiber,undefined);
@@ -280,7 +280,7 @@ test('actual Cordis root startup lifetime lease blocks even a caller native asse
   t.after(()=>ctx.fiber.dispose()); f.host.continuationContext=ctx; f.host.startupOwner='native';
   const key=Symbol.for('goal-wait-startup.root-lifetime.v1');
   const global=globalThis as any; const leases=global[key]??=new WeakMap();
-  leases.set(ctx.root[Context.isolate],{owner:ctx.fiber,state:{strategy:'replacement',status:'closed'}});
+  leases.set(ctx[Context.root][Context.isolate],{owner:ctx.fiber,state:{strategy:'replacement',status:'closed'}});
   const input=await inspectMigration(f.host,target);
   assert.match(input.moduleProblems?.goalWait?.join(';')??'',/startup.*lifetime/);
   assert.equal((await dryRunMigration(f.host,target)).decisions[0].phase,'conflict');

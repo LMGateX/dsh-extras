@@ -10,7 +10,7 @@ import * as hostTimezone from '../../src/modules/host-timezone/index.ts';
 const require = createRequire(import.meta.url);
 const ids = ['@deepseek-ai/dsh-api-session-controller', '@deepseek-ai/dsh-client-ui-schedule'];
 
-async function fixture(t: any, enabled = true, options: { missingAnchor?: boolean; configure?: (value: any) => void | Promise<void> } = {}) {
+async function fixture(t: any, enabled = true, options: { missingAnchor?: boolean; configure?: (value: any) => void | Promise<void>; overrideBoot?: (value: any) => any } = {}) {
   const ctx = new Context();
   t.after(() => ctx.fiber.dispose());
   const sources = new Map<string, string>();
@@ -21,7 +21,7 @@ async function fixture(t: any, enabled = true, options: { missingAnchor?: boolea
   }
   const targetUrl = 'plugins/??' + ids.map(id => id + '/client.js').join(',') + '&rev=native-v1';
   const foreignUrl = 'plugins/??unrelated/client.js&rev=foreign-v1';
-  const graph = { rev: 'graph-v1', release: { version: '0.2.2-rc.4' }, entries: [
+  const graph = { rev: 'graph-v1', release: { version: '0.2.3-alpha.2' }, entries: [
     ...ids.map(id => ({ id, url: targetUrl, rev: 'native-v1' })),
     { id: 'unrelated', url: foreignUrl, rev: 'foreign-v1' },
   ], batches: [ { phase: 'application', url: targetUrl, rev: 'native-v1', entries: [...ids] },
@@ -30,7 +30,11 @@ async function fixture(t: any, enabled = true, options: { missingAnchor?: boolea
   const fetches: string[] = [];
   const graphListeners = new Set<() => void>();
   const rebuildListeners = new Set<(id: string, rev: string) => void>();
-  const native = { graph: () => graph, clientPath: (id: string) => paths.get(id),
+  const native = { graph: () => graph,
+    graphFor: (principal?: { kind: string }) => principal?.kind === 'owner' || !principal ? graph : {
+      ...graph, entries: graph.entries.map(row => ({ ...row, config: { preference: 'default' } })),
+    },
+    clientPath: (id: string) => paths.get(id),
     onGraphChanged(listener: () => void) { graphListeners.add(listener); return () => { graphListeners.delete(listener); }; },
     onRebuilt(listener: (id: string, rev: string) => void) { rebuildListeners.add(listener); return () => { rebuildListeners.delete(listener); }; },
     async fetchBundle(request: Request) { fetches.push(request.url); return new Response([...sources.values()].join('\n;\n'), { headers: { 'content-type': 'text/javascript', 'cache-control': 'public, max-age=31536000, immutable' } }); } };
@@ -41,15 +45,16 @@ async function fixture(t: any, enabled = true, options: { missingAnchor?: boolea
     if (routes.has(route.path)) throw new Error('duplicate route');
     routes.set(route.path, route); return () => { if (routes.get(route.path) === route) routes.delete(route.path); };
   } });
-  ctx.on('webserver/index-inject' as any, ((table: any[]) => {
-    table.push({ kind: 'global', name: '__DSH_BOOT__', value: graph },
+  ctx.on('webserver/index-inject' as any, ((table: any[], peer: { principal: { kind: string } }) => {
+    const projected = native.graphFor(peer.principal);
+    table.push({ kind: 'global', name: '__DSH_BOOT__', value: options.overrideBoot ? options.overrideBoot(projected) : projected },
       { kind: 'script-preload', src: targetUrl }, { kind: 'script-src', placement: 'head', src: foreignUrl });
   }) as any);
   await options.configure?.({ ctx, paths, sources, routes, graph, native });
   const raw = { enabled };
   const fiber = ctx.plugin({ name: hostTimezone.name, apply: hostTimezone.apply }, raw);
   await fiber.await();
-  const table = () => { const rows: any[] = []; (ctx.emit as any)('webserver/index-inject', rows); return rows; };
+  const table = (kind = 'owner') => { const rows: any[] = []; (ctx.emit as any)('webserver/index-inject', rows, { principal: { kind } }); return rows; };
   const request = (url: string, method = 'GET') => {
     const value = new URL(url, 'http://isolated.invalid/');
     const route = routes.get(value.pathname) ?? [...routes.values()].filter(row => row.kind === 'prefix' && value.pathname.startsWith(row.path + '/')).sort((a,b)=>b.path.length-a.path.length)[0];
@@ -95,11 +100,44 @@ test('enabled plugin clones only target boot URLs and serves transformed bytes u
   assert.equal(f.fetches.length, 1);
 });
 
+test('peer-projected boot keeps the native peer defaults and only retargets owned resource URLs', async t => {
+  const f = await fixture(t, true, { configure: ({ graph }) => {
+    graph.entries[0].config = { preference: 'owner-private' };
+    graph.entries[2].config = { preference: 'unrelated-owner-private' };
+  } });
+  const ownerBoot = f.table().find(row => row.name === '__DSH_BOOT__').value;
+  const peerTable = f.table('member');
+  const peerBoot = peerTable.find(row => row.name === '__DSH_BOOT__').value;
+  assert.equal(ownerBoot.entries[0].config.preference, 'owner-private');
+  assert.equal(peerBoot.entries[0].config.preference, 'default');
+  assert.equal(peerBoot.entries[2].config.preference, 'default');
+  assert.doesNotMatch(JSON.stringify(peerTable), /owner-private/);
+  assert.equal(peerBoot.entries[0].url, ownerBoot.entries[0].url);
+  assert.equal(peerBoot.entries[2].url, f.foreignUrl);
+  assert.equal(f.graph.entries[0].url, f.targetUrl);
+  assert.equal((await f.request(peerBoot.entries[0].url)).status, 200);
+});
+
+test('a peer boot row altered outside the native projection is not rewritten or authorized', async t => {
+  let tamper = false;
+  const f = await fixture(t, true, { overrideBoot: projection => {
+    if (!tamper) return projection;
+    const changed = structuredClone(projection);
+    changed.entries[2].config = { preference: 'foreign' };
+    return changed;
+  } });
+  const proofUrl = f.table('member').find(row => row.name === '__DSH_EXTRAS_HOST_TIMEZONE_PAGE__').value.proofUrl;
+  tamper = true;
+  assert.throws(() => f.table('member'), /protected boot unavailable/);
+  assert.equal((await f.request(proofUrl)).status, 503);
+});
+
 test('native target reload URLs fail closed while unrelated native combos stay untouched', async t => {
   const f = await fixture(t);
   const rows = f.table();
   const protectedUrl = rows.find(row=>row.name==='__DSH_BOOT__').value.batches[0].url;
   assert.equal((await f.request(protectedUrl)).status, 200);
+  assert.equal(f.routes.get('/plugins/').auth, 'anonymous', 'exact guard preserves the native bundle route admission');
   const native = await f.request(f.targetUrl);
   assert.equal(native.status, 503, 'HMR native graph/rebuilt cannot reload the raw browser sampler');
   assert.equal(native.headers.get('cache-control'), 'no-store');
@@ -165,7 +203,7 @@ test('unknown package source bytes never mount the adapter even with the expecte
   await mkdir(join(root,'lib'));
   const path=join(root,'lib/client.js');
   const f=await fixture(t,true,{configure:async({paths,sources}:any)=>{
-    await writeFile(join(root,'package.json'),JSON.stringify({name:ids[0],version:'0.2.2-rc.4'}));
+    await writeFile(join(root,'package.json'),JSON.stringify({name:ids[0],version:'0.2.3-alpha.2'}));
     await writeFile(path,sources.get(ids[0])+'\n// unknown build\n');
     paths.set(ids[0],path);
   }});
@@ -270,6 +308,11 @@ test('target rebuild and remove/readd rotate source nonces even with the same na
   assert.equal((await f.request(first.proofUrl)).status,204,'unrelated rebuilt cannot revoke protected sources');
   f.graphChanged();
   assert.equal((await f.request(first.proofUrl)).status,204,'same graph advertisement does not revoke unchanged sources');
+  f.graph.rev = 'graph-config-update';
+  Object.assign(f.graph.entries[0]!, { config: { preference: 'changed' } });
+  f.graphChanged();
+  assert.equal(page().epoch, first.epoch, 'alpha.2 config-only graph publication does not rotate a target source');
+  assert.equal((await f.request(first.proofUrl)).status, 204);
   f.rebuilt(ids[0]!);
   assert.notEqual((await f.request(first.proofUrl)).status,204,'same-revision target rebuild must revoke the prior source nonce');
   const second=page();
@@ -358,7 +401,7 @@ test('proof revalidates target bytes and versions on disk instead of trusting ca
   const path=join(root,'lib/client.js');
   const manifest=join(root,'package.json');
   const f=await fixture(t,true,{configure:async({paths,sources}:any)=>{
-    await writeFile(manifest,JSON.stringify({name:ids[0],version:'0.2.2-rc.4'}));
+    await writeFile(manifest,JSON.stringify({name:ids[0],version:'0.2.3-alpha.2'}));
     await writeFile(path,sources.get(ids[0]));
     paths.set(ids[0],path);
   }});
@@ -387,7 +430,7 @@ for(const phase of ['mount','proof'] as const)test('connection package pin rejec
   for(const name of packages){
     const directory=join(root,'node_modules/@deepseek-ai',name);
     await mkdir(directory,{recursive:true});
-    await writeFile(join(directory,'package.json'),JSON.stringify({name:'@deepseek-ai/'+name,version:name==='dsh-client-connection'&&phase==='mount'?'0.2.2-rc.99':'0.2.2-rc.4'}));
+    await writeFile(join(directory,'package.json'),JSON.stringify({name:'@deepseek-ai/'+name,version:name==='dsh-client-connection'&&phase==='mount'?'0.2.2-rc.99':'0.2.3-alpha.2'}));
   }
   const connectionLib=join(root,'node_modules/@deepseek-ai/dsh-client-connection/lib');
   await mkdir(connectionLib);
@@ -434,7 +477,7 @@ for(const phase of ['mount','proof'] as const)for(const corruption of ['missing'
   for(const name of ['dsh','dsh-client-modules','dsh-host-webserver','dsh-client-connection']){
     const directory=join(root,'node_modules/@deepseek-ai',name);
     await mkdir(directory,{recursive:true});
-    await writeFile(join(directory,'package.json'),JSON.stringify({name:'@deepseek-ai/'+name,version:'0.2.2-rc.4'}));
+    await writeFile(join(directory,'package.json'),JSON.stringify({name:'@deepseek-ai/'+name,version:'0.2.3-alpha.2'}));
   }
   const lib=join(root,'node_modules/@deepseek-ai/dsh-client-connection/lib');
   await mkdir(lib);

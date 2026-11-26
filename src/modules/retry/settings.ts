@@ -19,7 +19,8 @@ export interface RetrySettingsSnapshot {
   diagnostic?: string;
 }
 export const RETRY_BODY_LIMIT = 8192;
-const providers = ['dsh-llm-deepseek-api-key','dsh-llm-deepseek-account','dsh-llm-pi-ai'];
+const HOST_VERSION = '0.2.3-alpha.2';
+const providers = ['@deepseek-ai/dsh-llm-deepseek-api-key','@deepseek-ai/dsh-llm-deepseek-account','@deepseek-ai/dsh-llm-pi-ai'];
 const recovery = {phase:'per-session',reason:'native-recovery-checked-per-failed-session'} as const;
 const plain = (v: any): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v) && Object.getPrototypeOf(v) === Object.prototype;
 function fail(status: number, code: string): never { throw Object.assign(new Error(code), {status,code}); }
@@ -27,21 +28,33 @@ function draft(value: any, resolve: any): RetryPolicyDraft {
   const p = resolve(value, 'retryPolicy');
   return {mode:p.mode,...p.mode === 'normal' ? {maxRetries:p.maxRetries} : {},initialDelayMs:p.initialDelayMs,maxDelayMs:p.maxDelayMs,jitterRatio:p.jitterRatio};
 }
+async function verifyPackage(manifestPath: string, name: string): Promise<void> {
+  const manifest = JSON.parse(await readFile(manifestPath,'utf8'));
+  if (manifest?.name !== name || manifest.version !== HOST_VERSION) fail(503,'native-retry-settings-unavailable');
+}
 async function nativeContract(anchor: string) {
-  const require = createRequire(anchor);
-  const manifest = JSON.parse(await readFile(require.resolve('@deepseek-ai/dsh/package.json'),'utf8'));
-  if (manifest.version !== '0.2.2-rc.4') fail(503,'native-retry-settings-unavailable');
-  const llm = await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-llm')).href);
-  const schemas = new Map<string,unknown>();
-  for (const name of providers) {
-    try { const m = await import(pathToFileURL(require.resolve('@deepseek-ai/'+name)).href); schemas.set('@deepseek-ai/'+name,m.Config); } catch { /* optional provider */ }
-  }
+  const manifestPath = createRequire(anchor).resolve('@deepseek-ai/dsh/package.json');
+  await verifyPackage(manifestPath,'@deepseek-ai/dsh');
+  const requireHost = createRequire(manifestPath);
+  const load = async (name: string) => {
+    await verifyPackage(requireHost.resolve(name+'/package.json'),name);
+    return import(pathToFileURL(requireHost.resolve(name)).href);
+  };
+  const llm = await load('@deepseek-ai/dsh-llm');
   if (typeof llm.resolveRetryPolicy !== 'function') fail(503,'native-retry-settings-unavailable');
-  return {resolve:llm.resolveRetryPolicy,schemas};
+  const providerModules = new Map<string,unknown>();
+  for (const name of providers) {
+    try {
+      const module = await load(name);
+      if (module.Config && typeof module.apply === 'function') providerModules.set(name,module);
+    } catch { /* absent or unaudited provider: no editable targets */ }
+  }
+  return {resolve:llm.resolveRetryPolicy,providerModules};
 }
 /** Root-level hook keeps provider settings editable when the classifier is disabled. */
 export function mountRetrySettings(ctx: Context, distribution: string): void {
-  ctx.inject(['webServer','connection','settings','configEditor','profileContext'], routeCtx => {
+  // Connection.admit delegates to the registered alpha.2 authentication service.
+  ctx.inject(['webServer','connection','connection.authentication','settings','configEditor','profileContext'], routeCtx => {
     const services = routeCtx as any;
     let live = true;
     routeCtx.effect(() => () => {live=false;});
@@ -55,7 +68,7 @@ export function mountRetrySettings(ctx: Context, distribution: string): void {
         if ('rejection' in admission) {res.writeHead(admission.rejection);res.end();return;}
         if (admission.peer.principal.kind !== 'owner') {res.writeHead(403);res.end();return;}
         if (req.method !== 'GET' && req.method !== 'PUT') {res.writeHead(405,{Allow:'GET, PUT'});res.end();return;}
-        const {resolve,schemas} = await contract;
+        const {resolve,providerModules} = await contract;
         const inventory = () => {
           const rows = services.settings.describe({redactSecrets:true});
           const entries = services.configEditor.entries();
@@ -63,8 +76,9 @@ export function mountRetrySettings(ctx: Context, distribution: string): void {
           for (const row of rows) {
             const matches = entries.filter((e:any)=>e.options.id===row.ns);
             if (matches.length !== 1) continue;
-            const entry=matches[0]; const schema=schemas.get(entry.options.name);
-            if (!schema || entry.moduleNamespace?.Config !== schema) continue;
+            const entry=matches[0]; const providerModule=providerModules.get(entry.options.name);
+            // A row with the same package id or borrowed Config is not native ownership.
+            if (!providerModule || entry.moduleNamespace !== providerModule) continue;
             const add=(provider:string,path:string[],value:unknown) => targets.push({id:JSON.stringify([row.ns,provider]),namespace:row.ns,provider,revision:row.revision,path,policy:draft(value,resolve)});
             if (entry.options.name==='@deepseek-ai/dsh-llm-pi-ai') {
               if (plain(row.value?.providers)) for (const provider of Object.keys(row.value.providers)) {

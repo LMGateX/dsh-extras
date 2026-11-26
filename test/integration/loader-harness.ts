@@ -7,6 +7,8 @@ import { join, resolve, dirname, basename, isAbsolute, sep } from 'node:path';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
 import type { TestContext } from 'node:test';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { WebEntryUrl } from '@deepseek-ai/dsh-host-webserver';
 import type { Distribution, ModuleId, FeaturePlugin } from '../../src/types.ts';
 import { createExtrasPlugin } from '../../src/runtime.ts';
 
@@ -56,17 +58,38 @@ export async function loaderFixture(t: TestContext, distribution: Distribution, 
   await writeFile(join(profile, 'package.json'), JSON.stringify({ name: 'isolated-root-profile', private: true, dependencies: {}, dsh: { profile: { bundles: [] } } }));
   const save = async (rows: unknown[]) => writeFile(patchPath, JSON.stringify([{ insert: rows }], null, 2));
   await save([{ id: distribution.name, name: distribution.name, config: initial }, ...extraRows]);
-  if (!selected) ctx.reflect.provide('profileContext', { dir: profile, patchPath, home, installAnchor: requireHost.resolve('@deepseek-ai/dsh/package.json'), overlays: [] });
+  if (!selected) ctx.reflect.provide('profileContext', { name: 'isolated', dir: profile, patchPath, home, cwd: root, installAnchor: requireHost.resolve('@deepseek-ai/dsh/package.json'), startedBundles: [], overlayPaths: [], telemetryDisabledEnv: undefined });
   ctx.reflect.provide('webServer', { register(route: any) { if (routes.has(route.path)) throw new Error('duplicate route'); routes.set(route.path, route); return () => { if (routes.get(route.path) === route) routes.delete(route.path); }; } });
   const records = new Map();
   ctx.reflect.provide('credentials', { async modifyRecord(key: string, edit: (value: any) => Promise<any>) { const next = await edit(records.get(key)); if (next !== undefined) records.set(key, next); return records.get(key); } });
-  const connectionPlugin = await loadHost('dsh-client-connection');
-  await ctx.plugin(connectionPlugin, {}).await();
-  const connection = ctx.get('connection') as any;
-  const host = '127.0.0.1:43999'; const launch = new URL(connection.authenticatedUrl('http://' + host + '/'));
-  const login = response(); connection.authorizeIndex({ method: 'GET', url: launch.pathname + launch.search, headers: { host } }, login);
-  const setCookie = login.headers['Set-Cookie'] ?? login.headers['set-cookie'];
-  const ownerCookie = String(Array.isArray(setCookie) ? setCookie[0] : setCookie).split(';')[0];
+  // In alpha.2, Connection admits requests but the separate token plugin owns
+  // browser launch URLs and cookie exchange. Drive its public WebServer events
+  // without opening a listening socket or inventing a fixture authentication rule.
+  await ctx.plugin(await loadHost('dsh-client-connection'), {}).await();
+  await ctx.plugin(await loadHost('dsh-host-authentication-token'), { cookieMaxAgeDays: 30 }).await();
+  const browserLaunchUrl = (base: string): string => {
+    const launches: WebEntryUrl[] = [];
+    ctx.emit('webserver/entry-url', base, launches);
+    if (launches.length !== 1) throw new Error('native token fixture did not publish one launch URL');
+    return launches[0]!.url;
+  };
+  const browserIndex = (req: IncomingMessage, res: ServerResponse, html: string) =>
+    ctx.waterfall('webserver/request', req, res, async () => {
+      const admission = ctx.get('connection')!.admit(req);
+      if ('rejection' in admission) { res.writeHead(admission.rejection); res.end(); return; }
+      if (admission.peer.principal.kind !== 'owner') { res.writeHead(403); res.end(); return; }
+      res.setHeader('Content-Type','text/html');
+      res.end(html);
+    });
+  const host = '127.0.0.1:43999';
+  const launch = new URL(browserLaunchUrl('http://' + host + '/'));
+  const login = response();
+  const loginRequest = { method: 'GET', url: launch.pathname + launch.search, headers: { host } };
+  await ctx.waterfall('webserver/request', loginRequest as IncomingMessage, login as unknown as ServerResponse, async () => {});
+  const setCookie = login.headers['set-cookie'];
+  const cookie = Array.isArray(setCookie) ? setCookie[0] : setCookie;
+  if (login.code !== 303 || typeof cookie !== 'string') throw new Error('native token fixture did not mint a browser cookie');
+  const ownerCookie = cookie.split(';', 1)[0]!;
   const request = (method = 'GET', headers: Record<string, string> = { host, cookie: ownerCookie }, name = distribution.name) => {
     const result = response(); const route = routes.get('/extras/' + encodeURIComponent(name) + '/status');
     if (!route) { result.code = 404; return result; }
@@ -92,6 +115,6 @@ export async function loaderFixture(t: TestContext, distribution: Distribution, 
     await editor.edit(entry, () => structuredClone(next));
     await loader.await();
   };
-  return { root, profile, home, ctx, loader, entry, fiber, routes, request, status, update, save, importTable, host, ownerCookie, dispose,
+  return { root, profile, home, ctx, loader, entry, fiber, routes, request, status, update, save, importTable, host, ownerCookie, browserLaunchUrl, browserIndex, dispose,
     ready: async (ids: readonly ModuleId[] = distribution.moduleIds) => until(() => status(), state => state.report !== undefined && ids.every(id => ['active', 'disabled', 'missing-dependency', 'conflict', 'failed'].includes(state.modules?.[id]?.phase)), 'root module admission') };
 }

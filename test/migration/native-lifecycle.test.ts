@@ -52,7 +52,7 @@ async function fixture(t: TestContext) {
   assert.ok(hmr, 'actual native HMR initialized (use node --expose-internals if needed)');
   const patchPath = join(dir, 'cordis.patch.yml');
   const baseFile = join(dir, 'cordis.yml');
-  const profile = { dir, home: dshHome, patchPath, installAnchor: anchor, overlays: [] };
+  const profile = { dir, home: dshHome, patchPath, installAnchor: anchor, overlayPaths: [] };
   const proof = {
     events: [] as string[], oldActive: 0, targetActive: 0, returned: 0,
     stopStarted: deferred(), allowStop, targetStopStarted: deferred(), targetAllowStop, controllers,

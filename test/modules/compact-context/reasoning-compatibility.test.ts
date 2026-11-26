@@ -87,13 +87,26 @@ test('a borrowed wrapper rejects a different native Context root but preserves t
   assert.equal(Object.getOwnPropertyDescriptor(one.raw, 'stream'), undefined);
 });
 
-for (const unsupportedVersion of ['0.2.2-rc.1', '0.2.2-rc.2', '0.2.2-rc.3', 'unverified-test-version']) test('public package version '+unsupportedVersion+' fails closed without modifying native runtime', async t => {
+for (const unsupportedVersion of ['0.2.2-rc.1', '0.2.2-rc.2', '0.2.2-rc.3', '0.2.2-rc.4', 'unverified-test-version']) test('public package version '+unsupportedVersion+' fails closed without modifying native runtime', async t => {
   const { ctx, raw, seen, mount } = await fixture(t);
   // Public package metadata in the in-memory module cache only; never edit node_modules.
   const metadata = createRequire(import.meta.url)('@deepseek-ai/dsh-llm/package.json'); const version = metadata.version;
   metadata.version = unsupportedVersion;
   try {
     const fork = await mount(); const state = plugin.runtimeStatus(fork.ctx).capabilities.compactionReasoning;
+    assert.equal(state.phase, 'unavailable'); assert.equal(state.reason, 'unverified host version');
+    assert.equal(Object.getOwnPropertyDescriptor(raw, 'stream'), undefined);
+    const original = request(); await consume(ctx.llm.stream(original)); assert.equal(seen.at(-1), original);
+  } finally { metadata.version = version; }
+});
+
+for (const unsupportedVersion of ['4.1.0', 'unverified-test-version']) test('unverified Cordis version '+unsupportedVersion+' refuses the modifier while native dispatch continues', async t => {
+  const { ctx, raw, seen, mount } = await fixture(t);
+  const metadata = createRequire(import.meta.url)('@deepseek-ai/cordis/package.json'); const version = metadata.version;
+  metadata.version = unsupportedVersion;
+  try {
+    const fork = await mount();
+    const state = plugin.runtimeStatus(fork.ctx).capabilities.compactionReasoning;
     assert.equal(state.phase, 'unavailable'); assert.equal(state.reason, 'unverified host version');
     assert.equal(Object.getOwnPropertyDescriptor(raw, 'stream'), undefined);
     const original = request(); await consume(ctx.llm.stream(original)); assert.equal(seen.at(-1), original);

@@ -1,5 +1,6 @@
 // Derived from @deepseek-ai/dsh-goal-round-driver historical published bundles
-// and exact 0.2.2-rc.2 / byte-identical 0.2.2-rc.3 / byte-identical 0.2.2-rc.4 published npm artifacts. Copyright (c) 2026 DeepSeek. MIT; see
+// and the audited, byte-identical 0.2.2-rc.2 through rc.4 and 0.2.3-alpha.2
+// published npm artifacts. Copyright (c) 2026 DeepSeek. MIT; see
 // UPSTREAM-LICENSE.txt and provenance.json.
 import { isDeepStrictEqual } from 'node:util';
 import type { Context } from '@deepseek-ai/cordis';

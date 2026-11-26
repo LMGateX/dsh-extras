@@ -170,7 +170,20 @@ export async function inspectMigration(host: NativeMigrationHost, target: Distri
   }
   const profilePatches = await layer(profile.patchPath, true);
   const homePatches = await layer(join(profile.home, 'cordis.patch.yml'), true);
-  const launcherPatches = structuredClone(input.overlays ?? []) as unknown[];
+  // Alpha.2 stores file paths, not an immutable startup patch snapshot. Read and
+  // fingerprint the current files in native argv order, including empty overlays.
+  if (Object.hasOwn(input, 'overlays')) throw new Error('legacy launcher overlay snapshot is not native alpha.2 profile evidence');
+  const paths = profile.overlayPaths ?? [];
+  if (!Array.isArray(paths) || paths.some(path => typeof path !== 'string' || !isAbsolute(path))) {
+    throw new Error('launcher overlay paths must be absolute native profile inputs');
+  }
+  const overlayPaths = [...paths];
+  const launcherPatches: unknown[] = [];
+  for (const path of overlayPaths) {
+    const patches = await layer(path);
+    if (await readFile(path, 'utf8') !== texts.get(path)) throw new Error('launcher overlay changed during discovery');
+    launcherPatches.push(...patches);
+  }
   const higher = [...homePatches, ...launcherPatches];
   const rows = native.composeEntries([...bundleLayers, profilePatches, homePatches, launcherPatches]);
   const flat = flatten(rows);
@@ -292,11 +305,11 @@ export async function inspectMigration(host: NativeMigrationHost, target: Distri
   }
   if (targetRows.length > 1) addProblem(target.moduleIds, 'multiple target instances require explicit recovery');
   const revision = createHash('sha256').update(JSON.stringify({ profileId, installAnchor: profile.installAnchor,
-    files: [...texts].sort(([a], [b]) => a.localeCompare(b)), overlays: launcherPatches,
+    files: [...texts].sort(([a], [b]) => a.localeCompare(b)), overlayPaths, overlays: launcherPatches,
     target: { rowId: target.rowId, packageName: target.packageName, moduleIds: target.moduleIds }, startupOwner: host.startupOwner ?? null,
   })).digest('hex');
   const inputFiles = [...texts].map(([path, value]) => ({ path, hash: value === null ? null : createHash('sha256').update(value).digest('hex') }));
-  const environmentIdentity = createHash('sha256').update(JSON.stringify({ profileId, installAnchor: profile.installAnchor, home: profile.home, overlays: launcherPatches, startupOwner: host.startupOwner ?? null, target: { rowId: target.rowId, packageName: target.packageName, moduleIds: target.moduleIds } })).digest('hex');
+  const environmentIdentity = createHash('sha256').update(JSON.stringify({ profileId, installAnchor: profile.installAnchor, home: profile.home, ...(overlayPaths.length ? {overlayPaths} : {}), overlays: launcherPatches, startupOwner: host.startupOwner ?? null, target: { rowId: target.rowId, packageName: target.packageName, moduleIds: target.moduleIds } })).digest('hex');
   return { profileId, profile, revision, manifest, patchText, manifestText, rows, sources, target, explicit, peers,
-    problems, legacyMode: sources.length > 0, moduleProblems, inputFiles, environmentIdentity, goalOwner };
+    problems, legacyMode: sources.length > 0, moduleProblems, inputFiles, environmentIdentity, launcherPatches, goalOwner };
 }
