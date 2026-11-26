@@ -6,7 +6,7 @@ import {createRuntime,load,llm,runTurn,events} from '../modules/retry/runtime.ts
 async function fixture(t:any,code='SERVER',failures=2){
  assert.ok(process.env.HOME?.startsWith('/tmp/'),'disposable HOME required');
  assert.ok(process.env.DSH_HOME?.startsWith('/tmp/'),'disposable DSH_HOME required');
- const runtime=await createRuntime({retry:false});t.after(()=>runtime.dispose());
+ const runtime=await createRuntime({retry:false,persistent:true});t.after(()=>runtime.dispose());
  const {ctx}=runtime;const off=()=>()=>{};
  // Only unrelated transport/attachment/workspace faces are deterministic doubles.
  // Native Controller, projection, maintenance, inbox, AgentLoop and LLM are real.
@@ -16,7 +16,7 @@ async function fixture(t:any,code='SERVER',failures=2){
  ctx.reflect.provide('attachments',{imageLimits:{maxImageBytes:1,maxImagesPerMessage:1,maxMessageImageBytes:1,maxImagePixels:1,maxImageDimension:1,mediaTypes:[]}});
  ctx.reflect.provide('fileUploads',{registerAgentResolver:off});
  ctx.reflect.provide('fs',{});ctx.reflect.provide('remoteAccess',{allows:()=>true});
- ctx.reflect.provide('workspaceRegistry',{archivedSessionIds:[]});ctx.reflect.provide('sessionQuery',{});
+ ctx.reflect.provide('workspaceRegistry',{archivedSessionIds:[]});
  const controllerModule=await load<any>('dsh-api-session-controller');
  await ctx.plugin(controllerModule.default,{}).await();
  const handle=await runtime.createAgent({sessionId:'native-continue',adapter:{failure:new llm.LlmError('offline failure',code),failures}});
@@ -44,7 +44,7 @@ test('stock Continue generating is a durable empty normal followup, not captured
  await assert.rejects(prompt('completed'));
 });
 
-for(const code of ['AUTH','INVALID_CREDENTIAL','MODEL_UNSUPPORTED','UNSUPPORTED_REASONING_EFFORT','ABORTED'])test('native continue refuses noncontinuable failure '+code,async t=>{
+for(const code of ['AUTH','INVALID_CREDENTIAL','MODEL_UNSUPPORTED','UNSUPPORTED_REASONING_EFFORT','ABORTED','CONTENT_REFUSED'])test('native continue refuses noncontinuable failure '+code,async t=>{
  const {handle,prompt}=await fixture(t,code,1);await runTurn(handle);
  assert.equal(handle.state.requests.length,1);await assert.rejects(prompt('must-refuse'));
  assert.equal(handle.state.requests.length,1);assert.equal(events(handle.state,'user/message').filter((e:any)=>e.data.source.kind==='retry').length,0);

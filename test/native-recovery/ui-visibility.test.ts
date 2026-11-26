@@ -16,7 +16,11 @@ const root=new URL('../../',import.meta.url).pathname;
 const event=(type:string,seq:number,data:any)=>({type,seq,time:seq*1000,data});
 const turn=(n:number,seq:number,kind='completed')=>[
  event('turn/start',seq*10,{turn:n}),
- ...(kind==='error'?[event('step/start',seq*10+1,{turn:n,step:1}),event('assistant/attempt',seq*10+2,{turn:n,step:1,stream:[{type:'chunk',time:1000,chunk:{type:'finish',reason:{kind:'error',failure:{code:'SERVER',message:'offline terminal failure'}}}}]}),event('step/end',seq*10+3,{turn:n,step:1})]:[]),
+ ...(kind==='error'?[event('step/start',seq*10+1,{turn:n,step:1}),event('assistant/attempt',seq*10+2,{turn:n,step:1,stream:[{type:'chunk',time:1000,chunk:{type:'finish',reason:{kind:'error',failure:{code:'SERVER',message:'offline terminal failure'}}}}]}),event('step/end',seq*10+3,{turn:n,step:1})]:kind==='completed'?[
+  event('step/start',seq*10+1,{turn:n,step:1}),
+  event('assistant/message',seq*10+2,{turn:n,step:1,message:createAssistantMessage({source:{provider:'offline',model:'offline-model'},content:[{type:'text',text:'offline successful answer'}]}),stream:[{type:'chunk',time:1000,chunk:{type:'finish',reason:{kind:'stop'}}}]}),
+  event('step/end',seq*10+3,{turn:n,step:1}),
+ ]:[]),
  event('turn/end',seq*10+4,{turn:n,reason:kind==='error'?{kind,error:{code:'SERVER',message:'offline terminal failure'}}:kind==='aborted'?{kind,reason:{kind:'user'}}:{kind}}),
 ];
 const unavailable={protocol:'dsh.request-recovery.v1',lifetime:'process-local',status:'unavailable',reason:'native-recovery-unavailable'};
@@ -56,9 +60,15 @@ for(const distribution of ['dsh-extras-retry','dsh-extras'])test('real native Tu
  const browser=await chromium.launch({executablePath:process.env.DSH_EXTRAS_CHROMIUM,headless:true,args:['--no-sandbox']});t.after(()=>browser.close());
  const page=await browser.newPage();page.setDefaultTimeout(4000);const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
  await page.goto('http://127.0.0.1:'+address.port);
- await page.waitForFunction(()=>document.documentElement.dataset.nativeAcceptance);
+ await page.waitForFunction(()=>document.documentElement.dataset.nativeAcceptance).catch(async error=>{
+    const progress=await page.evaluate(()=>(window as any).__acceptanceProgress);
+    throw new Error(`Native UI fixture bootstrap stopped at ${String(progress)}: ${errors.join('; ')}`,{cause:error});
+  });
  assert.equal(await page.evaluate(()=>document.documentElement.dataset.nativeAcceptance),'ready',await page.evaluate(()=>(window as any).__nativeAcceptanceError));
- await expect(page.locator('[data-turn-tail]')).toHaveCount(1);
+ await expect(page.locator('[data-turn-tail]')).toHaveCount(1).catch(async cause=>{
+   const root=await page.locator('#root').innerHTML();
+   throw new Error(`Native TurnTail fixture DOM: ${root.slice(0,600)}; errors: ${errors.join('; ')}`,{cause});
+  });
  await expect(page.locator('[data-request-recovery]')).toHaveCount(0);
  assert.equal(reads,0,'ordinary replies do not even read unsupported recovery');
  state={...state,events:[...turn(1,1,'error'),...turn(2,3)]};

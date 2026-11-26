@@ -12,10 +12,12 @@
  const connectionState=createSnapshotStore({status:'connected'});
  ctx.reflect.provide('connection',{state:connectionState});
  ctx.reflect.provide('remote',{$on:()=>()=>{}});
+  // This fixture renders unchanged native factories, but has no full boot graph.
+  ctx.reflect.provide('modules',{subscribeModules:()=>()=>{},activeRecords:()=>[]});
  await ctx.plugin(req('@deepseek-ai/dsh-client-ui-renderer')).await();
  await ctx.plugin(req('@deepseek-ai/dsh-client-locale')).await();
  const bindings=new Map();
- const sessions={binding:id=>bindings.get(id),list:createSnapshotStore({byId:{},currentId:transport.sessionId}),retainInfo:()=>createSnapshotStore(undefined)};
+ const sessions={binding:id=>bindings.get(id),list:createSnapshotStore({byId:{},currentId:transport.sessionId}),retainInfo:()=>createSnapshotStore({retainedFacets:{conversation:1}})};
  ctx.reflect.provide('sessions',sessions);
  new UiConversation(ctx,sessions);
  // Native ui-chat contributes its own session standard chat source here.
