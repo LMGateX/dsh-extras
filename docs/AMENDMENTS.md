@@ -14,6 +14,8 @@ The stock alpha.2 loader also propagated a deliberately failed status bundle thr
 
 Re-review also identified that interrupted selective rollback could resume a journaled multi-module write before consulting the new caller’s selection. A pending write may both disable and restore modules. Bind it to the original module selection (order independent) and refuse a resume with missing or differing scope before mutating profile documents or the journal. Users can repeat the same selection; this does not forbid fresh, narrower operations after the interrupted one finishes. Test refusal without writes and replay with the original scope.
 
+The exact alpha.2 Chromium profile then exposed a locale service arrival regression: the native document language was English, but the seven packed Extras forms captured the optional `locale` service before it was provided and held the Chinese fallback for their lifetime. Follow the live native locale across arrival and teardown without adding back the hard Plugin Manager edge or remounting active forms. Preserve the existing fallback when no locale provider exists. The seven packed settings/persistence journeys must pass in the native English profile, in addition to late-arrival and fault checks.
+
 ## 2026-11-26 — Adapt and release for exact DSH 0.2.3-alpha.2
 
 The user requests local checkout of the upstream tag, compatibility adaptation, push and release without installing into the machine’s DSH. The [alpha.2 contract](DSH_ALPHA2_080.md) records the observed Node, Cordis and Goal driver facts, exact-host scope and final-artifact/remote gates. No policy or safety waiver, personal-profile inspection, Actions or Extras npm publication.
