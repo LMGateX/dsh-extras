@@ -12,6 +12,8 @@ Retain native dynamic Chime injection, with no hard client manifest edge for ses
 
 The stock alpha.2 loader also propagated a deliberately failed status bundle through the existing `ui-plugin-manager → ui-sidebar → ui-workspace → ui-conversation → ui-session-status` arrival chain. Extras registers its own slots and `configForms` (the latter is owned by `ui-settings`), not a Plugin Manager service. Remove the redundant Plugin Manager arrival edge as well; it remains a native consumer of those slots when installed and working. Test both the stock manager/configuration path and independent Extras factory activation when the status resource fails. This does not promise that upstream’s own manager or conversation UI survives that failure.
 
+Re-review also identified that interrupted selective rollback could resume a journaled multi-module write before consulting the new caller’s selection. A pending write may both disable and restore modules. Bind it to the original module selection (order independent) and refuse a resume with missing or differing scope before mutating profile documents or the journal. Users can repeat the same selection; this does not forbid fresh, narrower operations after the interrupted one finishes. Test refusal without writes and replay with the original scope.
+
 ## 2026-11-26 — Adapt and release for exact DSH 0.2.3-alpha.2
 
 The user requests local checkout of the upstream tag, compatibility adaptation, push and release without installing into the machine’s DSH. The [alpha.2 contract](DSH_ALPHA2_080.md) records the observed Node, Cordis and Goal driver facts, exact-host scope and final-artifact/remote gates. No policy or safety waiver, personal-profile inspection, Actions or Extras npm publication.
