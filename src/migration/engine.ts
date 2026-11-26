@@ -484,13 +484,31 @@ function restoreIntent(journal: Journal): ModuleId[] {
       decision.source?.bundleSelected && !beforeBundles.includes(decision.source.bundleName ?? decision.source.packageName) && afterBundles.includes(decision.source.bundleName ?? decision.source.packageName)))
     .map(decision => decision.moduleId);
 }
-/** Rebase only exact owned restore deltas; never replay an old whole-profile enabling image. */
+/** Rebase only exact owned disables and restores; never replay an old whole-profile image. */
 async function rebaseRecovery(host: NativeMigrationHost, target: Distribution, journal: Journal, ids: ModuleId[]): Promise<void> {
   const current = await inspectMigration(host, target), old = journal.recoveryWrites!;
   assertLauncherReplay(journal, current);
+  if (ids.some(id => !old.selectedModules.includes(id))) throw new Error('unrecognized recovery restore intent');
   const doc = document(current.patchText), manifest = structuredClone(current.manifest);
-  const { config } = targetConfig(doc, target, {});
+  const { index, config } = targetConfig(doc, target, {});
   const modules = isRecord(config.modules) ? config.modules : {};
+  const pending = old.selectedModules.filter(id => !ids.includes(id) && !journal.rollback?.[id]?.done);
+  if (pending.length) {
+    const before = targetConfig(document(old.patchBefore), target, {}).config.modules;
+    const after = targetConfig(document(old.patchAfter), target, {}).config.modules;
+    if (!isRecord(before) || !isRecord(after)) throw new Error('unrecognized recovery disable intent');
+    for (const id of pending) {
+      const decision = journal.plan.decisions.find(value => value.moduleId === id);
+      if (!decision?.config || journal.rollback?.[id]?.done !== false) throw new Error('unrecognized recovery disable intent');
+      const disabled = { ...decision.config, enabled: false };
+      if (!isDeepStrictEqual(after[id], disabled) ||
+          !isDeepStrictEqual(before[id], decision.config) && !isDeepStrictEqual(before[id], disabled)) throw new Error('unrecognized recovery disable intent');
+      if (!isDeepStrictEqual(modules[id], disabled)) {
+        if (!isDeepStrictEqual(modules[id], before[id])) throw new Error('newer module edit prevents recovery replay');
+        doc.setIn([index, 'config', 'modules', id, 'enabled'], false);
+      }
+    }
+  }
   const dsh = isRecord(manifest.dsh) ? manifest.dsh : {}, profile = isRecord(dsh.profile) ? dsh.profile : {};
   let bundles = Array.isArray(profile.bundles) ? [...profile.bundles] : [];
   for (const id of ids) {
@@ -520,9 +538,6 @@ async function rebaseRecovery(host: NativeMigrationHost, target: Distribution, j
     if (source?.bundleSelected && !bundles.includes(source.bundleName ?? source.packageName)) bundles.push(source.bundleName ?? source.packageName);
     state.done = true;
   }
-  config.modules = modules;
-  // Marker deletion shifts indices; resolve the existing target override again.
-  doc.setIn([targetIndex(doc, target), 'config'], config);
   profile.bundles = bundles; dsh.profile = profile; manifest.dsh = dsh;
   journal.recoveryWrites = { patchBefore: current.patchText, patchAfter: String(doc), manifestBefore: current.manifestText,
     manifestAfter: JSON.stringify(manifest, null, 2) + '\n', restoreModules: ids, selectedModules: old.selectedModules };
@@ -583,6 +598,7 @@ export async function rollbackMigration(host: NativeMigrationHost, target: Distr
     const { index, config } = targetConfig(doc, target, {});
     const values = isRecord(config.modules) ? config.modules : {};
     journal.rollback ??= {};
+    const restoreModules: ModuleId[] = [];
     for (const id of selectedModules) {
       const decision = journal.plan.decisions.find(d => d.moduleId === id);
       if (!decision?.config || decision.phase === 'conflict') throw new Error('module was not imported by this operation');
@@ -608,6 +624,7 @@ export async function rollbackMigration(host: NativeMigrationHost, target: Distr
           doc.deleteIn([matching]);
         }
         pending.done = true;
+        restoreModules.push(id);
       }
     }
     config.modules = values;
@@ -618,12 +635,13 @@ export async function rollbackMigration(host: NativeMigrationHost, target: Distr
     const dsh = isRecord(manifest.dsh) ? manifest.dsh : {};
     const profile = isRecord(dsh.profile) ? dsh.profile : {};
     const bundles = Array.isArray(profile.bundles) ? profile.bundles : [];
-    for (const id of selectedModules) {
-      const decision = journal.plan.decisions.find(d => d.moduleId === id);
-      if (journal.rollback[id]?.done && decision?.source?.bundleSelected && !bundles.includes(decision.source.bundleName ?? decision.source.packageName)) bundles.push(decision.source.bundleName ?? decision.source.packageName);
+    for (const id of restoreModules) {
+      const source = journal.plan.decisions.find(d => d.moduleId === id)?.source;
+      if (source?.bundleSelected && !bundles.includes(source.bundleName ?? source.packageName)) bundles.push(source.bundleName ?? source.packageName);
     }
     profile.bundles = bundles; dsh.profile = profile; manifest.dsh = dsh;
-    journal.recoveryWrites = { patchBefore: input.patchText, patchAfter: String(doc), manifestBefore, manifestAfter: JSON.stringify(manifest, null, 2) + '\n', restoreModules: selectedModules.filter(id => journal.rollback?.[id]?.done), selectedModules };
+    const manifestAfter = restoreModules.length ? JSON.stringify(manifest, null, 2) + '\n' : manifestBefore;
+    journal.recoveryWrites = { patchBefore: input.patchText, patchAfter: String(doc), manifestBefore, manifestAfter, restoreModules, selectedModules };
     await writePrivate(paths.journal, JSON.stringify(journal) + '\n');
     await finishRecovery(host, target, journal);
     return reportJournal(host, journal);

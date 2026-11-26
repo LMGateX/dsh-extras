@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -13,7 +14,7 @@ import type { Distribution, LoaderEntry, ModuleId, NativeMigrationHost } from '.
 const anchor = process.env.DSH_TEST_INSTALL_ANCHOR ?? createRequire(import.meta.url).resolve('@deepseek-ai/dsh/package.json');
 const target: Distribution = { rowId: 'dsh-extras', packageName: 'dsh-extras', moduleIds: ['compact-context', 'retry', 'chime', 'goalWait'] };
 const packages = { retry: ['dsh-stream-retry', '0.1.9', 'stream-retry'], 'compact-context': ['dsh-tool-compact-context', '0.4.7', 'dsh-tool-compact-context'] } as const;
-async function fixture(t: TestContext, modules: ('compact-context' | 'retry')[] = ['retry']) {
+async function fixture(t: TestContext, modules: ('compact-context' | 'retry')[] = ['retry'], firstRollback = modules) {
   const root = await mkdtemp(join(tmpdir(), 'extras-rollback-ownership-'));
   const home = join(root, 'HOME'), dshHome = join(home, 'DSH_HOME'), dir = join(dshHome, 'profiles', 'rollback-proof');
   await mkdir(dir, { recursive: true });
@@ -39,7 +40,7 @@ async function fixture(t: TestContext, modules: ('compact-context' | 'retry')[] 
   await writeFile(join(dir, 'package.json'), JSON.stringify({ dependencies: Object.fromEntries(['dsh-extras', ...names].map(name => [name, '*'])), dsh: { profile: { bundles: ['dsh-extras', ...names] } } }));
   await writeFile(host.profileContext.patchPath, '[]\n');
   const engine = new URL('../../src/migration/engine.ts', import.meta.url).href;
-  const script = 'import {runMigration,rollbackMigration} from ' + JSON.stringify(engine) + ';const target=' + JSON.stringify(target) + ';const host={profileContext:' + JSON.stringify(host.profileContext) + ',loader:{entries:()=>[]}};const result=await runMigration(host,target);await rollbackMigration(host,target,{operationId:result.operationId,modules:' + JSON.stringify(modules) + '});console.log(JSON.stringify(result));';
+  const script = 'import {runMigration,rollbackMigration} from ' + JSON.stringify(engine) + ';const target=' + JSON.stringify(target) + ';const host={profileContext:' + JSON.stringify(host.profileContext) + ',loader:{entries:()=>[]}};const result=await runMigration(host,target);await rollbackMigration(host,target,{operationId:result.operationId,modules:' + JSON.stringify(firstRollback) + '});console.log(JSON.stringify(result));';
   const child = spawnSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8', env: { ...process.env } });
   assert.equal(child.status, 0, child.stderr);
   const operationId = JSON.parse(child.stdout).operationId as string;
@@ -114,6 +115,80 @@ for (const missing of [false, true]) test('rollback refuses ' + (missing ? 'a le
   await assert.rejects(rollbackMigration(f.host, target, { operationId: f.operationId, modules: ['retry'] }), /launcher overlay provenance/);
   assert.deepEqual(await snap(), before);
   await f.assertBlocked('retry');
+});
+
+async function targetPatch(path: string) {
+  const doc = parseDocument(await readFile(path, 'utf8'));
+  const index = (doc.toJS() as { id?: string }[]).findLastIndex(row => row.id === target.rowId);
+  return {
+    enabled: (id: ModuleId) => doc.getIn([index, 'config', 'modules', id, 'enabled']),
+    setEnabled: async (id: ModuleId, enabled: boolean) => {
+      doc.setIn([index, 'config', 'modules', id, 'enabled'], enabled);
+      await writeFile(path, String(doc));
+    },
+  };
+}
+
+test('mixed rollback restores the pending source and disables a newly selected module for its next recovery', async t => {
+  const f = await fixture(t, ['compact-context', 'retry'], ['retry']);
+  const paths = await profilePaths(f.host, target.rowId);
+  assert.equal((await targetPatch(paths.patch)).enabled('compact-context'), true);
+  await (await targetPatch(paths.patch)).setEnabled('chime', true);
+
+  const report = await rollbackMigration(f.host, target, { operationId: f.operationId, modules: ['retry', 'compact-context'] });
+  assert.equal(report.modules.retry?.phase, 'rolled-back');
+  assert.equal(report.modules['compact-context']?.phase, 'restart-required');
+  assert.ok((await f.manifest()).dsh.profile.bundles.includes(packages.retry[0]));
+  await f.assertBlocked('compact-context');
+  assert.equal((await targetPatch(paths.patch)).enabled('chime'), true);
+
+  const next = await rollbackMigration(f.host, target, { operationId: f.operationId, modules: ['compact-context'] });
+  assert.equal(next.modules['compact-context']?.phase, 'rolled-back');
+  assert.ok((await f.manifest()).dsh.profile.bundles.includes(packages['compact-context'][0]));
+  assert.equal((await targetPatch(paths.patch)).enabled('chime'), true);
+});
+
+test('including a previously restored module does not repeat its restoration', async t => {
+  const f = await fixture(t, ['compact-context', 'retry'], ['retry']);
+  const selection = { operationId: f.operationId, modules: ['retry'] as const };
+  assert.equal((await rollbackMigration(f.host, target, selection)).modules.retry?.phase, 'rolled-back');
+  const manifest = await f.manifest();
+  manifest.dsh.profile.bundles = manifest.dsh.profile.bundles.filter((name: string) => name !== packages.retry[0]);
+  await writeFile(join(f.dir, 'package.json'), JSON.stringify(manifest));
+
+  const report = await rollbackMigration(f.host, target, { ...selection, modules: ['retry', 'compact-context'] });
+  assert.equal(report.modules.retry?.phase, 'rolled-back');
+  assert.equal(report.modules['compact-context']?.phase, 'restart-required');
+  assert.equal((await f.manifest()).dsh.profile.bundles.includes(packages.retry[0]), false);
+  await f.assertBlocked('compact-context');
+});
+
+for (const patchWritten of [false, true]) test('mixed rollback resumes after interruption; patch written=' + patchWritten, async t => {
+  const f = await fixture(t, ['compact-context', 'retry'], ['retry']);
+  const paths = await profilePaths(f.host, target.rowId);
+  const patchBefore = await readFile(paths.patch, 'utf8');
+  const manifestBefore = await readFile(paths.manifest, 'utf8');
+  const interruption = new Error('simulated recovery interruption');
+  const host: NativeMigrationHost = { ...f.host, loader: { entries: () => {
+    const journal = JSON.parse(readFileSync(paths.journal, 'utf8'));
+    if (journal.recoveryWrites && (readFileSync(paths.patch, 'utf8') !== patchBefore) === patchWritten) throw interruption;
+    return f.entries;
+  } } };
+  const selection = { operationId: f.operationId, modules: ['retry', 'compact-context'] as const };
+  await assert.rejects(rollbackMigration(host, target, selection), error => error === interruption);
+  assert.equal(await readFile(paths.manifest, 'utf8'), manifestBefore);
+  assert.equal((await targetPatch(paths.patch)).enabled('compact-context'), !patchWritten);
+  if (!patchWritten) await (await targetPatch(paths.patch)).setEnabled('chime', true);
+  const manifest = await f.manifest(); manifest.description = 'newer unrelated metadata';
+  await writeFile(paths.manifest, JSON.stringify(manifest));
+
+  const report = await rollbackMigration(f.host, target, selection);
+  assert.equal(report.modules.retry?.phase, 'rolled-back');
+  assert.equal(report.modules['compact-context']?.phase, 'restart-required');
+  assert.ok((await f.manifest()).dsh.profile.bundles.includes(packages.retry[0]));
+  assert.equal((await f.manifest()).description, 'newer unrelated metadata');
+  await f.assertBlocked('compact-context');
+  if (!patchWritten) assert.equal((await targetPatch(paths.patch)).enabled('chime'), true);
 });
 
 async function interruptedRestore(f: Awaited<ReturnType<typeof fixture>>, modules: ('compact-context' | 'retry')[], patchAlreadyWritten: boolean) {
