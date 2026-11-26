@@ -41,11 +41,14 @@ const form = {
 const provide = (name, value) => {ctx.provide(name); ctx.set(name,value);};
 const requestedLocale = new URLSearchParams(location.search).get('locale');
 let active = requestedLocale === 'en' ? 'en' : 'zh';
-if (requestedLocale !== 'absent') provide('locale', {
-  getLocale() {return {active};},
-  subscribe(fn) {localeListeners.add(fn); return () => localeListeners.delete(fn);},
-  resolveText(text) {return typeof text === 'string' ? text : text[active] ?? text.zh;},
-});
+window.publishLocale = () => {
+  window.withdrawLocale = ctx.provide('locale', {
+    getLocale() {return {active};},
+    subscribe(fn) {localeListeners.add(fn); return () => localeListeners.delete(fn);},
+    resolveText(text) {return typeof text === 'string' ? text : text[active] ?? text.zh;},
+  });
+};
+if (requestedLocale !== 'absent') window.publishLocale();
 window.setLocale = next => {active=next; for(const fn of localeListeners) fn();};
 window.localeSubscriberCount = () => localeListeners.size;
 window.accepted = () => structuredClone(snapshot);

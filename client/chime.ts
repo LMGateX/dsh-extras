@@ -1630,10 +1630,10 @@ export function createChimeAdapter(React: ReactRuntime) {
 
 
   let preview: { unlock(): void; playRing(reason: ChimeReason, session: {id:string;title:string}, sound?:string): unknown } | undefined;
-  function createView(ctx: ClientContext) {
+  function createView(ctx: ClientContext, settingsLocale?: LocaleLike) {
       // The platform locale service is optional: with it every string below renders in
       // the active language (zh/en), without it Chinese is the fallback.
-      const locale = typeof ctx.get === 'function' ? (ctx.get('locale') as LocaleLike | undefined) : undefined
+      const locale = settingsLocale ?? (typeof ctx.get === 'function' ? (ctx.get('locale') as LocaleLike | undefined) : undefined)
       const t = (text: string | Text): string => (typeof text === 'string' ? text : locale !== undefined ? locale.resolveText(text) : text.zh)
       const localeTick = createFlag(false)
       if (locale !== undefined) {

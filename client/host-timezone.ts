@@ -313,9 +313,9 @@ export function createHostTimezoneAdapter(React: any) {
         stop(); latch.owned = false; binding = undefined;
       };
     },
-    createView(ctx: any): unknown {
+    createView(ctx: any, settingsLocale?: SettingsLocale): unknown {
       return function HostTimezonePageStatus() {
-        const candidate = typeof ctx?.get === 'function' ? ctx.get('locale') : undefined;
+        const candidate = settingsLocale ?? (typeof ctx?.get === 'function' ? ctx.get('locale') : undefined);
         const locale = candidate && typeof candidate.getLocale === 'function' && typeof candidate.subscribe === 'function' && typeof candidate.resolveText === 'function' ? candidate as SettingsLocale : undefined;
         const t = useSettingsText(React, locale);
         const snapshot = React.useSyncExternalStore(

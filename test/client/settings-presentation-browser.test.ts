@@ -250,6 +250,30 @@ test('all seven actual packed settings localize, retain drafts and use native th
           assert.equal(await page.evaluate(()=>(window as any).localeSubscriberCount()),0);
           assert.deepEqual(await page.evaluate(()=>(window as any).writes),[]);
         }));
+        if (name==='dsh-extras') await t.test(name+': late locale service repaints an already-open draft without remounting',()=>scenario('absent',async page=>{
+          const chime = page.locator('[data-module="chime"]');
+          const duration = chime.locator('#dsh-session-chime-durationMs');
+          const before = await page.evaluate(()=>(window as any).accepted());
+          await page.getByRole('button',{name:'全部展开',exact:true}).waitFor();
+          await duration.fill('3000');
+          const identity = await duration.elementHandle(); assert.ok(identity);
+          await page.evaluate(() => { (window as any).setLocale('en'); (window as any).publishLocale(); });
+          const check = async (english:boolean) => {
+            await page.getByRole('button',{name:english?'Expand all':'全部展开',exact:true}).waitFor();
+            await chime.getByRole('button',{name:english?'Save':'保存',exact:true}).waitFor();
+            assert.equal(await duration.inputValue(),'3000');
+            assert.equal(await duration.evaluate((element,previous)=>element===previous,identity),true);
+            assert.equal(await page.evaluate(()=>(window as any).viewRegistrations),1);
+            assert.deepEqual(await page.evaluate(()=>(window as any).accepted()),before);
+            assert.deepEqual(await page.evaluate(()=>(window as any).writes),[]);
+          };
+          await check(true);
+          await page.evaluate(()=>(window as any).withdrawLocale());
+          await check(false);
+          assert.equal(await page.evaluate(()=>(window as any).localeSubscriberCount()),0);
+          await page.evaluate(()=>(window as any).publishLocale());
+          await check(true);
+        }));
         await t.test(name+': controls and cards follow light/dark tokens without narrow overflow',()=>scenario('en',async page=>{
           await presentation(page,'light'); await presentation(page,'dark');
           await page.setViewportSize({width:960,height:800});await presentation(page,'light');

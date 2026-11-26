@@ -1,19 +1,41 @@
 /** Native optional locale port, shared by settings only; no provider/feature metadata. */
 export interface SettingsLocale {
-  getLocale(): { readonly active: string };
+  getLocale(): { readonly active: string; readonly revision?: number };
   subscribe(listener: () => void): () => void;
-  resolveText(text: unknown): string;
+  resolveText(text: string | { readonly en: string; readonly zh: string }): string;
 }
 export type SettingsText = (en: string, zh: string) => string;
 const fallbackSubscribe = () => () => {};
 const fallbackSnapshot = () => 'zh';
-const localeCallbacks = new WeakMap<SettingsLocale, { subscribe: SettingsLocale['subscribe']; read: () => string }>();
+const localeCallbacks = new WeakMap<SettingsLocale, { subscribe: SettingsLocale['subscribe']; read: () => string | number }>();
+
+/** Keep the settings view stable while the independent native locale fiber arrives or unloads. */
+export function observeSettingsLocale(ctx: { inject(names: string[], apply: (scope: { locale: SettingsLocale }) => () => void): unknown }): SettingsLocale {
+  let current: SettingsLocale | undefined;
+  let revision = 0;
+  const listeners = new Set<() => void>();
+  const publish = () => { revision++; for (const listener of [...listeners]) listener(); };
+  ctx.inject(['locale'], ({ locale }) => {
+    current = locale;
+    const off = locale.subscribe(publish);
+    publish();
+    return () => { off(); current = undefined; publish(); };
+  });
+  return {
+    getLocale: () => ({ active: current?.getLocale().active ?? 'zh', revision }),
+    subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
+    resolveText(text) { return current ? current.resolveText(text) : typeof text === 'string' ? text : text.zh; },
+  };
+}
 
 /** Bind public service methods without losing their receiver; keep hook callbacks stable. */
 export function useSettingsText(React: any, locale?: SettingsLocale): SettingsText {
   let callbacks = locale && localeCallbacks.get(locale);
   if (locale && !callbacks) {
-    callbacks = { subscribe: listener => locale.subscribe(listener), read: () => locale.getLocale().active };
+    callbacks = { subscribe: listener => locale.subscribe(listener), read: () => {
+      const { active, revision } = locale.getLocale();
+      return revision ?? active;
+    } };
     localeCallbacks.set(locale, callbacks);
   }
   React.useSyncExternalStore(callbacks?.subscribe ?? fallbackSubscribe, callbacks?.read ?? fallbackSnapshot, callbacks?.read ?? fallbackSnapshot);

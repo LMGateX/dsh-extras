@@ -83,5 +83,5 @@ export function createRetrySettingsView(React:any, supplied?:RetrySettingsSource
 }
 /** Generated combined/split composition contract. */
 export function createRetrySettingsAdapter(React:any) {
-  return {createView(ctx:any){return createRetrySettingsView(React,undefined,ctx.get('locale'));}};
+  return {createView(ctx:any,locale:SettingsLocale|undefined=ctx.get('locale')){return createRetrySettingsView(React,undefined,locale);}};
 }

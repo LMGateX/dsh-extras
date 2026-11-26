@@ -2,19 +2,20 @@ import { bindSection, type ConfigForm } from './forms.ts';
 import { createSettingsView, type SettingsDescriptor } from './settings-core.ts';
 import { capturePageProof, createStatusStore, legacyChimeAtBoot, type StatusStore } from './status.ts';
 import { ownScope } from './scope.ts';
+import { observeSettingsLocale, type SettingsLocale } from './settings-ui.ts';
 
 export interface ChimeAdapter {
   mount(ctx: any, form: ConfigForm): () => void;
-  createView(ctx: any): unknown;
+  createView(ctx: any, locale?: SettingsLocale): unknown;
 }
 export type ChimeAdapterFactory = (React: any) => ChimeAdapter;
 export type ExtrasClientDescriptor = SettingsDescriptor;
-export type SettingsAdapterFactory = (React: any) => { createView(ctx: any): unknown };
+export type SettingsAdapterFactory = (React: any) => { createView(ctx: any, locale?: SettingsLocale): unknown };
 export interface RecoveryMountOptions { rowId:string; enabled:()=>boolean; subscribe(listener:()=>void):()=>void; }
 export type RecoveryAdapterFactory = (React:any)=>{mount(ctx:any,options:RecoveryMountOptions):()=>void};
 /** Unknown accepted configuration is not an explicit disable/revocation. */
 export interface HostTimezoneMountOptions { rowId:string; enabled():boolean|undefined; subscribe(listener:()=>void):()=>void; }
-export type HostTimezoneAdapterFactory = (React:any)=>{mount(ctx:any,options:HostTimezoneMountOptions):()=>void;createView(ctx:any):unknown};
+export type HostTimezoneAdapterFactory = (React:any)=>{mount(ctx:any,options:HostTimezoneMountOptions):()=>void;createView(ctx:any,locale?:SettingsLocale):unknown};
 
 /** Public build seam: generated entry supplies selected imports and platform React. */
 export function createExtrasClient(descriptor: ExtrasClientDescriptor, React: any, makeChime?: ChimeAdapterFactory, makeReasoning?: SettingsAdapterFactory, makeModelPolicy?: SettingsAdapterFactory, makeRetry?: SettingsAdapterFactory, makeRecovery?:RecoveryAdapterFactory, makeHostTimezone?:HostTimezoneAdapterFactory) {
@@ -53,7 +54,8 @@ export function createExtrasClient(descriptor: ExtrasClientDescriptor, React: an
     }
     // Read the exact served namespace's accepted store; page.mutate remains the only page write endpoint.
     const accepted = { getSnapshot: () => root.getSnapshot(), subscribe: (listener: () => void) => root.subscribe(listener) };
-    const View = createSettingsView(React, descriptor, chime?.createView(owned.ctx), status, reasoning?.createView(owned.ctx), accepted, owned.ctx.get('locale'), modelPolicy?.createView(owned.ctx), retry?.createView(owned.ctx), hostTimezone?.createView(owned.ctx));
+    const locale = observeSettingsLocale(owned.ctx);
+    const View = createSettingsView(React, descriptor, chime?.createView(owned.ctx, locale), status, reasoning?.createView(owned.ctx, locale), accepted, locale, modelPolicy?.createView(owned.ctx, locale), retry?.createView(owned.ctx, locale), hostTimezone?.createView(owned.ctx, locale));
     owned.ctx.effect(() => ctx.configForms.whileServed([descriptor.rowId], () => {
       const offRow = ctx.slots.inject('plugins.row.config', () => ctx.slots.register({
         name: 'plugins.row.config', key: descriptor.packageName + '#' + descriptor.rowId,

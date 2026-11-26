@@ -110,8 +110,8 @@ export function createModelPolicySettingsView(React:any,catalog?:ReasoningCatalo
     h('button',{type:'button',disabled:disabled||!scopeValid,onClick:()=>{if(scopeValid&&!disabled)editor.resetScope(activeScope);}},t('Reset scope to inherit (staged)','将范围重置为继承（暂存）'))));
  };
 }
-export function createModelPolicyAdapter(React:any) {return {createView(ctx:any){
- let remote:any;let locale:SettingsLocale|undefined;try{locale=ctx.get('locale');}catch{/* optional */}
+export function createModelPolicyAdapter(React:any) {return {createView(ctx:any,locale?:SettingsLocale){
+ let remote:any;try{locale??=ctx.get('locale');}catch{/* optional */}
  ctx.inject(['remote'],(scope:any)=>{remote=scope.get('remote');return()=>{remote=undefined;};});
  return createModelPolicySettingsView(React,{load:()=>remote?.session?.modelCatalog()},locale,createWorkspaceCatalog(ctx));
 }};}

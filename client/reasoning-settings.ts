@@ -185,10 +185,9 @@ export function createReasoningSettingsView(React: any, catalog?: ReasoningCatal
 /** Optional remote lifetime belongs only to selected reasoning distributions. */
 export function createReasoningAdapter(React: any, rowId?: string) {
   return {
-    createView(ctx: any) {
+    createView(ctx: any, locale?: SettingsLocale) {
       let catalogRemote: any;
-      let locale: SettingsLocale | undefined;
-      try { locale = ctx.get('locale'); } catch { /* Optional host locale service. */ }
+      try { locale ??= ctx.get('locale'); } catch { /* Optional host locale service. */ }
       ctx.inject(['remote'], (scope: any) => {
         catalogRemote = scope.get('remote');
         return () => { catalogRemote = undefined; };
