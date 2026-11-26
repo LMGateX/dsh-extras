@@ -37,7 +37,7 @@ for(const {name,modules} of distributions) test('packed installable distribution
   assert.equal(pkg.dsh.client.platforms,undefined);assert.equal(pkg.dsh.bundle.patch,'cordis.patch.yml');
   assert.equal(pkg.dsh.client.inject.includes('@deepseek-ai/dsh-api-session-controller'), modules.includes('retry') || modules.includes('chime') || modules.includes('host-timezone'), 'selected session-controller dependency does not depend on chime transitively');
   assert.equal(pkg.dsh.client.inject.includes('@deepseek-ai/dsh-api-workspace-controller'), modules.includes('model-policy') || modules.includes('compact-context'), 'native workspace discovery dependency belongs only to workspace settings distributions');
-  assert.equal(pkg.dsh.client.inject.includes('@deepseek-ai/dsh-client-ui-session-status'), modules.includes('chime'), 'native session status dependency is selected only by chime');
+  assert.ok(!pkg.dsh.client.inject.includes('@deepseek-ai/dsh-client-ui-session-status'), 'optional session status must not block arrival of any Extras client');
   const patch=await readFile(join(packageDir,'cordis.patch.yml'),'utf8');assert.ok(patch.includes('id: '+name));
   const listing=execFileSync('tar',['-tzf',archive],{encoding:'utf8'}).split('\n');
   assert.ok(!listing.some(file=>file.includes('node_modules/')||file.includes('.dsh-extras/')||file.includes('.env')));
@@ -103,6 +103,27 @@ for(const {name,modules} of distributions) test('packed installable distribution
     assert.deepEqual(entry.Config({}).modules['compact-context'].compactionReasoning.get(), {enabled:false,rules:[{scope:'all',mode:'inherit'}]}, 'packed defaults keep request reasoning disabled and tool-independent');
   }
   if (modules.includes('host-timezone')) {
+    const notice = await readFile(join(packageDir, 'notices/host-timezone.txt'), 'utf8');
+    assert.ok(!notice.includes('0.2.2-rc.4'), 'the runtime notice documents this release, not historical artifact pins');
+    for (const [hostPackage, artifact] of [
+      ['dsh-api-session-controller', 'lib/client.js'],
+      ['dsh-client-ui-schedule', 'lib/client.js'],
+      ['dsh-client-connection', 'lib/client.browser.js'],
+    ]) {
+      const id = '@deepseek-ai/' + hostPackage;
+      const manifest = hostRequire.resolve(id + '/package.json');
+      const native = JSON.parse(await readFile(manifest, 'utf8'));
+      assert.equal(native.version, '0.2.3-alpha.2');
+      assert.ok(notice.includes(id + '@' + native.version));
+      const raw = await readFile(resolve(manifest, '..', artifact));
+      assert.ok(notice.includes(artifact + ' SHA-256:\n  ' + createHash('sha256').update(raw).digest('hex')));
+      if (hostPackage === 'dsh-client-connection') {
+        const methods = [...raw.toString().matchAll(/async call\(channel,endpoint,payload,signal\)\{assertTarget[^\n]+?return full\.result\}/g)];
+        assert.equal(methods.length, 1, 'the alpha.2 browser artifact has one audited default RPC callable');
+        assert.ok(notice.includes('Emitted callable source SHA-256 (Function.prototype.toString):\n  '
+          + createHash('sha256').update(methods[0][0]).digest('hex')));
+      }
+    }
     assert.deepEqual(Object.keys(entry.Config({}).modules['host-timezone']),['enabled']);
     assert.equal(entry.Config({}).modules['host-timezone'].enabled.get(),false);
     assert.equal(entry.Config({modules:{'host-timezone':{enabled:true}}}).modules['host-timezone'].enabled.get(),true);

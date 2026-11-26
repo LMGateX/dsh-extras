@@ -104,10 +104,8 @@ export interface SessionUIStatus {
 /** The session-status snapshot the optional session UI service publishes. */
 export type SessionUIStatusSnapshot = ReadonlyMap<string, SessionUIStatus>
 
-/** The client session UI service this plugin uses when the deployment has one. */
-export interface UiSessionService {
-  readonly sessionStatus: ObservableSnapshot<SessionUIStatusSnapshot>
-}
+/** Optional client Session status service, separately provided from the base session UI. */
+export type UiSessionStatusService = ObservableSnapshot<SessionUIStatusSnapshot>
 
 /**
  * The client Remote service, reduced to the one forwarded event this plugin
@@ -152,8 +150,8 @@ export interface ClientContext {
   readonly sessions: SessionsService
   /** Background-job rosters; absent when the deployment mounts no job controller. */
   readonly jobs?: JobsService
-  /** Session UI status (pending questions/approvals); absent without the session UI bundle. */
-  readonly uiSession?: UiSessionService
+  /** Pending questions/approvals; only admitted by the optional nested injection. */
+  readonly 'uiSession.sessionStatus'?: UiSessionStatusService
   /** Forwarded Remote events (failed turns); absent without the Remote assembly. */
   readonly remote?: RemoteService
   get?(name: string): unknown

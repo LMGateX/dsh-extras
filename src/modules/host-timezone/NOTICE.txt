@@ -2,28 +2,28 @@ Host time-zone privacy adapter — original DSH Extras implementation.
 Copyright (c) 2026 LMGateX. MIT License; see the distribution LICENSE.
 
 The exact-version adapter includes minimal function anchors and replacement
-forms derived from DeepSeek Harness 0.2.2-rc.4 session-controller and schedule
+forms derived from DeepSeek Harness 0.2.3-alpha.2 session-controller and schedule
 client artifacts, plus an exact callable-source compatibility expectation from
 client-connection. Native installation files are read only and are not rewritten.
-Source: https://github.com/deepseek-ai/deepseek-harness
+Source: https://github.com/deepseek-ai/deepseek-harness/tree/4b399c39a6d1479cd84ca591b4d7c88e24d38a96
 
-Audited npm packages: @deepseek-ai/dsh-api-session-controller@0.2.2-rc.4
+Audited npm package: @deepseek-ai/dsh-api-session-controller@0.2.3-alpha.2
   Source function: src/client/time-zone.ts resolvedClientTimeZone().
   lib/client.js SHA-256:
-  e9af25a01168a8405730c107471cbd6befccfab3294e793b10e1467c57255852
-Audited npm package: @deepseek-ai/dsh-client-ui-schedule@0.2.2-rc.4
+  5e999335e66010345637bb533b8e1c67a3602e56f0cbb3bcfbc0d764e80248f2
+Audited npm package: @deepseek-ai/dsh-client-ui-schedule@0.2.3-alpha.2
   Source function: src/client/editor-timing.ts defaultTiming(); replacement uses
   its existing startInZone() formatter and preserves explicit/stored rules.
   lib/client.js SHA-256:
-  b8dda300c8f835d825c8cbc23e56d66ffb4167d9c072f30468897611a9f34379
-Audited unmodified support package: @deepseek-ai/dsh-client-connection@0.2.2-rc.4
-  Source callable: src/client/rpc.ts createWebConnectionRpc().call.
-  The selected client adapter compares the exact emitted callable source before
-  admission; its closed-over implementation is covered by the raw browser pin.
+  adf0906b9c61521766b942cdbaa678bb58d32540177bf19a9a9d1c5214b2fd5f
+Audited unmodified support package: @deepseek-ai/dsh-client-connection@0.2.3-alpha.2
+  Source callable: src/client/rpc.ts createWebConnectionRpc().call, the default
+  installed by src/client/index.ts installConnection(). The selected client
+  adapter checks its exact emitted source; the raw browser pin covers its closure.
   lib/client.browser.js SHA-256:
-  5f6107953fa764c80b6c06aa161be318ffa0b71e565ac81536fc4267d5d62412
+  891f407ee38416678095cd9d9fac867b1ad60e5c7fb01f3798518e8693dc76a1
   Emitted callable source SHA-256 (Function.prototype.toString):
-  e9f0a1690441d6b00726bc296ad541776a9b711717e5ed3f72dc7375d35ee51b
+  cdc2f2cf439765f8fb5e6d100d54a4cd9cdf2d34fc174801d39800f05e244b55
   This support artifact is verified only: it is neither transformed nor marked.
 
 The following upstream MIT notice applies to those copied function anchors,

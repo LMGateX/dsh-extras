@@ -21,7 +21,7 @@ export function createChimeAdapter(React: ReactRuntime) {
     type RingInfo = import('./chime-public.ts').RingInfo
     type SessionListSnapshot = import('./chime-public.ts').SessionListSnapshot
     type SessionUIStatusSnapshot = import('./chime-public.ts').SessionUIStatusSnapshot
-    type UiSessionService = import('./chime-public.ts').UiSessionService
+    type UiSessionStatusService = import('./chime-public.ts').UiSessionStatusService
 
 
     /** Loader row id declared by this bundle's patch. */
@@ -110,7 +110,7 @@ export function createChimeAdapter(React: ReactRuntime) {
       /** Adopt the optional roster service; the returned handle gives it up again. */
       attachRoster(service: JobsService): () => void
       /** Adopt the optional session UI status source; the returned handle gives it up again. */
-      attachUiSession(service: UiSessionService): () => void
+      attachUiSession(status: UiSessionStatusService): () => void
       /** Adopt the optional Remote event source; the returned handle gives it up again. */
       attachRemote(service: RemoteService): () => void
       /** Record one failed top-level turn; it rings as this stretch's settle outcome. */
@@ -507,9 +507,8 @@ export function createChimeAdapter(React: ReactRuntime) {
        * bundle mounts after this one. The returned handle unsubscribes and
        * re-arms the silent baseline for a replacement service.
        */
-      function attachUiSession(service: UiSessionService): () => void {
+      function attachUiSession(status: UiSessionStatusService): () => void {
         let attached = true
-        const status = service.sessionStatus
         questionBaseline = true
         questionSeen = new Map()
         applyQuestionSnapshot(status.getSnapshot())
@@ -1881,9 +1880,10 @@ export function createChimeAdapter(React: ReactRuntime) {
       // failing activation. The callbacks return the attach handles so Cordis
       // disposes them with this fiber.
       ctx.inject(['uiSession.sessionStatus'], (scope) => {
-        const uiSession = scope.uiSession
-        if (!uiSession?.sessionStatus) return undefined
-        return watcher.attachUiSession(uiSession)
+        // The dotted dependency admits the status leaf, not the base uiSession service.
+        const status = scope['uiSession.sessionStatus']
+        if (status === undefined) return undefined
+        return watcher.attachUiSession(status)
       })
       ctx.inject(['remote'], (scope) => {
         const remote = scope.remote

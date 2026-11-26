@@ -267,7 +267,7 @@ function harness(): Harness {
       detach = undefined;
     },
     attachUiSession: () => {
-      detachUi = watcher.attachUiSession(questions.service);
+      detachUi = watcher.attachUiSession(questions.service.sessionStatus);
     },
     detachUiSession: () => {
       detachUi?.();
@@ -863,19 +863,22 @@ test('apply adopts the optional session UI and Remote services when they arrive'
   try {
     const h = applyHarness();
     client.apply(h.ctx);
-    h.setSessions(sessionsOf({ a: { running: false } }));
+    h.setSessions(sessionsOf({ a: { running: true }, b: {} }));
+    h.setSessions(sessionsOf({ a: { running: false }, b: {} }));
+    assert.equal(decoded, 1, 'completion still rings while the status provider is missing');
     const ui = fakeUiSession();
-    ui.set({});
-    h.provide('uiSession', ui.service);
+    ui.set({ a: { key: 'already-pending', kind: 'question' } });
+    h.provide('uiSession', {});
     assert.equal(ui.listeners.size, 0, 'base UI service is not the status capability');
     h.provide('uiSession.sessionStatus', ui.service.sessionStatus);
     assert.equal(ui.listeners.size, 1, 'the UI status source is adopted through ctx.inject');
+    assert.equal(decoded, 1, 'an interaction present on arrival is a silent baseline');
     ui.set({ a: { key: 'q1', kind: 'question' } });
-    assert.equal(decoded, 1, 'a pending question rings through the attached UI service');
+    assert.equal(decoded, 2, 'a new pending question rings through the attached UI service');
     const remote = fakeRemote();
     h.provide('remote', remote.service);
-    remote.emit('a');
-    assert.equal(decoded, 2, 'a failed turn rings through the attached Remote service');
+    remote.emit('b');
+    assert.equal(decoded, 3, 'a failed turn rings through the attached Remote service');
     // The attach handles are fiber effects: unloading releases both registrations.
     h.dispose();
     assert.equal(ui.listeners.size, 0, 'disposing releases the UI status subscription');
